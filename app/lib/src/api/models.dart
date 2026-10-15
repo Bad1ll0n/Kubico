@@ -350,6 +350,8 @@ class CalendarEvent {
     required this.participantUserIds,
     required this.dropOffUserId,
     required this.pickUpUserId,
+    this.seriesId,
+    this.originalDate,
     required this.updatedAt,
   });
 
@@ -371,7 +373,13 @@ class CalendarEvent {
   /// Boleias: quem leva e quem vai buscar.
   final String? dropOffUserId;
   final String? pickUpUserId;
+
+  /// Numa alteração a um só dia de uma série: a série e o dia que substitui.
+  final String? seriesId;
+  final DateTime? originalDate;
   final DateTime updatedAt;
+
+  bool get isRecurring => recurrence != null;
 
   factory CalendarEvent.fromJson(Map<String, dynamic> json) => CalendarEvent(
     id: json['id'] as String,
@@ -388,6 +396,8 @@ class CalendarEvent {
     participantUserIds: (json['participantUserIds'] as List).cast<String>(),
     dropOffUserId: json['dropOffUserId'] as String?,
     pickUpUserId: json['pickUpUserId'] as String?,
+    seriesId: json['seriesId'] as String?,
+    originalDate: _day(json['originalDate']),
     updatedAt: DateTime.parse(json['updatedAt'] as String),
   );
 }
@@ -397,6 +407,7 @@ class CalendarEvent {
 class CalendarOccurrence {
   const CalendarOccurrence({
     required this.eventId,
+    required this.occurrenceDate,
     required this.startsAt,
     required this.endsAt,
     required this.startDate,
@@ -405,6 +416,9 @@ class CalendarOccurrence {
   });
 
   final String eventId;
+
+  /// O dia que identifica esta ocorrência dentro da série (para alterar ou apagar só esta).
+  final DateTime occurrenceDate;
   final DateTime? startsAt;
   final DateTime? endsAt;
   final DateTime? startDate;
@@ -423,6 +437,7 @@ class CalendarOccurrence {
 
   factory CalendarOccurrence.fromJson(Map<String, dynamic> json) => CalendarOccurrence(
     eventId: json['eventId'] as String,
+    occurrenceDate: DateTime.parse(json['occurrenceDate'] as String),
     startsAt: _instant(json['startsAt']),
     endsAt: _instant(json['endsAt']),
     startDate: _day(json['startDate']),
@@ -500,6 +515,19 @@ class CalendarEventDraft {
   final List<String> participantUserIds;
   final String? dropOffUserId;
   final String? pickUpUserId;
+
+  CalendarEventDraft copyWith({DateTime? start, DateTime? end}) => CalendarEventDraft(
+    title: title,
+    start: start ?? this.start,
+    end: end ?? this.end,
+    isAllDay: isAllDay,
+    notes: notes,
+    location: location,
+    recurrence: recurrence,
+    participantUserIds: participantUserIds,
+    dropOffUserId: dropOffUserId,
+    pickUpUserId: pickUpUserId,
+  );
 
   factory CalendarEventDraft.from(CalendarEvent event) => CalendarEventDraft(
     title: event.title,

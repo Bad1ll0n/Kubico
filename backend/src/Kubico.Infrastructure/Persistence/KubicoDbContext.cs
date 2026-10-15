@@ -101,7 +101,11 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(c => c.Recurrence).HasMaxLength(200);
             e.HasIndex(c => new { c.HouseholdId, c.StartsAt });
             e.HasIndex(c => new { c.HouseholdId, c.StartDate });
+            e.HasIndex(c => new { c.SeriesId, c.OriginalDate });
             e.HasOne(c => c.Household).WithMany().HasForeignKey(c => c.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+
+            // Apagar uma série apaga as suas exceções.
+            e.HasOne<CalendarEvent>().WithMany().HasForeignKey(c => c.SeriesId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

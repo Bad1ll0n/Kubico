@@ -44,6 +44,10 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("EndsAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.PrimitiveCollection<List<DateOnly>>("ExcludedDates")
+                        .IsRequired()
+                        .HasColumnType("date[]");
+
                     b.Property<Guid>("HouseholdId")
                         .HasColumnType("uuid");
 
@@ -55,6 +59,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<DateOnly?>("OriginalDate")
+                        .HasColumnType("date");
+
                     b.PrimitiveCollection<List<Guid>>("ParticipantUserIds")
                         .IsRequired()
                         .HasColumnType("uuid[]");
@@ -65,6 +72,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<string>("Recurrence")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("SeriesId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");
@@ -85,6 +95,8 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.HasIndex("HouseholdId", "StartDate");
 
                     b.HasIndex("HouseholdId", "StartsAt");
+
+                    b.HasIndex("SeriesId", "OriginalDate");
 
                     b.ToTable("CalendarEvents");
                 });
@@ -376,6 +388,11 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasForeignKey("HouseholdId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("Kubico.Domain.Calendar.CalendarEvent", null)
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Household");
                 });

@@ -209,6 +209,117 @@ public class CalendarTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFa
         Assert.Equal(created.Id, await deleted.Task.WaitAsync(TimeSpan.FromSeconds(10)));
     }
 
+    [Fact]
+    public async Task One_occurrence_can_be_moved_or_deleted_without_touching_the_rest()
+    {
+        var (client, _) = await factory.CreateUserAsync();
+        var household = await HouseholdTests.CreateHousehold(client, "Casa");
+        var url = $"/api/households/{household.Id}/events";
+        var swimming = await CreateEvent(client, household.Id, new SaveEventRequest(
+            "Natação", StartsAt: Utc(2026, 11, 3, 18), EndsAt: Utc(2026, 11, 3, 19), Recurrence: "FREQ=WEEKLY"));
+        var moved = new SaveEventRequest("Natação (quarta)", StartsAt: Utc(2026, 11, 11, 19), EndsAt: Utc(2026, 11, 11, 20));
+
+        var first = await client.PutAsJsonAsync($"{url}/{swimming.Id}/occurrences/2026-11-10?scope=this", moved, TestJson.Options);
+        var again = await client.PutAsJsonAsync($"{url}/{swimming.Id}/occurrences/2026-11-10", moved, TestJson.Options);
+        var deleted = await client.DeleteAsync($"{url}/{swimming.Id}/occurrences/2026-11-17");
+        var exception = (await first.Content.ReadFromJsonAsync<CalendarEventDto>(TestJson.Options))!;
+        var calendar = await GetCalendar(client, household.Id, "2026-11-01", "2026-11-30");
+
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+        Assert.Equal((swimming.Id, new DateOnly(2026, 11, 10)), (exception.SeriesId!.Value, exception.OriginalDate!.Value));
+        Assert.Equal(
+            new[] { (swimming.Id, Utc(2026, 11, 3, 18)), (exception.Id, Utc(2026, 11, 11, 19)), (swimming.Id, Utc(2026, 11, 24, 18)) },
+            calendar.Occurrences.Select(o => (o.EventId, o.StartsAt!.Value)));
+
+        // Apagar a série apaga também as exceções.
+        (await client.DeleteAsync($"{url}/{swimming.Id}")).EnsureSuccessStatusCode();
+        Assert.Empty((await GetCalendar(client, household.Id, "2026-11-01", "2026-11-30")).Occurrences);
+    }
+
+    [Fact]
+    public async Task This_and_following_splits_or_ends_the_series()
+    {
+        var (client, _) = await factory.CreateUserAsync();
+        var household = await HouseholdTests.CreateHousehold(client, "Casa");
+        var url = $"/api/households/{household.Id}/events";
+        var swimming = await CreateEvent(client, household.Id, new SaveEventRequest(
+            "Natação", StartsAt: Utc(2026, 11, 3, 18), EndsAt: Utc(2026, 11, 3, 19), Recurrence: "FREQ=WEEKLY"));
+
+        var split = await client.PutAsJsonAsync($"{url}/{swimming.Id}/occurrences/2026-11-17?scope=following", new SaveEventRequest(
+            "Natação (horário de inverno)", StartsAt: Utc(2026, 11, 17, 19), EndsAt: Utc(2026, 11, 17, 20), Recurrence: "FREQ=WEEKLY"),
+            TestJson.Options);
+        var winter = (await split.Content.ReadFromJsonAsync<CalendarEventDto>(TestJson.Options))!;
+        var calendar = await GetCalendar(client, household.Id, "2026-11-01", "2026-11-30");
+
+        Assert.Equal(HttpStatusCode.Created, split.StatusCode);
+        Assert.Equal(
+            new[] { Utc(2026, 11, 3, 18), Utc(2026, 11, 10, 18), Utc(2026, 11, 17, 19), Utc(2026, 11, 24, 19) },
+            calendar.Occurrences.Select(o => o.StartsAt!.Value));
+        Assert.Equal("FREQ=WEEKLY;UNTIL=20261110", calendar.Events.Single(e => e.Id == swimming.Id).Recurrence);
+
+        // "Este e os seguintes" a partir da primeira ocorrência apaga a série toda.
+        var stopped = await client.DeleteAsync($"{url}/{winter.Id}/occurrences/2026-11-24?scope=following");
+        var gone = await client.DeleteAsync($"{url}/{swimming.Id}/occurrences/2026-11-03?scope=following");
+        var after = await GetCalendar(client, household.Id, "2026-11-01", "2026-12-31");
+
+        Assert.Equal(HttpStatusCode.NoContent, stopped.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, gone.StatusCode);
+        Assert.Equal(Utc(2026, 11, 17, 19), Assert.Single(after.Occurrences).StartsAt);
+    }
+
+    [Fact]
+    public async Task Moving_the_whole_series_drops_its_exceptions()
+    {
+        var (client, _) = await factory.CreateUserAsync();
+        var household = await HouseholdTests.CreateHousehold(client, "Casa");
+        var url = $"/api/households/{household.Id}/events";
+        var dinner = await CreateEvent(client, household.Id, new SaveEventRequest(
+            "Jantar de família", StartsAt: Utc(2026, 11, 1, 20), EndsAt: Utc(2026, 11, 1, 22), Recurrence: "FREQ=WEEKLY"));
+        (await client.DeleteAsync($"{url}/{dinner.Id}/occurrences/2026-11-08")).EnsureSuccessStatusCode();
+        (await client.PutAsJsonAsync($"{url}/{dinner.Id}/occurrences/2026-11-15", new SaveEventRequest(
+            "Jantar em casa dos avós", StartsAt: Utc(2026, 11, 15, 13), EndsAt: Utc(2026, 11, 15, 15)), TestJson.Options))
+            .EnsureSuccessStatusCode();
+
+        var renamed = await client.PutAsJsonAsync($"{url}/{dinner.Id}", new SaveEventRequest(
+            "Jantar", StartsAt: Utc(2026, 11, 1, 20), EndsAt: Utc(2026, 11, 1, 22), Recurrence: "FREQ=WEEKLY"), TestJson.Options);
+        var kept = await GetCalendar(client, household.Id, "2026-11-01", "2026-11-21");
+        var moved = await client.PutAsJsonAsync($"{url}/{dinner.Id}", new SaveEventRequest(
+            "Jantar", StartsAt: Utc(2026, 11, 1, 19), EndsAt: Utc(2026, 11, 1, 21), Recurrence: "FREQ=WEEKLY"), TestJson.Options);
+        var reset = await GetCalendar(client, household.Id, "2026-11-01", "2026-11-21");
+
+        renamed.EnsureSuccessStatusCode();
+        moved.EnsureSuccessStatusCode();
+        Assert.Equal(new[] { 1, 15 }, kept.Occurrences.Select(o => o.StartsAt!.Value.Day));
+        Assert.Equal(new[] { 1, 8, 15 }, reset.Occurrences.Select(o => o.StartsAt!.Value.Day));
+        Assert.All(reset.Occurrences, o => Assert.Equal(dinner.Id, o.EventId));
+    }
+
+    [Fact]
+    public async Task Occurrence_changes_check_the_day_the_scope_and_permissions()
+    {
+        var (admin, _) = await factory.CreateUserAsync();
+        var (child, _) = await factory.CreateUserAsync();
+        var (stranger, _) = await factory.CreateUserAsync();
+        var household = await HouseholdTests.CreateHousehold(admin, "Casa");
+        var strangerHousehold = await HouseholdTests.CreateHousehold(stranger, "Outra casa");
+        await Join(admin, child, household.Id, HouseholdRole.Child);
+        var url = $"/api/households/{household.Id}/events";
+        var weekly = await CreateEvent(admin, household.Id, new SaveEventRequest(
+            "Treino", StartsAt: Utc(2026, 11, 3, 18), EndsAt: Utc(2026, 11, 3, 19), Recurrence: "FREQ=WEEKLY"));
+        var once = await CreateEvent(admin, household.Id, new SaveEventRequest(
+            "Reunião", StartsAt: Utc(2026, 11, 4, 9), EndsAt: Utc(2026, 11, 4, 10)));
+
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.DeleteAsync($"{url}/{weekly.Id}/occurrences/2026-11-04")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.DeleteAsync($"{url}/{once.Id}/occurrences/2026-11-04")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.DeleteAsync($"{url}/{weekly.Id}/occurrences/2026-11-10?scope=all")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await child.DeleteAsync($"{url}/{weekly.Id}/occurrences/2026-11-10")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await stranger.DeleteAsync(
+            $"/api/households/{strangerHousehold.Id}/events/{weekly.Id}/occurrences/2026-11-10")).StatusCode);
+        Assert.Equal(4, (await GetCalendar(admin, household.Id, "2026-11-01", "2026-11-24")).Occurrences.Count(o => o.EventId == weekly.Id));
+    }
+
     private static DateTimeOffset Utc(int year, int month, int day, int hour) =>
         new(year, month, day, hour, 0, 0, TimeSpan.Zero);
 

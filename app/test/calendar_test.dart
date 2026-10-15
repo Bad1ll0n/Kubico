@@ -88,6 +88,7 @@ final _dentist = {
 
 final _dentistOccurrence = {
   'eventId': 'e3',
+  'occurrenceDate': '2026-11-10',
   'startsAt': _at(11, 10, 9),
   'endsAt': _at(11, 10, 10),
   'startDate': null,
@@ -100,6 +101,7 @@ Map<String, dynamic> _calendar({required bool withDentist}) => {
   'occurrences': [
     {
       'eventId': 'e1',
+      'occurrenceDate': '2026-11-10',
       'startsAt': _at(11, 10, 10),
       'endsAt': _at(11, 10, 11, 30),
       'startDate': null,
@@ -108,6 +110,7 @@ Map<String, dynamic> _calendar({required bool withDentist}) => {
     },
     {
       'eventId': 'e2',
+      'occurrenceDate': '2026-11-12',
       'startsAt': null,
       'endsAt': null,
       'startDate': '2026-11-12',
@@ -127,9 +130,18 @@ class _FakeApi {
   final ranges = <String>[];
   final posts = <Map<String, dynamic>>[];
 
+  /// Alterações a ocorrências: "PUT /caminho?scope=..." ou "DELETE /caminho?scope=...".
+  final occurrenceChanges = <String>[];
+
   late final client = MockClient((request) async {
     final path = request.url.path;
     if (path == '/api/households/h1') return _json(_household);
+    if (path.contains('/occurrences/')) {
+      occurrenceChanges.add('${request.method} $path?${request.url.query}');
+      if (request.method == 'DELETE') return http.Response('', 204);
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      return _json({..._football, 'id': 'e9', 'title': body['title'], 'seriesId': 'e1', 'recurrence': null}, 201);
+    }
     if (path == '/api/households/h1/events' && request.method == 'POST') {
       posts.add(jsonDecode(request.body) as Map<String, dynamic>);
       return _json(_dentist, 201);
@@ -246,6 +258,7 @@ void main() {
   test('uma ocorrência aparece em todos os dias que ocupa', () {
     final trip = CalendarOccurrence(
       eventId: 'e1',
+      occurrenceDate: DateTime(2026, 11, 12),
       startsAt: null,
       endsAt: null,
       startDate: DateTime(2026, 11, 12),
@@ -254,6 +267,7 @@ void main() {
     );
     final party = CalendarOccurrence(
       eventId: 'e2',
+      occurrenceDate: DateTime(2026, 11, 10),
       startsAt: DateTime(2026, 11, 10, 23),
       endsAt: DateTime(2026, 11, 11, 1),
       startDate: null,
@@ -292,6 +306,55 @@ void main() {
     expect(find.text('9 – 15 de novembro'), findsOneWidget);
     expect(find.text('Futebol'), findsOneWidget);
     expect(find.text('Férias'), findsNWidgets(2));
+  });
+
+  test('"todos os eventos" muda a série com o mesmo desvio que a ocorrência editada', () {
+    final series = CalendarEvent.fromJson(_football);
+    final occurrence = CalendarOccurrence(
+      eventId: 'e1',
+      occurrenceDate: DateTime(2026, 11, 24),
+      startsAt: DateTime(2026, 11, 24, 10),
+      endsAt: DateTime(2026, 11, 24, 11, 30),
+      startDate: null,
+      endDate: null,
+      conflictUserIds: const [],
+    );
+    final edited = CalendarEventDraft(
+      title: 'Futebol',
+      start: DateTime(2026, 11, 24, 11),
+      end: DateTime(2026, 11, 24, 13),
+      recurrence: 'FREQ=WEEKLY;BYDAY=TU',
+    );
+
+    final moved = draftForSeries(edited, series, occurrence);
+
+    expect(moved.start, DateTime(2026, 11, 10, 11), reason: 'uma hora mais tarde, a partir do primeiro dia da série');
+    expect(moved.end, DateTime(2026, 11, 10, 13));
+    expect(moved.recurrence, 'FREQ=WEEKLY;BYDAY=TU');
+  });
+
+  testWidgets('num evento que se repete, alterar pergunta se é só este, os seguintes ou todos', (tester) async {
+    final api = _FakeApi();
+    await _pump(tester, api, HouseholdRole.adult);
+
+    await tester.tap(find.text('Futebol'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'O que é?'), 'Futebol (jogo fora)');
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Alterar evento que se repete'), findsOneWidget);
+
+    await tester.tap(find.text('Só este evento'));
+    await tester.pumpAndSettle();
+    expect(api.occurrenceChanges, ['PUT /api/households/h1/events/e1/occurrences/2026-11-10?scope=this']);
+
+    await tester.tap(find.text('Futebol'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apagar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Este e os seguintes'));
+    await tester.pumpAndSettle();
+    expect(api.occurrenceChanges.last, 'DELETE /api/households/h1/events/e1/occurrences/2026-11-10?scope=following');
   });
 
   testWidgets('um adulto cria um evento e é avisado do conflito', (tester) async {

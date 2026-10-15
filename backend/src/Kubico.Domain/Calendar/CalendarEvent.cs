@@ -27,6 +27,17 @@ public class CalendarEvent
     /// <summary>RRULE canónica, sem o prefixo "RRULE:" (ex.: "FREQ=WEEKLY;BYDAY=TU,TH"). Null = não se repete.</summary>
     public string? Recurrence { get; set; }
 
+    /// <summary>
+    /// Dias (locais) das ocorrências retiradas da série, apagadas ou substituídas por uma exceção (o EXDATE do iCalendar).
+    /// </summary>
+    public List<DateOnly> ExcludedDates { get; set; } = [];
+
+    /// <summary>Numa exceção ("só este evento"), a série de que substitui uma ocorrência. Null nos eventos normais.</summary>
+    public Guid? SeriesId { get; set; }
+
+    /// <summary>Numa exceção, o dia da ocorrência original que substitui.</summary>
+    public DateOnly? OriginalDate { get; set; }
+
     /// <summary>Membros envolvidos. A cor do evento e a deteção de conflitos vêm daqui.</summary>
     public List<Guid> ParticipantUserIds { get; set; } = [];
 
@@ -39,6 +50,12 @@ public class CalendarEvent
     public DateTimeOffset UpdatedAt { get; set; }
 
     public bool IsAllDay => StartDate is not null;
+
+    public bool IsRecurring => Recurrence is not null;
+
+    /// <summary>Dia (local) da primeira ocorrência.</summary>
+    public DateOnly FirstDate(TimeZoneInfo zone) =>
+        StartDate ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(StartsAt!.Value, zone).DateTime);
 
     public void SetTimed(DateTimeOffset startsAt, DateTimeOffset endsAt)
     {
@@ -62,10 +79,8 @@ public class CalendarEvent
     /// </summary>
     public IEnumerable<EventOccurrence> Occurrences(DateTimeOffset from, DateTimeOffset to, TimeZoneInfo zone)
     {
-        var firstDate = StartDate ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(StartsAt!.Value, zone).DateTime);
-        var dates = RecurrenceRule.TryParse(Recurrence, out var rule) ? rule.Dates(firstDate) : [firstDate];
-
-        foreach (var date in dates)
+        var firstDate = FirstDate(zone);
+        foreach (var date in Dates(firstDate))
         {
             var occurrence = OccurrenceOn(date, date == firstDate, zone);
             if (occurrence.Start >= to)
@@ -73,12 +88,56 @@ public class CalendarEvent
                 yield break;
             }
 
-            if (occurrence.End > from)
+            if (occurrence.End > from && !ExcludedDates.Contains(date))
             {
                 yield return occurrence;
             }
         }
     }
+
+    /// <summary>Se a série tem uma ocorrência neste dia (mesmo que tenha sido retirada).</summary>
+    public bool HasOccurrenceOn(DateOnly date, TimeZoneInfo zone) =>
+        Dates(FirstDate(zone)).TakeWhile(d => d <= date).Contains(date);
+
+    /// <summary>Retira a ocorrência deste dia ("apagar só este evento" ou substituí-la por uma exceção).</summary>
+    public void Exclude(DateOnly date)
+    {
+        if (!ExcludedDates.Contains(date))
+        {
+            ExcludedDates = [.. ExcludedDates, date];
+        }
+    }
+
+    /// <summary>
+    /// Termina a série antes de <paramref name="date"/> ("este e os seguintes"). Devolve false quando não sobra
+    /// nenhuma ocorrência; nesse caso o evento deve ser apagado.
+    /// </summary>
+    public bool EndBefore(DateOnly date, TimeZoneInfo zone)
+    {
+        if (!RecurrenceRule.TryParse(Recurrence, out var rule))
+        {
+            return false;
+        }
+
+        // A última ocorrência que fica; um COUNT passa a UNTIL, para a série não crescer.
+        DateOnly? last = null;
+        foreach (var d in rule.Dates(FirstDate(zone)).TakeWhile(d => d < date))
+        {
+            last = d;
+        }
+
+        if (last is null)
+        {
+            return false;
+        }
+
+        Recurrence = (rule with { Count = null, Until = last }).ToString();
+        ExcludedDates = [.. ExcludedDates.Where(d => d < date)];
+        return true;
+    }
+
+    private IEnumerable<DateOnly> Dates(DateOnly firstDate) =>
+        RecurrenceRule.TryParse(Recurrence, out var rule) ? rule.Dates(firstDate) : [firstDate];
 
     private EventOccurrence OccurrenceOn(DateOnly date, bool isFirst, TimeZoneInfo zone)
     {
@@ -86,7 +145,12 @@ public class CalendarEvent
         {
             var lastDate = date.AddDays(EndDate!.Value.DayNumber - startDate.DayNumber);
             return new EventOccurrence(
-                this, ZonedTime.StartOfDay(date, zone), ZonedTime.StartOfDay(lastDate.AddDays(1), zone), date, lastDate);
+                this,
+                date,
+                ZonedTime.StartOfDay(date, zone),
+                ZonedTime.StartOfDay(lastDate.AddDays(1), zone),
+                date,
+                lastDate);
         }
 
         var duration = EndsAt!.Value - StartsAt!.Value;
@@ -94,16 +158,18 @@ public class CalendarEvent
 
         // A primeira usa o instante guardado: numa hora ambígua (quando o relógio recua) a hora local não chega.
         var start = isFirst ? StartsAt.Value : ZonedTime.ToInstant(date.ToDateTime(localTime), zone);
-        return new EventOccurrence(this, start, start + duration);
+        return new EventOccurrence(this, date, start, start + duration);
     }
 }
 
 /// <summary>
-/// Uma ocorrência concreta de um evento. Nos de dia inteiro, <see cref="Start"/> e <see cref="End"/> são as
-/// meias-noites locais e <see cref="StartDate"/>/<see cref="EndDate"/> os dias (inclusive).
+/// Uma ocorrência concreta de um evento. <see cref="Date"/> é o dia (local) que a identifica dentro da série.
+/// Nos de dia inteiro, <see cref="Start"/> e <see cref="End"/> são as meias-noites locais e
+/// <see cref="StartDate"/>/<see cref="EndDate"/> os dias (inclusive).
 /// </summary>
 public sealed record EventOccurrence(
     CalendarEvent Event,
+    DateOnly Date,
     DateTimeOffset Start,
     DateTimeOffset End,
     DateOnly? StartDate = null,

@@ -143,6 +143,24 @@ class ApiClient {
   Future<void> deleteEvent(String householdId, String eventId) =>
       _send('DELETE', '/api/households/$householdId/events/$eventId');
 
+  /// Altera só a ocorrência de [date] de uma série ou, com [following], essa e as seguintes.
+  Future<CalendarEvent> updateOccurrence(
+    String householdId,
+    String eventId,
+    DateTime date,
+    CalendarEventDraft draft, {
+    bool following = false,
+  }) async => CalendarEvent.fromJson(
+    await _send('PUT', _occurrencePath(householdId, eventId, date, following), body: draft.toJson()),
+  );
+
+  /// Apaga só a ocorrência de [date] de uma série ou, com [following], essa e as seguintes.
+  Future<void> deleteOccurrence(String householdId, String eventId, DateTime date, {bool following = false}) =>
+      _send('DELETE', _occurrencePath(householdId, eventId, date, following));
+
+  String _occurrencePath(String householdId, String eventId, DateTime date, bool following) =>
+      '${_eventsPath(householdId)}/$eventId/occurrences/${apiDate(date)}?scope=${following ? 'following' : 'this'}';
+
   String _eventsPath(String householdId) => '/api/households/$householdId/events';
 
   String _itemsPath(String householdId, String listId) => '/api/households/$householdId/lists/$listId/items';
