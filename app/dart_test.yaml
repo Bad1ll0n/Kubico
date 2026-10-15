@@ -1,0 +1,3 @@
+tags:
+  live:
+    # Testes contra uma API real; ver test/live_api_test.dart.

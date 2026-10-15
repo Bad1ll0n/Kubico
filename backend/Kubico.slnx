@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Kubico.Api/Kubico.Api.csproj" />
+    <Project Path="src/Kubico.Domain/Kubico.Domain.csproj" />
+    <Project Path="src/Kubico.Infrastructure/Kubico.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Kubico.Api.Tests/Kubico.Api.Tests.csproj" />
+  </Folder>
+</Solution>

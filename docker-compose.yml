@@ -1,0 +1,34 @@
+# Ambiente local completo: PostgreSQL + API.
+#   docker compose up --build
+# A API fica em http://localhost:5281 (Swagger/OpenAPI em /openapi/v1.json).
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: kubico
+      POSTGRES_USER: kubico
+      POSTGRES_PASSWORD: kubico
+    ports:
+      - "5432:5432"
+    volumes:
+      - kubico-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kubico -d kubico"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Kubico: "Host=db;Port=5432;Database=kubico;Username=kubico;Password=kubico"
+      Database__MigrateOnStartup: "true"
+    ports:
+      - "5281:8080"
+
+volumes:
+  kubico-db:
