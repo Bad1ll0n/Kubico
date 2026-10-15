@@ -125,6 +125,26 @@ class ApiClient {
     return (json['members'] as List).map((m) => MemberChoreStats.fromJson(m as Map<String, dynamic>)).toList();
   }
 
+  // --- Calendário ---
+
+  /// Eventos, ocorrências e feriados entre dois dias (inclusive; no máximo 92 dias).
+  Future<CalendarRange> getCalendar(String householdId, DateTime from, DateTime to) async {
+    final query = 'from=${apiDate(from)}&to=${apiDate(to)}';
+    final json = await _send('GET', '${_eventsPath(householdId)}?$query') as Map<String, dynamic>;
+    return CalendarRange.fromJson(json);
+  }
+
+  Future<CalendarEvent> createEvent(String householdId, CalendarEventDraft draft) async =>
+      CalendarEvent.fromJson(await _send('POST', _eventsPath(householdId), body: draft.toJson()));
+
+  Future<CalendarEvent> updateEvent(String householdId, String eventId, CalendarEventDraft draft) async =>
+      CalendarEvent.fromJson(await _send('PUT', '${_eventsPath(householdId)}/$eventId', body: draft.toJson()));
+
+  Future<void> deleteEvent(String householdId, String eventId) =>
+      _send('DELETE', '/api/households/$householdId/events/$eventId');
+
+  String _eventsPath(String householdId) => '/api/households/$householdId/events';
+
   String _itemsPath(String householdId, String listId) => '/api/households/$householdId/lists/$listId/items';
 
   // --- HTTP ---

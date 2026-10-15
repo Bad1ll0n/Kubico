@@ -214,7 +214,8 @@ enum ChoreRecurrence {
   static ChoreRecurrence fromApi(String value) => values.firstWhere((r) => r.apiValue == value, orElse: () => none);
 }
 
-String _date(DateTime d) =>
+/// Data sem hora, no formato da API (yyyy-MM-dd).
+String apiDate(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 /// Uma tarefa da casa. As datas de prazo são dias (sem hora).
@@ -296,7 +297,7 @@ class ChoreDraft {
     'title': title,
     if (notes != null && notes!.isNotEmpty) 'notes': notes,
     'points': points,
-    if (dueDate != null) 'dueDate': _date(dueDate!),
+    if (dueDate != null) 'dueDate': apiDate(dueDate!),
     'recurrence': recurrence.apiValue,
     if (assigneeUserId != null) 'assigneeUserId': assigneeUserId,
     'rotationUserIds': rotationUserIds,
@@ -325,4 +326,282 @@ class MemberChoreStats {
     completed: json['completed'] as int,
     points: json['points'] as int,
   );
+}
+
+DateTime? _instant(Object? value) => value == null ? null : DateTime.parse(value as String).toLocal();
+
+DateTime? _day(Object? value) => value == null ? null : DateTime.parse(value as String);
+
+/// Um evento do calendário da casa. Os de dia inteiro têm [startDate] e [endDate] (dias, inclusive);
+/// os outros têm [startsAt] e [endsAt], na hora local do dispositivo.
+class CalendarEvent {
+  const CalendarEvent({
+    required this.id,
+    required this.householdId,
+    required this.title,
+    required this.notes,
+    required this.location,
+    required this.isAllDay,
+    required this.startsAt,
+    required this.endsAt,
+    required this.startDate,
+    required this.endDate,
+    required this.recurrence,
+    required this.participantUserIds,
+    required this.dropOffUserId,
+    required this.pickUpUserId,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String householdId;
+  final String title;
+  final String? notes;
+  final String? location;
+  final bool isAllDay;
+  final DateTime? startsAt;
+  final DateTime? endsAt;
+  final DateTime? startDate;
+  final DateTime? endDate;
+
+  /// RRULE canónica (ex.: "FREQ=WEEKLY;BYDAY=TU,TH"); null se não se repete. Ver [Recurrence].
+  final String? recurrence;
+  final List<String> participantUserIds;
+
+  /// Boleias: quem leva e quem vai buscar.
+  final String? dropOffUserId;
+  final String? pickUpUserId;
+  final DateTime updatedAt;
+
+  factory CalendarEvent.fromJson(Map<String, dynamic> json) => CalendarEvent(
+    id: json['id'] as String,
+    householdId: json['householdId'] as String,
+    title: json['title'] as String,
+    notes: json['notes'] as String?,
+    location: json['location'] as String?,
+    isAllDay: json['isAllDay'] as bool,
+    startsAt: _instant(json['startsAt']),
+    endsAt: _instant(json['endsAt']),
+    startDate: _day(json['startDate']),
+    endDate: _day(json['endDate']),
+    recurrence: json['recurrence'] as String?,
+    participantUserIds: (json['participantUserIds'] as List).cast<String>(),
+    dropOffUserId: json['dropOffUserId'] as String?,
+    pickUpUserId: json['pickUpUserId'] as String?,
+    updatedAt: DateTime.parse(json['updatedAt'] as String),
+  );
+}
+
+/// Uma ocorrência de um evento no intervalo pedido. [conflictUserIds] são os membros ocupados com outro
+/// evento à mesma hora, ou quando têm de levar ou ir buscar alguém.
+class CalendarOccurrence {
+  const CalendarOccurrence({
+    required this.eventId,
+    required this.startsAt,
+    required this.endsAt,
+    required this.startDate,
+    required this.endDate,
+    required this.conflictUserIds,
+  });
+
+  final String eventId;
+  final DateTime? startsAt;
+  final DateTime? endsAt;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final List<String> conflictUserIds;
+
+  bool get isAllDay => startDate != null;
+
+  /// Se ocupa alguma parte de [day] (hora local).
+  bool occursOn(DateTime day) {
+    final start = DateTime(day.year, day.month, day.day);
+    final end = DateTime(day.year, day.month, day.day + 1);
+    if (isAllDay) return !startDate!.isAfter(start) && !endDate!.isBefore(start);
+    return startsAt!.isBefore(end) && endsAt!.isAfter(start);
+  }
+
+  factory CalendarOccurrence.fromJson(Map<String, dynamic> json) => CalendarOccurrence(
+    eventId: json['eventId'] as String,
+    startsAt: _instant(json['startsAt']),
+    endsAt: _instant(json['endsAt']),
+    startDate: _day(json['startDate']),
+    endDate: _day(json['endDate']),
+    conflictUserIds: (json['conflictUserIds'] as List).cast<String>(),
+  );
+}
+
+class Holiday {
+  const Holiday({required this.date, required this.name});
+
+  final DateTime date;
+  final String name;
+
+  factory Holiday.fromJson(Map<String, dynamic> json) =>
+      Holiday(date: DateTime.parse(json['date'] as String), name: json['name'] as String);
+}
+
+/// O calendário de um intervalo de dias: eventos, as suas ocorrências e os feriados nacionais.
+class CalendarRange {
+  const CalendarRange({required this.events, required this.occurrences, required this.holidays});
+
+  final Map<String, CalendarEvent> events;
+  final List<CalendarOccurrence> occurrences;
+  final List<Holiday> holidays;
+
+  List<CalendarOccurrence> on(DateTime day) =>
+      occurrences.where((o) => o.occursOn(day) && events.containsKey(o.eventId)).toList();
+
+  /// Membros indisponíveis para alguma ocorrência de [eventId].
+  Set<String> conflictsFor(String eventId) =>
+      occurrences.where((o) => o.eventId == eventId).expand((o) => o.conflictUserIds).toSet();
+
+  Holiday? holidayOn(DateTime day) {
+    for (final h in holidays) {
+      if (h.date.year == day.year && h.date.month == day.month && h.date.day == day.day) return h;
+    }
+    return null;
+  }
+
+  factory CalendarRange.fromJson(Map<String, dynamic> json) {
+    final events = [for (final e in json['events'] as List) CalendarEvent.fromJson(e as Map<String, dynamic>)];
+    final occurrences = json['occurrences'] as List;
+    final holidays = json['holidays'] as List;
+    return CalendarRange(
+      events: {for (final e in events) e.id: e},
+      occurrences: [for (final o in occurrences) CalendarOccurrence.fromJson(o as Map<String, dynamic>)],
+      holidays: [for (final h in holidays) Holiday.fromJson(h as Map<String, dynamic>)],
+    );
+  }
+}
+
+/// Dados para criar ou editar um evento. Nos de dia inteiro só contam os dias de [start] e [end] (inclusive).
+class CalendarEventDraft {
+  const CalendarEventDraft({
+    required this.title,
+    required this.start,
+    required this.end,
+    this.isAllDay = false,
+    this.notes,
+    this.location,
+    this.recurrence,
+    this.participantUserIds = const [],
+    this.dropOffUserId,
+    this.pickUpUserId,
+  });
+
+  final String title;
+  final DateTime start;
+  final DateTime end;
+  final bool isAllDay;
+  final String? notes;
+  final String? location;
+  final String? recurrence;
+  final List<String> participantUserIds;
+  final String? dropOffUserId;
+  final String? pickUpUserId;
+
+  factory CalendarEventDraft.from(CalendarEvent event) => CalendarEventDraft(
+    title: event.title,
+    start: (event.isAllDay ? event.startDate : event.startsAt)!,
+    end: (event.isAllDay ? event.endDate : event.endsAt)!,
+    isAllDay: event.isAllDay,
+    notes: event.notes,
+    location: event.location,
+    recurrence: event.recurrence,
+    participantUserIds: event.participantUserIds,
+    dropOffUserId: event.dropOffUserId,
+    pickUpUserId: event.pickUpUserId,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    if (notes != null && notes!.isNotEmpty) 'notes': notes,
+    if (location != null && location!.isNotEmpty) 'location': location,
+    'isAllDay': isAllDay,
+    if (isAllDay) 'startDate': apiDate(start),
+    if (isAllDay) 'endDate': apiDate(end),
+    if (!isAllDay) 'startsAt': start.toUtc().toIso8601String(),
+    if (!isAllDay) 'endsAt': end.toUtc().toIso8601String(),
+    if (recurrence != null) 'recurrence': recurrence,
+    'participantUserIds': participantUserIds,
+    if (dropOffUserId != null) 'dropOffUserId': dropOffUserId,
+    if (pickUpUserId != null) 'pickUpUserId': pickUpUserId,
+  };
+}
+
+enum RecurrenceFrequency {
+  daily('DAILY', 'Todos os dias', 'dias'),
+  weekly('WEEKLY', 'Todas as semanas', 'semanas'),
+  monthly('MONTHLY', 'Todos os meses', 'meses'),
+  yearly('YEARLY', 'Todos os anos', 'anos');
+
+  const RecurrenceFrequency(this.apiValue, this.label, this.unit);
+
+  final String apiValue;
+  final String label;
+  final String unit;
+}
+
+/// Repetição de um evento: o subconjunto de RRULE (RFC 5545) que a API aceita.
+class Recurrence {
+  const Recurrence(this.frequency, {this.interval = 1, this.weekdays = const [], this.count, this.until});
+
+  final RecurrenceFrequency frequency;
+  final int interval;
+
+  /// Dias da semana, de [DateTime.monday] a [DateTime.sunday]; só nas repetições semanais.
+  final List<int> weekdays;
+  final int? count;
+
+  /// Último dia (inclusive).
+  final DateTime? until;
+
+  static const _dayCodes = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+
+  /// Lê a RRULE que a API guarda; null se não houver ou não for reconhecida.
+  static Recurrence? parse(String? rule) {
+    if (rule == null || rule.isEmpty) return null;
+    RecurrenceFrequency? frequency;
+    var interval = 1;
+    var weekdays = <int>[];
+    int? count;
+    DateTime? until;
+
+    for (final part in rule.split(';')) {
+      final separator = part.indexOf('=');
+      if (separator < 0) return null;
+      final value = part.substring(separator + 1);
+      switch (part.substring(0, separator)) {
+        case 'FREQ':
+          for (final f in RecurrenceFrequency.values) {
+            if (f.apiValue == value) frequency = f;
+          }
+        case 'INTERVAL':
+          interval = int.tryParse(value) ?? 1;
+        case 'BYDAY':
+          weekdays = value.split(',').map(_dayCodes.indexOf).where((i) => i >= 0).map((i) => i + 1).toList();
+        case 'COUNT':
+          count = int.tryParse(value);
+        case 'UNTIL':
+          if (value.length >= 8) until = DateTime.tryParse(value.substring(0, 8));
+      }
+    }
+
+    if (frequency == null) return null;
+    return Recurrence(frequency, interval: interval, weekdays: weekdays, count: count, until: until);
+  }
+
+  /// A RRULE para enviar à API (ex.: "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20261231").
+  String toRule() {
+    final days = [...weekdays]..sort();
+    final byDay = frequency == RecurrenceFrequency.weekly ? days.map((d) => _dayCodes[d - 1]).join(',') : '';
+    return [
+      'FREQ=${frequency.apiValue}',
+      if (interval != 1) 'INTERVAL=$interval',
+      if (byDay.isNotEmpty) 'BYDAY=$byDay',
+      if (count != null) 'COUNT=$count',
+      if (until != null) 'UNTIL=${apiDate(until!).replaceAll('-', '')}',
+    ].join(';');
+  }
 }

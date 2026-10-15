@@ -16,11 +16,11 @@ public class Household
 
     public const string DefaultTimeZoneId = "Europe/Lisbon";
 
-    public DateOnly Today(DateTimeOffset now)
-    {
-        var zone = TimeZoneInfo.TryFindSystemTimeZoneById(TimeZoneId, out var found) ? found : TimeZoneInfo.Utc;
-        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime);
-    }
+    /// <summary>Fuso da casa; se o sistema não o conhecer, usa UTC.</summary>
+    public TimeZoneInfo TimeZone =>
+        TimeZoneInfo.TryFindSystemTimeZoneById(TimeZoneId, out var found) ? found : TimeZoneInfo.Utc;
+
+    public DateOnly Today(DateTimeOffset now) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, TimeZone).DateTime);
 
     public List<Membership> Members { get; set; } = [];
     public List<Invite> Invites { get; set; } = [];

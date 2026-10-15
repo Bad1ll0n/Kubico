@@ -4,13 +4,14 @@ import 'package:provider/provider.dart';
 import '../api/models.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
+import 'calendar_view.dart';
 import 'chores_view.dart';
 import 'household_screen.dart';
 import 'onboarding_screen.dart';
 import 'shopping_items_view.dart';
 import 'shopping_lists_view.dart';
 
-/// Ecrã principal de uma casa, com as secções Compras e Tarefas.
+/// Ecrã principal de uma casa, com as secções Compras, Tarefas e Calendário.
 /// Em ecrãs largos (PC, tablet) usa uma barra lateral e mostra listas e artigos lado a lado;
 /// no telemóvel usa a barra inferior e abre cada lista num ecrã próprio.
 class HomeScreen extends StatefulWidget {
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _sections = [
     (icon: Icons.shopping_cart_outlined, selectedIcon: Icons.shopping_cart, label: 'Compras'),
     (icon: Icons.task_alt_outlined, selectedIcon: Icons.task_alt, label: 'Tarefas'),
+    (icon: Icons.calendar_month_outlined, selectedIcon: Icons.calendar_month, label: 'Calendário'),
   ];
 
   String? _connectedHouseholdId;
@@ -94,7 +96,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               )
             : lists;
-        final chores = ChoresView(key: ValueKey('chores-${household.id}'), household: household);
+        final content = switch (_section) {
+          0 => shopping,
+          1 => ChoresView(key: ValueKey('chores-${household.id}'), household: household),
+          _ => CalendarView(key: ValueKey('calendar-${household.id}'), household: household),
+        };
 
         return Scaffold(
           appBar: AppBar(
@@ -138,10 +144,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     const VerticalDivider(width: 1),
-                    Expanded(child: _section == 0 ? shopping : chores),
+                    Expanded(child: content),
                   ],
                 )
-              : (_section == 0 ? shopping : chores),
+              : content,
           bottomNavigationBar: wide
               ? null
               : NavigationBar(

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Serialization;
 using Kubico.Api.Auth;
+using Kubico.Api.Calendar;
 using Kubico.Api.Chores;
 using Kubico.Api.Common;
 using Kubico.Api.Households;
@@ -110,6 +111,7 @@ api.MapAuthEndpoints();
 api.MapHouseholdEndpoints();
 api.MapShoppingEndpoints();
 api.MapChoreEndpoints();
+api.MapCalendarEndpoints();
 
 app.MapHub<HouseholdHub>(HouseholdHub.Path);
 
