@@ -51,6 +51,11 @@ class CalendarEventDeleted extends HouseholdEvent {
   final String eventId;
 }
 
+/// Mudou alguma coisa nas recompensas ou nos pedidos (o ecrã volta a ler tudo, porque os saldos mudam).
+class RewardsChanged extends HouseholdEvent {
+  const RewardsChanged();
+}
+
 /// Ligação SignalR ao agregado aberto. Volta a ligar-se sozinha quando a rede falha
 /// e avisa (via [reconnected]) para os ecrãs recarregarem o que possam ter perdido.
 class HouseholdRealtime {
@@ -102,6 +107,10 @@ class HouseholdRealtime {
       (args) => _emit(args, (a) => CalendarEventUpserted(CalendarEvent.fromJson(_map(a[0])))),
     );
     connection.on('CalendarEventDeleted', (args) => _emit(args, (a) => CalendarEventDeleted(a[0] as String)));
+
+    for (final name in ['RewardUpserted', 'RewardDeleted', 'RedemptionUpserted', 'RedemptionDeleted']) {
+      connection.on(name, (args) => _emit(args, (_) => const RewardsChanged()));
+    }
 
     connection.onreconnected(({connectionId}) async {
       await _join(connection, householdId);

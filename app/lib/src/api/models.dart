@@ -644,3 +644,154 @@ class Recurrence {
     ].join(';');
   }
 }
+
+enum RedemptionStatus {
+  pending('Pending', 'À espera de aprovação'),
+  approved('Approved', 'Aprovado'),
+  rejected('Rejected', 'Recusado');
+
+  const RedemptionStatus(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
+
+  static RedemptionStatus fromApi(String value) => values.firstWhere((s) => s.apiValue == value, orElse: () => pending);
+}
+
+/// Uma recompensa que se troca por pontos das tarefas.
+class Reward {
+  const Reward({
+    required this.id,
+    required this.householdId,
+    required this.title,
+    required this.description,
+    required this.cost,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String householdId;
+  final String title;
+  final String? description;
+  final int cost;
+  final DateTime updatedAt;
+
+  factory Reward.fromJson(Map<String, dynamic> json) => Reward(
+    id: json['id'] as String,
+    householdId: json['householdId'] as String,
+    title: json['title'] as String,
+    description: json['description'] as String?,
+    cost: json['cost'] as int,
+    updatedAt: DateTime.parse(json['updatedAt'] as String),
+  );
+}
+
+/// Dados para criar ou editar uma recompensa.
+class RewardDraft {
+  const RewardDraft({required this.title, this.description, required this.cost});
+
+  final String title;
+  final String? description;
+  final int cost;
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    if (description != null && description!.isNotEmpty) 'description': description,
+    'cost': cost,
+  };
+}
+
+/// Um pedido de troca de pontos por uma recompensa. Guarda o nome e o custo de quando foi feito.
+class RewardRedemption {
+  const RewardRedemption({
+    required this.id,
+    required this.householdId,
+    required this.rewardId,
+    required this.userId,
+    required this.rewardTitle,
+    required this.points,
+    required this.status,
+    required this.requestedAt,
+    required this.decidedAt,
+  });
+
+  final String id;
+  final String householdId;
+  final String? rewardId;
+  final String userId;
+  final String rewardTitle;
+  final int points;
+  final RedemptionStatus status;
+  final DateTime requestedAt;
+  final DateTime? decidedAt;
+
+  factory RewardRedemption.fromJson(Map<String, dynamic> json) => RewardRedemption(
+    id: json['id'] as String,
+    householdId: json['householdId'] as String,
+    rewardId: json['rewardId'] as String?,
+    userId: json['userId'] as String,
+    rewardTitle: json['rewardTitle'] as String,
+    points: json['points'] as int,
+    status: RedemptionStatus.fromApi(json['status'] as String),
+    requestedAt: DateTime.parse(json['requestedAt'] as String).toLocal(),
+    decidedAt: _instant(json['decidedAt']),
+  );
+}
+
+/// Saldo de um membro: ganhos nas tarefas, já trocados, reservados (pedidos à espera) e disponíveis.
+class MemberPoints {
+  const MemberPoints({
+    required this.userId,
+    required this.displayName,
+    required this.color,
+    required this.earned,
+    required this.spent,
+    required this.reserved,
+    required this.available,
+  });
+
+  final String userId;
+  final String displayName;
+  final String color;
+  final int earned;
+  final int spent;
+  final int reserved;
+  final int available;
+
+  factory MemberPoints.fromJson(Map<String, dynamic> json) => MemberPoints(
+    userId: json['userId'] as String,
+    displayName: json['displayName'] as String,
+    color: json['color'] as String,
+    earned: json['earned'] as int,
+    spent: json['spent'] as int,
+    reserved: json['reserved'] as int,
+    available: json['available'] as int,
+  );
+}
+
+/// As recompensas da casa, os pedidos recentes (pendentes primeiro) e o saldo de cada membro.
+class RewardsOverview {
+  const RewardsOverview({required this.rewards, required this.redemptions, required this.points});
+
+  final List<Reward> rewards;
+  final List<RewardRedemption> redemptions;
+  final List<MemberPoints> points;
+
+  MemberPoints? pointsOf(String? userId) {
+    for (final p in points) {
+      if (p.userId == userId) return p;
+    }
+    return null;
+  }
+
+  factory RewardsOverview.fromJson(Map<String, dynamic> json) {
+    final rewards = json['rewards'] as List;
+    final redemptions = json['redemptions'] as List;
+    final points = json['points'] as List;
+    return RewardsOverview(
+      rewards: [for (final r in rewards) Reward.fromJson(r as Map<String, dynamic>)],
+      redemptions: [for (final r in redemptions) RewardRedemption.fromJson(r as Map<String, dynamic>)],
+      points: [for (final p in points) MemberPoints.fromJson(p as Map<String, dynamic>)],
+    );
+  }
+}

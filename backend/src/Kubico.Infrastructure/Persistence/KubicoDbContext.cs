@@ -1,6 +1,7 @@
 using Kubico.Domain.Calendar;
 using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
+using Kubico.Domain.Rewards;
 using Kubico.Domain.Shopping;
 using Kubico.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,8 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<Chore> Chores => Set<Chore>();
     public DbSet<ChoreCompletion> ChoreCompletions => Set<ChoreCompletion>();
     public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
+    public DbSet<Reward> Rewards => Set<Reward>();
+    public DbSet<RewardRedemption> RewardRedemptions => Set<RewardRedemption>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -108,6 +111,26 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
 
             // Apagar uma série apaga as suas exceções.
             e.HasOne<CalendarEvent>().WithMany().HasForeignKey(c => c.SeriesId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Reward>(e =>
+        {
+            e.Property(r => r.Title).HasMaxLength(100);
+            e.Property(r => r.Description).HasMaxLength(500);
+            e.HasIndex(r => r.HouseholdId);
+            e.HasOne(r => r.Household).WithMany().HasForeignKey(r => r.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RewardRedemption>(e =>
+        {
+            e.Property(r => r.RewardTitle).HasMaxLength(100);
+            e.Property(r => r.Status).HasConversion<string>().HasMaxLength(20);
+            e.HasIndex(r => new { r.HouseholdId, r.RequestedAt });
+            e.HasIndex(r => new { r.HouseholdId, r.UserId });
+            e.HasOne<Household>().WithMany().HasForeignKey(r => r.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+
+            // O histórico fica, mesmo que a recompensa seja apagada.
+            e.HasOne<Reward>().WithMany().HasForeignKey(r => r.RewardId).OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

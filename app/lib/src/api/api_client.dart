@@ -168,6 +168,35 @@ class ApiClient {
     return getCalendarFeed(householdId);
   }
 
+  // --- Recompensas ---
+
+  Future<RewardsOverview> getRewards(String householdId) async =>
+      RewardsOverview.fromJson(await _send('GET', '/api/households/$householdId/rewards') as Map<String, dynamic>);
+
+  Future<Reward> createReward(String householdId, RewardDraft draft) async =>
+      Reward.fromJson(await _send('POST', '/api/households/$householdId/rewards', body: draft.toJson()));
+
+  Future<Reward> updateReward(String householdId, String rewardId, RewardDraft draft) async =>
+      Reward.fromJson(await _send('PUT', '/api/households/$householdId/rewards/$rewardId', body: draft.toJson()));
+
+  Future<void> deleteReward(String householdId, String rewardId) =>
+      _send('DELETE', '/api/households/$householdId/rewards/$rewardId');
+
+  /// Pede a recompensa: fica à espera de um adulto, ou aprovada logo se quem pede for adulto.
+  Future<RewardRedemption> redeemReward(String householdId, String rewardId) async => RewardRedemption.fromJson(
+    await _send('POST', '/api/households/$householdId/rewards/$rewardId/redeem') as Map<String, dynamic>,
+  );
+
+  Future<RewardRedemption> decideRedemption(String householdId, String redemptionId, {required bool approve}) async {
+    final action = approve ? 'approve' : 'reject';
+    final json = await _send('POST', '/api/households/$householdId/redemptions/$redemptionId/$action');
+    return RewardRedemption.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// Cancela um pedido que ainda está à espera; os pontos voltam.
+  Future<void> cancelRedemption(String householdId, String redemptionId) =>
+      _send('DELETE', '/api/households/$householdId/redemptions/$redemptionId');
+
   String _occurrencePath(String householdId, String eventId, DateTime date, bool following) =>
       '${_eventsPath(householdId)}/$eventId/occurrences/${apiDate(date)}?scope=${following ? 'following' : 'this'}';
 

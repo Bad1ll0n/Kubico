@@ -6,6 +6,7 @@ using Kubico.Api.Chores;
 using Kubico.Api.Common;
 using Kubico.Api.Households;
 using Kubico.Api.Realtime;
+using Kubico.Api.Rewards;
 using Kubico.Api.Shopping;
 using Kubico.Domain.Users;
 using Kubico.Infrastructure;
@@ -113,6 +114,7 @@ api.MapShoppingEndpoints();
 api.MapChoreEndpoints();
 api.MapCalendarEndpoints();
 api.MapCalendarFeedEndpoints();
+api.MapRewardEndpoints();
 
 app.MapHub<HouseholdHub>(HouseholdHub.Path);
 
