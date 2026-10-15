@@ -133,9 +133,20 @@ class _FakeApi {
   /// Alterações a ocorrências: "PUT /caminho?scope=..." ou "DELETE /caminho?scope=...".
   final occurrenceChanges = <String>[];
 
+  /// Quantos endereços de subscrição já foram gerados.
+  var feeds = 1;
+
   late final client = MockClient((request) async {
     final path = request.url.path;
     if (path == '/api/households/h1') return _json(_household);
+    if (path == '/api/households/h1/calendar-feed') {
+      if (request.method == 'DELETE') {
+        feeds++;
+        return http.Response('', 204);
+      }
+      final url = 'https://api.kubico.test/api/calendar-feeds/segredo-$feeds.ics';
+      return _json({'url': url, 'webcalUrl': url.replaceFirst('https', 'webcal')});
+    }
     if (path.contains('/occurrences/')) {
       occurrenceChanges.add('${request.method} $path?${request.url.query}');
       if (request.method == 'DELETE') return http.Response('', 204);
@@ -355,6 +366,20 @@ void main() {
     await tester.tap(find.text('Este e os seguintes'));
     await tester.pumpAndSettle();
     expect(api.occurrenceChanges.last, 'DELETE /api/households/h1/events/e1/occurrences/2026-11-10?scope=following');
+  });
+
+  testWidgets('qualquer membro vê o endereço para subscrever noutros calendários e pode trocá-lo', (tester) async {
+    final api = _FakeApi();
+    await _pump(tester, api, HouseholdRole.child);
+
+    await tester.tap(find.byTooltip('Ver noutros calendários'));
+    await tester.pumpAndSettle();
+    expect(find.text('https://api.kubico.test/api/calendar-feeds/segredo-1.ics'), findsOneWidget);
+
+    await tester.tap(find.text('Gerar novo endereço'));
+    await tester.pumpAndSettle();
+    expect(find.text('https://api.kubico.test/api/calendar-feeds/segredo-2.ics'), findsOneWidget);
+    expect(find.text('https://api.kubico.test/api/calendar-feeds/segredo-1.ics'), findsNothing);
   });
 
   testWidgets('um adulto cria um evento e é avisado do conflito', (tester) async {

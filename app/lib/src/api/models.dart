@@ -558,6 +558,17 @@ class CalendarEventDraft {
   };
 }
 
+/// Endereço pessoal (iCalendar) para subscrever o calendário da casa noutras apps.
+class CalendarFeed {
+  const CalendarFeed({required this.url, required this.webcalUrl});
+
+  final String url;
+  final String webcalUrl;
+
+  factory CalendarFeed.fromJson(Map<String, dynamic> json) =>
+      CalendarFeed(url: json['url'] as String, webcalUrl: json['webcalUrl'] as String);
+}
+
 enum RecurrenceFrequency {
   daily('DAILY', 'Todos os dias', 'dias'),
   weekly('WEEKLY', 'Todas as semanas', 'semanas'),

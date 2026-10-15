@@ -158,6 +158,16 @@ class ApiClient {
   Future<void> deleteOccurrence(String householdId, String eventId, DateTime date, {bool following = false}) =>
       _send('DELETE', _occurrencePath(householdId, eventId, date, following));
 
+  /// O endereço pessoal para subscrever o calendário da casa (é criado no primeiro pedido).
+  Future<CalendarFeed> getCalendarFeed(String householdId) async =>
+      CalendarFeed.fromJson(await _send('POST', '/api/households/$householdId/calendar-feed'));
+
+  /// Desativa o endereço atual e devolve um novo.
+  Future<CalendarFeed> renewCalendarFeed(String householdId) async {
+    await _send('DELETE', '/api/households/$householdId/calendar-feed');
+    return getCalendarFeed(householdId);
+  }
+
   String _occurrencePath(String householdId, String eventId, DateTime date, bool following) =>
       '${_eventsPath(householdId)}/$eventId/occurrences/${apiDate(date)}?scope=${following ? 'following' : 'this'}';
 

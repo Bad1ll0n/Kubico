@@ -48,7 +48,9 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         {
             e.Property(m => m.Role).HasConversion<string>().HasMaxLength(20);
             e.Property(m => m.Color).HasMaxLength(7);
+            e.Property(m => m.CalendarFeedToken).HasMaxLength(64);
             e.HasIndex(m => new { m.HouseholdId, m.UserId }).IsUnique();
+            e.HasIndex(m => m.CalendarFeedToken).IsUnique();
             e.HasOne(m => m.Household).WithMany(h => h.Members).HasForeignKey(m => m.HouseholdId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(m => m.User).WithMany(u => u.Memberships).HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
         });

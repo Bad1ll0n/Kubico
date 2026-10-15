@@ -253,6 +253,10 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CalendarFeedToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("Color")
                         .IsRequired()
                         .HasMaxLength(7)
@@ -273,6 +277,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CalendarFeedToken")
+                        .IsUnique();
 
                     b.HasIndex("UserId");
 

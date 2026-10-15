@@ -7,6 +7,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../realtime/household_realtime.dart';
 import 'calendar_event_editor.dart';
+import 'calendar_feed_dialog.dart';
 import 'dates_pt.dart';
 import 'theme.dart';
 
@@ -333,6 +334,11 @@ class _CalendarViewState extends State<CalendarView> {
                 icon: const Icon(Icons.chevron_right),
               ),
               TextButton(onPressed: () => _go(DateTime.now()), child: const Text('Hoje')),
+              IconButton(
+                tooltip: 'Ver noutros calendários',
+                onPressed: () => showCalendarFeedDialog(context, householdId: _householdId),
+                icon: const Icon(Icons.share_outlined),
+              ),
             ],
           ),
         ],

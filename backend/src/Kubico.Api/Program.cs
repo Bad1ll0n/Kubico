@@ -112,6 +112,7 @@ api.MapHouseholdEndpoints();
 api.MapShoppingEndpoints();
 api.MapChoreEndpoints();
 api.MapCalendarEndpoints();
+api.MapCalendarFeedEndpoints();
 
 app.MapHub<HouseholdHub>(HouseholdHub.Path);
 
