@@ -6,7 +6,7 @@ App para gerir tudo o que é de casa: famílias com várias contas, calendário 
 
 ## O que já funciona
 
-- **Contas**: registo e entrada com email e palavra-passe. A sessão renova-se sozinha (token de acesso de 15 minutos e refresh token rotativo de 60 dias) e pode terminar-se em todos os dispositivos.
+- **Contas**: registo e entrada com email e palavra-passe. A sessão renova-se sozinha (token de acesso de 15 minutos e refresh token rotativo de 60 dias) e pode terminar-se em todos os dispositivos, ou só num, a partir da lista de dispositivos com sessão iniciada.
 - **Casas (agregados)**: criar uma casa, convidar membros com um código, papéis (Administrador, Adulto, Criança, Convidado), cor por membro, várias casas por utilizador.
 - **Listas de compras partilhadas em tempo real**: criar listas, adicionar artigos ("2 leite" separa a quantidade), marcar como comprado, limpar o carrinho. Quem tem a mesma lista aberta vê as alterações na hora (SignalR). **Funcionam sem rede**: a app guarda uma cópia e as alterações feitas no supermercado sem ligação são enviadas quando a rede voltar, sem duplicar artigos.
 - **Tarefas e rotinas**: tarefas únicas ou recorrentes (diárias, semanais, mensais), responsável ou "qualquer pessoa", rotação automática entre membros a cada conclusão, pontos e resumo dos últimos 30 dias por membro. As crianças só concluem as suas tarefas ou as de qualquer pessoa. Tarefas em atraso saltam para o período seguinte sem acumular.
@@ -67,8 +67,8 @@ flutter run --dart-define=API_URL=https://api.exemplo.pt
 ## Testes
 
 ```bash
-cd backend && dotnet test        # 95 testes (integração e regras de negócio)
-cd app && flutter test           # 39 testes unitários e de widgets
+cd backend && dotnet test        # 96 testes (integração e regras de negócio)
+cd app && flutter test           # 40 testes unitários e de widgets
 ```
 
 Teste da app contra uma API real (tempo real incluído):
@@ -91,6 +91,5 @@ KUBICO_API_URL=http://localhost:5281 flutter test test/live_api_test.dart
 
 1. Avisos no telemóvel: criar o projeto Firebase, correr `flutterfire configure` e juntar o `firebase_messaging` à app, que regista o token em `POST /api/notifications/devices`. O servidor já envia pelo FCM.
 2. Calendário: sync nos dois sentidos com Google e Outlook (precisa de credenciais OAuth da Google e da Microsoft). Por agora, o calendário da casa vê-se nessas apps através do endereço de subscrição.
-3. Lista de dispositivos com sessão iniciada (os refresh tokens já guardam o dispositivo).
 
 A especificação completa do produto está no documento "App de Gestão Familiar e da Casa — Especificação".

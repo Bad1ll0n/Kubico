@@ -62,6 +62,47 @@ public class RefreshTokenTests(KubicoApiFactory factory) : IClassFixture<KubicoA
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Each_device_is_listed_and_can_be_signed_out_from_another()
+    {
+        var email = $"{Guid.NewGuid():N}@kubico.test";
+        var phone = await SignIn("/api/auth/register", new RegisterRequest(email, "palavra-passe-segura", "Ana"), "android");
+        var laptop = await SignIn("/api/auth/login", new LoginRequest(email, "palavra-passe-segura"), "windows");
+        var (stranger, _) = await factory.CreateUserAsync();
+        var phoneClient = Authorized(phone.AccessToken);
+
+        var sessions = (await phoneClient.GetFromJsonAsync<List<DeviceSessionDto>>("/api/auth/sessions", TestJson.Options))!;
+        var laptopSession = sessions.Single(s => s.Device == "windows");
+        var byStranger = await stranger.DeleteAsync($"/api/auth/sessions/{laptopSession.Id}");
+        var ended = await phoneClient.DeleteAsync($"/api/auth/sessions/{laptopSession.Id}");
+        var laptopRefresh = await factory.CreateClient().PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(laptop.RefreshToken));
+        var after = await phoneClient.GetFromJsonAsync<List<DeviceSessionDto>>("/api/auth/sessions", TestJson.Options);
+
+        Assert.Equal(2, sessions.Count);
+        Assert.True(sessions.Single(s => s.Device == "android").IsCurrent);
+        Assert.False(laptopSession.IsCurrent);
+        Assert.Equal(HttpStatusCode.NotFound, byStranger.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, ended.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, laptopRefresh.StatusCode);
+        Assert.Equal("android", Assert.Single(after!).Device);
+    }
+
+    private async Task<AuthResponse> SignIn(string url, object request, string device)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(request) };
+        message.Headers.Add("X-Kubico-Device", device);
+        var response = await factory.CreateClient().SendAsync(message);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<AuthResponse>(TestJson.Options))!;
+    }
+
+    private HttpClient Authorized(string accessToken)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        return client;
+    }
+
     internal static async Task<AuthResponse?> Refresh(HttpClient client, string refreshToken)
     {
         var response = await client.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(refreshToken));

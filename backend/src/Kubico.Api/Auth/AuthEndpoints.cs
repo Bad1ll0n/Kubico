@@ -111,12 +111,46 @@ public static class AuthEndpoints
             return Results.NoContent();
         }).RequireAuthorization();
 
+        // Dispositivos com sessão iniciada; "este" é o do token de acesso usado no pedido.
+        group.MapGet("/sessions", async (ClaimsPrincipal principal, SessionService sessions, CancellationToken ct) =>
+        {
+            var current = Guid.TryParse(principal.FindFirstValue(TokenService.SessionClaim), out var sid) ? sid : (Guid?)null;
+            return Results.Ok(await sessions.ListAsync(principal.GetUserId(), current, ct));
+        }).RequireAuthorization();
+
+        group.MapDelete("/sessions/{sessionId:guid}", async (
+            Guid sessionId, ClaimsPrincipal principal, SessionService sessions, CancellationToken ct) =>
+            await sessions.EndAsync(principal.GetUserId(), sessionId, ct) ? Results.NoContent() : Results.NotFound())
+            .RequireAuthorization();
+
         return api;
     }
 
     private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 
-    private static string? Device(HttpRequest http) => http.Headers.UserAgent.ToString() is { Length: > 0 } agent ? agent : null;
+    /// <summary>Que dispositivo é: a app diz (cabeçalho X-Kubico-Device); senão, adivinha-se pelo User-Agent.</summary>
+    private static string? Device(HttpRequest http)
+    {
+        var declared = http.Headers["X-Kubico-Device"].ToString();
+        if (KnownDevices.Contains(declared))
+        {
+            return declared;
+        }
+
+        var agent = http.Headers.UserAgent.ToString();
+        return agent switch
+        {
+            _ when agent.Contains("Android", StringComparison.OrdinalIgnoreCase) => "android",
+            _ when agent.Contains("iPhone", StringComparison.OrdinalIgnoreCase)
+                || agent.Contains("iPad", StringComparison.OrdinalIgnoreCase) => "ios",
+            _ when agent.Contains("Windows", StringComparison.OrdinalIgnoreCase) => "windows",
+            _ when agent.Contains("Mac OS", StringComparison.OrdinalIgnoreCase) => "macos",
+            _ when agent.Contains("Linux", StringComparison.OrdinalIgnoreCase) => "linux",
+            _ => null,
+        };
+    }
+
+    private static readonly HashSet<string> KnownDevices = ["android", "ios", "windows", "macos", "linux", "web"];
 
     public static UserDto ToDto(this User user) => new(user.Id, user.Email, user.DisplayName);
 }

@@ -8,6 +8,7 @@ import '../session/session_controller.dart';
 import '../shopping/shopping_repository.dart';
 import 'calendar_view.dart';
 import 'chores_view.dart';
+import 'devices_screen.dart';
 import 'household_screen.dart';
 import 'notifications_screen.dart';
 import 'onboarding_screen.dart';
@@ -156,9 +157,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         .push(MaterialPageRoute<void>(builder: (_) => HouseholdScreen(householdId: household.id))),
               ),
               PopupMenuButton<String>(
-                onSelected: (value) => _signOut(session, everywhere: value == 'logout-all'),
+                onSelected: (value) => value == 'devices'
+                    ? Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DevicesScreen()))
+                    : _signOut(session, everywhere: value == 'logout-all'),
                 itemBuilder: (_) => [
                   PopupMenuItem(enabled: false, child: Text(session.user?.email ?? '')),
+                  const PopupMenuItem(value: 'devices', child: Text('Dispositivos com sessão iniciada')),
                   const PopupMenuItem(value: 'logout', child: Text('Terminar sessão')),
                   const PopupMenuItem(value: 'logout-all', child: Text('Terminar sessão em todos os dispositivos')),
                 ],

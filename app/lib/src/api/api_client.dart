@@ -18,10 +18,13 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  ApiClient({required this.baseUrl, http.Client? httpClient}) : _http = httpClient ?? http.Client();
+  ApiClient({required this.baseUrl, http.Client? httpClient, this.deviceKind}) : _http = httpClient ?? http.Client();
 
   final String baseUrl;
   final http.Client _http;
+
+  /// Em que tipo de dispositivo corre a app (android, ios, windows, macos, linux, web), para a lista de sessões.
+  final String? deviceKind;
 
   /// Token JWT da sessão atual; null quando ninguém tem sessão iniciada.
   String? accessToken;
@@ -51,6 +54,14 @@ class ApiClient {
 
   /// Termina a sessão em todos os dispositivos.
   Future<void> logoutEverywhere() => _send('POST', '/api/auth/logout-all');
+
+  /// Os dispositivos com sessão iniciada (o deste vem marcado).
+  Future<List<DeviceSession>> getSessions() async => [
+    for (final s in await _send('GET', '/api/auth/sessions') as List) DeviceSession.fromJson(s as Map<String, dynamic>),
+  ];
+
+  /// Termina a sessão noutro dispositivo.
+  Future<void> endSession(String sessionId) => _send('DELETE', '/api/auth/sessions/$sessionId');
 
   Future<Me> getMe() async => Me.fromJson(await _send('GET', '/api/me'));
 
@@ -257,6 +268,7 @@ class ApiClient {
   Future<dynamic> _send(String method, String path, {Map<String, dynamic>? body, bool retry = true}) async {
     final request = http.Request(method, Uri.parse('$baseUrl$path'))..headers['Accept'] = 'application/json';
     if (accessToken != null) request.headers['Authorization'] = 'Bearer $accessToken';
+    if (deviceKind != null) request.headers['X-Kubico-Device'] = deviceKind!;
     if (body != null) {
       request.headers['Content-Type'] = 'application/json';
       request.body = jsonEncode(body);

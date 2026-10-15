@@ -46,6 +46,33 @@ class AuthResult {
   );
 }
 
+/// Uma sessão iniciada num dispositivo. [device] é android, ios, windows, macos, linux ou web.
+class DeviceSession {
+  const DeviceSession({
+    required this.id,
+    required this.device,
+    required this.startedAt,
+    required this.lastActiveAt,
+    required this.isCurrent,
+  });
+
+  final String id;
+  final String? device;
+  final DateTime startedAt;
+  final DateTime lastActiveAt;
+
+  /// A sessão deste dispositivo.
+  final bool isCurrent;
+
+  factory DeviceSession.fromJson(Map<String, dynamic> json) => DeviceSession(
+    id: json['id'] as String,
+    device: json['device'] as String?,
+    startedAt: DateTime.parse(json['startedAt'] as String).toLocal(),
+    lastActiveAt: DateTime.parse(json['lastActiveAt'] as String).toLocal(),
+    isCurrent: json['isCurrent'] as bool,
+  );
+}
+
 class HouseholdSummary {
   const HouseholdSummary({required this.id, required this.name, required this.role});
 
