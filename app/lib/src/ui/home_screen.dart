@@ -8,10 +8,11 @@ import 'calendar_view.dart';
 import 'chores_view.dart';
 import 'household_screen.dart';
 import 'onboarding_screen.dart';
+import 'rewards_view.dart';
 import 'shopping_items_view.dart';
 import 'shopping_lists_view.dart';
 
-/// Ecrã principal de uma casa, com as secções Compras, Tarefas e Calendário.
+/// Ecrã principal de uma casa, com as secções Compras, Tarefas, Calendário e Recompensas.
 /// Em ecrãs largos (PC, tablet) usa uma barra lateral e mostra listas e artigos lado a lado;
 /// no telemóvel usa a barra inferior e abre cada lista num ecrã próprio.
 class HomeScreen extends StatefulWidget {
@@ -28,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
     (icon: Icons.shopping_cart_outlined, selectedIcon: Icons.shopping_cart, label: 'Compras'),
     (icon: Icons.task_alt_outlined, selectedIcon: Icons.task_alt, label: 'Tarefas'),
     (icon: Icons.calendar_month_outlined, selectedIcon: Icons.calendar_month, label: 'Calendário'),
+    (icon: Icons.card_giftcard_outlined, selectedIcon: Icons.card_giftcard, label: 'Recompensas'),
   ];
 
   String? _connectedHouseholdId;
@@ -99,7 +101,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final content = switch (_section) {
           0 => shopping,
           1 => ChoresView(key: ValueKey('chores-${household.id}'), household: household),
-          _ => CalendarView(key: ValueKey('calendar-${household.id}'), household: household),
+          2 => CalendarView(key: ValueKey('calendar-${household.id}'), household: household),
+          _ => RewardsView(key: ValueKey('rewards-${household.id}'), household: household),
         };
 
         return Scaffold(
