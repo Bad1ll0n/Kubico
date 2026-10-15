@@ -1,3 +1,4 @@
+using Kubico.Api.Calendar;
 using Kubico.Api.Chores;
 using Kubico.Api.Shopping;
 using Microsoft.AspNetCore.SignalR;
@@ -13,6 +14,8 @@ public static class HouseholdEvents
     public const string ShoppingItemDeleted = "ShoppingItemDeleted";
     public const string ChoreUpserted = "ChoreUpserted";
     public const string ChoreDeleted = "ChoreDeleted";
+    public const string CalendarEventUpserted = "CalendarEventUpserted";
+    public const string CalendarEventDeleted = "CalendarEventDeleted";
 }
 
 public class HouseholdNotifier(IHubContext<HouseholdHub> hub)
@@ -34,6 +37,12 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub)
 
     public Task ChoreDeleted(Guid householdId, Guid choreId, CancellationToken ct) =>
         Group(householdId).SendAsync(HouseholdEvents.ChoreDeleted, choreId, ct);
+
+    public Task CalendarEventUpserted(Guid householdId, CalendarEventDto calendarEvent, CancellationToken ct) =>
+        Group(householdId).SendAsync(HouseholdEvents.CalendarEventUpserted, calendarEvent, ct);
+
+    public Task CalendarEventDeleted(Guid householdId, Guid eventId, CancellationToken ct) =>
+        Group(householdId).SendAsync(HouseholdEvents.CalendarEventDeleted, eventId, ct);
 
     private IClientProxy Group(Guid householdId) => hub.Clients.Group(HouseholdHub.GroupName(householdId));
 }

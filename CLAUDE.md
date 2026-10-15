@@ -46,16 +46,17 @@ O CI (`.github/workflows/ci.yml`) corre build com `-warnaserror`, testes, `dart 
 - **Datas**: instantes em `DateTimeOffset` UTC; prazos em `DateOnly`. "Hoje" calcula-se com `Household.Today(now)` (fuso da casa, por omissão Europe/Lisbon). Usa sempre `TimeProvider`, nunca `DateTime.Now`.
 - **EF Core**: entidades com `Id` já preenchido adicionadas por navegação têm de ser registadas com `db.X.Add(...)`, senão o EF faz UPDATE em vez de INSERT.
 - **Enums** viajam como texto em JSON (`JsonStringEnumConverter`) e na base de dados.
+- **Calendário**: eventos com hora usam `StartsAt`/`EndsAt` (UTC); de dia inteiro, `StartDate`/`EndDate` (inclusive). A repetição é uma RRULE canónica (`RecurrenceRule`, subconjunto da RFC 5545) e as ocorrências, os conflitos e os feriados calculam-se no servidor, no fuso da casa (`GET /events?from&to`, até 92 dias).
 - **Erros** devolvem ProblemDetails com `title` em português, pronto a mostrar; a app mostra o `title` ou a primeira mensagem de validação.
 - **Textos visíveis ao utilizador em português de Portugal.** Código, nomes de classes e commits técnicos podem ser em inglês; comentários em português.
 - Cada funcionalidade nova leva testes de integração no backend (incluindo permissões e isolamento entre casas) e testes na app.
 
 ## Estado e próximos passos
 
-Feito: contas (JWT), casas e convites, listas de compras em tempo real, tarefas recorrentes com rotação e pontos.
+Feito: contas (JWT), casas e convites, listas de compras em tempo real, tarefas recorrentes com rotação e pontos, calendário partilhado (repetições, boleias, conflitos, feriados).
 
 A seguir (por esta ordem, salvo indicação em contrário):
-1. Calendário partilhado (eventos da casa; depois sync Google/Outlook).
+1. Calendário: sync Google/Outlook e exceções em eventos que se repetem (editar ou apagar só uma ocorrência).
 2. Recompensas trocáveis por pontos.
 3. Modo offline na lista de compras.
 4. Refresh tokens.

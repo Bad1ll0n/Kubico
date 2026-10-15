@@ -41,6 +41,16 @@ class ChoreDeleted extends HouseholdEvent {
   final String choreId;
 }
 
+class CalendarEventUpserted extends HouseholdEvent {
+  const CalendarEventUpserted(this.event);
+  final CalendarEvent event;
+}
+
+class CalendarEventDeleted extends HouseholdEvent {
+  const CalendarEventDeleted(this.eventId);
+  final String eventId;
+}
+
 /// Ligação SignalR ao agregado aberto. Volta a ligar-se sozinha quando a rede falha
 /// e avisa (via [reconnected]) para os ecrãs recarregarem o que possam ter perdido.
 class HouseholdRealtime {
@@ -86,6 +96,12 @@ class HouseholdRealtime {
 
     connection.on('ChoreUpserted', (args) => _emit(args, (a) => ChoreUpserted(Chore.fromJson(_map(a[0])))));
     connection.on('ChoreDeleted', (args) => _emit(args, (a) => ChoreDeleted(a[0] as String)));
+
+    connection.on(
+      'CalendarEventUpserted',
+      (args) => _emit(args, (a) => CalendarEventUpserted(CalendarEvent.fromJson(_map(a[0])))),
+    );
+    connection.on('CalendarEventDeleted', (args) => _emit(args, (a) => CalendarEventDeleted(a[0] as String)));
 
     connection.onreconnected(({connectionId}) async {
       await _join(connection, householdId);

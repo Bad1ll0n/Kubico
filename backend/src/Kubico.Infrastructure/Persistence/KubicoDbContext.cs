@@ -1,3 +1,4 @@
+using Kubico.Domain.Calendar;
 using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
 using Kubico.Domain.Shopping;
@@ -17,6 +18,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<ShoppingItem> ShoppingItems => Set<ShoppingItem>();
     public DbSet<Chore> Chores => Set<Chore>();
     public DbSet<ChoreCompletion> ChoreCompletions => Set<ChoreCompletion>();
+    public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -89,6 +91,17 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasIndex(c => new { c.ChoreId, c.CompletedAt });
             e.HasIndex(c => c.UserId);
             e.HasOne(c => c.Chore).WithMany(c => c.Completions).HasForeignKey(c => c.ChoreId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CalendarEvent>(e =>
+        {
+            e.Property(c => c.Title).HasMaxLength(200);
+            e.Property(c => c.Notes).HasMaxLength(1000);
+            e.Property(c => c.Location).HasMaxLength(200);
+            e.Property(c => c.Recurrence).HasMaxLength(200);
+            e.HasIndex(c => new { c.HouseholdId, c.StartsAt });
+            e.HasIndex(c => new { c.HouseholdId, c.StartDate });
+            e.HasOne(c => c.Household).WithMany().HasForeignKey(c => c.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

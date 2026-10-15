@@ -12,6 +12,7 @@ Primeira fatia vertical, de ponta a ponta:
 - **Casas (agregados)**: criar uma casa, convidar membros com um código, papéis (Administrador, Adulto, Criança, Convidado), cor por membro, várias casas por utilizador.
 - **Listas de compras partilhadas em tempo real**: criar listas, adicionar artigos ("2 leite" separa a quantidade), marcar como comprado, limpar o carrinho. Quem tem a mesma lista aberta vê as alterações na hora (SignalR).
 - **Tarefas e rotinas**: tarefas únicas ou recorrentes (diárias, semanais, mensais), responsável ou "qualquer pessoa", rotação automática entre membros a cada conclusão, pontos e resumo dos últimos 30 dias por membro. As crianças só concluem as suas tarefas ou as de qualquer pessoa. Tarefas em atraso saltam para o período seguinte sem acumular.
+- **Calendário partilhado**: vistas de dia, semana e mês; eventos com hora ou de dia inteiro (vários dias incluídos), com repetição diária, semanal (em vários dias da semana), mensal ou anual, até uma data. Cada evento tem participantes (com a cor de cada membro) e boleias: quem leva e quem vai buscar. A app avisa quando alguém está em dois eventos ao mesmo tempo ou tem de levar/ir buscar alguém enquanto está noutro compromisso. Mostra os feriados nacionais de Portugal. A mudança de hora não desloca as repetições (às 18:00 continua às 18:00).
 - **App Flutter** para Android, iOS, Windows, macOS, Linux e web. Em ecrãs largos (PC, tablet) mostra as listas e os artigos lado a lado.
 
 ## Estrutura
@@ -66,7 +67,7 @@ flutter run --dart-define=API_URL=https://api.exemplo.pt
 ## Testes
 
 ```bash
-cd backend && dotnet test        # 31 testes (integração e regras de negócio)
+cd backend && dotnet test        # 65 testes (integração e regras de negócio)
 cd app && flutter test           # testes unitários e de widgets
 ```
 
@@ -85,7 +86,7 @@ KUBICO_API_URL=http://localhost:5281 flutter test test/live_api_test.dart
 
 ## Próximos passos
 
-1. Calendário partilhado (eventos da casa; depois sync Google/Outlook).
+1. Calendário: sync com Google/Outlook e editar ou apagar só uma ocorrência de um evento que se repete.
 2. Recompensas trocáveis por pontos.
 3. Modo offline na lista de compras (cache local e fila de alterações).
 4. Refresh tokens e "terminar sessão em todos os dispositivos".
