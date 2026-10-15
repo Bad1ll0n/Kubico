@@ -10,7 +10,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Kubico.Api.Households;
 
 public record CreateHouseholdRequest(
-    [property: Required, StringLength(100, MinimumLength = 1)] string Name);
+    [property: Required, StringLength(100, MinimumLength = 1)] string Name,
+    [property: StringLength(64)] string? TimeZoneId = null);
 
 public record CreateInviteRequest(HouseholdRole Role = HouseholdRole.Adult, int ValidForDays = 7);
 
@@ -18,7 +19,7 @@ public record HouseholdSummaryDto(Guid Id, string Name, HouseholdRole Role);
 
 public record MemberDto(Guid UserId, string DisplayName, HouseholdRole Role, string Color);
 
-public record HouseholdDto(Guid Id, string Name, HouseholdRole MyRole, IReadOnlyList<MemberDto> Members);
+public record HouseholdDto(Guid Id, string Name, string TimeZoneId, HouseholdRole MyRole, IReadOnlyList<MemberDto> Members);
 
 public record InviteDto(string Code, HouseholdRole Role, DateTimeOffset ExpiresAt);
 
@@ -69,10 +70,19 @@ public static class HouseholdEndpoints
     private static async Task<IResult> CreateHousehold(
         CreateHouseholdRequest request, ClaimsPrincipal principal, KubicoDbContext db, TimeProvider clock, CancellationToken ct)
     {
+        var timeZoneId = string.IsNullOrWhiteSpace(request.TimeZoneId) ? Household.DefaultTimeZoneId : request.TimeZoneId.Trim();
+        if (!TimeZoneInfo.TryFindSystemTimeZoneById(timeZoneId, out _))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(request.TimeZoneId)] = ["Fuso horário desconhecido (usa um nome IANA, ex.: Europe/Lisbon)."],
+            });
+        }
+
         var userId = principal.GetUserId();
         var now = clock.GetUtcNow();
 
-        var household = new Household { Name = request.Name.Trim(), CreatedAt = now };
+        var household = new Household { Name = request.Name.Trim(), TimeZoneId = timeZoneId, CreatedAt = now };
         household.Members.Add(new Membership
         {
             UserId = userId,
@@ -104,6 +114,7 @@ public static class HouseholdEndpoints
             {
                 h.Id,
                 h.Name,
+                h.TimeZoneId,
                 Members = h.Members
                     .OrderBy(m => m.User.DisplayName)
                     .Select(m => new MemberDto(m.UserId, m.User.DisplayName, m.Role, m.Color))
@@ -111,7 +122,7 @@ public static class HouseholdEndpoints
             })
             .SingleAsync(ct);
 
-        return Results.Ok(new HouseholdDto(household.Id, household.Name, role!.Value, household.Members));
+        return Results.Ok(new HouseholdDto(household.Id, household.Name, household.TimeZoneId, role!.Value, household.Members));
     }
 
     private static async Task<IResult> CreateInvite(

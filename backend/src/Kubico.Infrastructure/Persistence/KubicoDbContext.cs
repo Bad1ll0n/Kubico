@@ -1,3 +1,4 @@
+using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
 using Kubico.Domain.Shopping;
 using Kubico.Domain.Users;
@@ -14,6 +15,8 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<Invite> Invites => Set<Invite>();
     public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
     public DbSet<ShoppingItem> ShoppingItems => Set<ShoppingItem>();
+    public DbSet<Chore> Chores => Set<Chore>();
+    public DbSet<ChoreCompletion> ChoreCompletions => Set<ChoreCompletion>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -36,6 +39,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         modelBuilder.Entity<Household>(e =>
         {
             e.Property(h => h.Name).HasMaxLength(100);
+            e.Property(h => h.TimeZoneId).HasMaxLength(64).HasDefaultValue(Household.DefaultTimeZoneId);
         });
 
         modelBuilder.Entity<Membership>(e =>
@@ -69,6 +73,22 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(i => i.Category).HasMaxLength(50);
             e.HasIndex(i => i.ListId);
             e.HasOne(i => i.List).WithMany(l => l.Items).HasForeignKey(i => i.ListId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Chore>(e =>
+        {
+            e.Property(c => c.Title).HasMaxLength(200);
+            e.Property(c => c.Notes).HasMaxLength(1000);
+            e.Property(c => c.Recurrence).HasConversion<string>().HasMaxLength(20);
+            e.HasIndex(c => new { c.HouseholdId, c.DueDate });
+            e.HasOne(c => c.Household).WithMany().HasForeignKey(c => c.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ChoreCompletion>(e =>
+        {
+            e.HasIndex(c => new { c.ChoreId, c.CompletedAt });
+            e.HasIndex(c => c.UserId);
+            e.HasOne(c => c.Chore).WithMany(c => c.Completions).HasForeignKey(c => c.ChoreId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

@@ -98,6 +98,33 @@ class ApiClient {
   Future<void> clearChecked(String householdId, String listId) =>
       _send('POST', '${_itemsPath(householdId, listId)}/clear-checked');
 
+  // --- Tarefas ---
+
+  Future<List<Chore>> getChores(String householdId) async =>
+      (await _send('GET', '/api/households/$householdId/chores') as List)
+          .map((c) => Chore.fromJson(c as Map<String, dynamic>))
+          .toList();
+
+  Future<Chore> createChore(String householdId, ChoreDraft draft) async =>
+      Chore.fromJson(await _send('POST', '/api/households/$householdId/chores', body: draft.toJson()));
+
+  Future<Chore> updateChore(String householdId, String choreId, ChoreDraft draft) async =>
+      Chore.fromJson(await _send('PUT', '/api/households/$householdId/chores/$choreId', body: draft.toJson()));
+
+  Future<void> deleteChore(String householdId, String choreId) =>
+      _send('DELETE', '/api/households/$householdId/chores/$choreId');
+
+  /// Conclui a tarefa e devolve a versão atualizada e os pontos ganhos.
+  Future<(Chore, int)> completeChore(String householdId, String choreId) async {
+    final json = await _send('POST', '/api/households/$householdId/chores/$choreId/complete') as Map<String, dynamic>;
+    return (Chore.fromJson(json['chore'] as Map<String, dynamic>), json['pointsEarned'] as int);
+  }
+
+  Future<List<MemberChoreStats>> getChoreStats(String householdId, {int days = 30}) async {
+    final json = await _send('GET', '/api/households/$householdId/chores/stats?days=$days') as Map<String, dynamic>;
+    return (json['members'] as List).map((m) => MemberChoreStats.fromJson(m as Map<String, dynamic>)).toList();
+  }
+
   String _itemsPath(String householdId, String listId) => '/api/households/$householdId/lists/$listId/items';
 
   // --- HTTP ---

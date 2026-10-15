@@ -4,13 +4,15 @@ import 'package:provider/provider.dart';
 import '../api/models.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
+import 'chores_view.dart';
 import 'household_screen.dart';
 import 'onboarding_screen.dart';
 import 'shopping_items_view.dart';
 import 'shopping_lists_view.dart';
 
-/// Ecrã principal de uma casa. Em ecrãs largos (PC, tablet) mostra as listas e os
-/// artigos lado a lado; no telemóvel abre cada lista num ecrã próprio.
+/// Ecrã principal de uma casa, com as secções Compras e Tarefas.
+/// Em ecrãs largos (PC, tablet) usa uma barra lateral e mostra listas e artigos lado a lado;
+/// no telemóvel usa a barra inferior e abre cada lista num ecrã próprio.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -21,8 +23,14 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const _sections = [
+    (icon: Icons.shopping_cart_outlined, selectedIcon: Icons.shopping_cart, label: 'Compras'),
+    (icon: Icons.task_alt_outlined, selectedIcon: Icons.task_alt, label: 'Tarefas'),
+  ];
+
   String? _connectedHouseholdId;
   ShoppingList? _selectedList;
+  int _section = 0;
 
   @override
   void didChangeDependencies() {
@@ -68,6 +76,26 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         );
 
+        final shopping = wide
+            ? Row(
+                children: [
+                  SizedBox(width: 340, child: lists),
+                  const VerticalDivider(width: 1),
+                  Expanded(
+                    child: _selectedList == null
+                        ? const _EmptyDetail()
+                        : ShoppingItemsView(
+                            key: ValueKey(_selectedList!.id),
+                            householdId: household.id,
+                            list: _selectedList!,
+                            showTitle: true,
+                          ),
+                  ),
+                ],
+              )
+            : lists;
+        final chores = ChoresView(key: ValueKey('chores-${household.id}'), household: household);
+
         return Scaffold(
           appBar: AppBar(
             title: _HouseholdSwitcher(session: session, current: household),
@@ -96,21 +124,34 @@ class _HomeScreenState extends State<HomeScreen> {
           body: wide
               ? Row(
                   children: [
-                    SizedBox(width: 340, child: lists),
-                    const VerticalDivider(width: 1),
-                    Expanded(
-                      child: _selectedList == null
-                          ? const _EmptyDetail()
-                          : ShoppingItemsView(
-                              key: ValueKey(_selectedList!.id),
-                              householdId: household.id,
-                              list: _selectedList!,
-                              showTitle: true,
-                            ),
+                    NavigationRail(
+                      selectedIndex: _section,
+                      onDestinationSelected: (i) => setState(() => _section = i),
+                      labelType: NavigationRailLabelType.all,
+                      destinations: [
+                        for (final s in _sections)
+                          NavigationRailDestination(
+                            icon: Icon(s.icon),
+                            selectedIcon: Icon(s.selectedIcon),
+                            label: Text(s.label),
+                          ),
+                      ],
                     ),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: _section == 0 ? shopping : chores),
                   ],
                 )
-              : lists,
+              : (_section == 0 ? shopping : chores),
+          bottomNavigationBar: wide
+              ? null
+              : NavigationBar(
+                  selectedIndex: _section,
+                  onDestinationSelected: (i) => setState(() => _section = i),
+                  destinations: [
+                    for (final s in _sections)
+                      NavigationDestination(icon: Icon(s.icon), selectedIcon: Icon(s.selectedIcon), label: s.label),
+                  ],
+                ),
         );
       },
     );

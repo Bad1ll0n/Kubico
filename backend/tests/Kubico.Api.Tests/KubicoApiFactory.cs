@@ -3,6 +3,9 @@ using System.Net.Http.Json;
 using Kubico.Api.Auth;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Kubico.Api.Tests;
 
@@ -12,6 +15,16 @@ namespace Kubico.Api.Tests;
 /// </summary>
 public sealed class KubicoApiFactory : WebApplicationFactory<Program>
 {
+    /// <summary>
+    /// Relógio controlado pelos testes: meia-noite UTC de hoje (no passado, para os tokens
+    /// JWT, que são validados com o relógio real, serem aceites).
+    /// </summary>
+    public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero));
+
+    /// <summary>"Hoje" na casa (Europe/Lisbon) segundo o relógio dos testes.</summary>
+    public DateOnly Today => DateOnly.FromDateTime(
+        TimeZoneInfo.ConvertTime(Clock.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById("Europe/Lisbon")).DateTime);
+
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"kubico-tests-{Guid.NewGuid():N}.db");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -21,6 +34,7 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Database:Provider", "Sqlite");
         builder.UseSetting("Database:MigrateOnStartup", "true");
         builder.UseSetting("Jwt:SigningKey", "test-signing-key-that-is-long-enough-0123456789");
+        builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(Clock));
     }
 
     /// <summary>Regista um utilizador novo e devolve um cliente já autenticado.</summary>

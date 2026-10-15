@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Serialization;
 using Kubico.Api.Auth;
+using Kubico.Api.Chores;
 using Kubico.Api.Common;
 using Kubico.Api.Households;
 using Kubico.Api.Realtime;
@@ -108,6 +109,7 @@ var api = app.MapGroup("/api");
 api.MapAuthEndpoints();
 api.MapHouseholdEndpoints();
 api.MapShoppingEndpoints();
+api.MapChoreEndpoints();
 
 app.MapHub<HouseholdHub>(HouseholdHub.Path);
 

@@ -11,6 +11,7 @@ Primeira fatia vertical, de ponta a ponta:
 - **Contas**: registo e entrada com email e palavra-passe (JWT).
 - **Casas (agregados)**: criar uma casa, convidar membros com um código, papéis (Administrador, Adulto, Criança, Convidado), cor por membro, várias casas por utilizador.
 - **Listas de compras partilhadas em tempo real**: criar listas, adicionar artigos ("2 leite" separa a quantidade), marcar como comprado, limpar o carrinho. Quem tem a mesma lista aberta vê as alterações na hora (SignalR).
+- **Tarefas e rotinas**: tarefas únicas ou recorrentes (diárias, semanais, mensais), responsável ou "qualquer pessoa", rotação automática entre membros a cada conclusão, pontos e resumo dos últimos 30 dias por membro. As crianças só concluem as suas tarefas ou as de qualquer pessoa. Tarefas em atraso saltam para o período seguinte sem acumular.
 - **App Flutter** para Android, iOS, Windows, macOS, Linux e web. Em ecrãs largos (PC, tablet) mostra as listas e os artigos lado a lado.
 
 ## Estrutura
@@ -65,7 +66,7 @@ flutter run --dart-define=API_URL=https://api.exemplo.pt
 ## Testes
 
 ```bash
-cd backend && dotnet test        # 17 testes de integração
+cd backend && dotnet test        # 31 testes (integração e regras de negócio)
 cd app && flutter test           # testes unitários e de widgets
 ```
 
@@ -84,10 +85,10 @@ KUBICO_API_URL=http://localhost:5281 flutter test test/live_api_test.dart
 
 ## Próximos passos
 
-1. Refresh tokens e "terminar sessão em todos os dispositivos".
-2. Modo offline na lista de compras (cache local e fila de alterações).
-3. Calendário partilhado com sync Google/Outlook.
-4. Tarefas recorrentes com rotação entre membros.
+1. Calendário partilhado (eventos da casa; depois sync Google/Outlook).
+2. Recompensas trocáveis por pontos.
+3. Modo offline na lista de compras (cache local e fila de alterações).
+4. Refresh tokens e "terminar sessão em todos os dispositivos".
 5. Notificações push.
 
 A especificação completa do produto está no documento "App de Gestão Familiar e da Casa — Especificação".

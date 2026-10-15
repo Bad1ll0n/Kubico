@@ -31,6 +31,16 @@ class ShoppingItemDeleted extends HouseholdEvent {
   final String itemId;
 }
 
+class ChoreUpserted extends HouseholdEvent {
+  const ChoreUpserted(this.chore);
+  final Chore chore;
+}
+
+class ChoreDeleted extends HouseholdEvent {
+  const ChoreDeleted(this.choreId);
+  final String choreId;
+}
+
 /// Ligação SignalR ao agregado aberto. Volta a ligar-se sozinha quando a rede falha
 /// e avisa (via [reconnected]) para os ecrãs recarregarem o que possam ter perdido.
 class HouseholdRealtime {
@@ -73,6 +83,9 @@ class HouseholdRealtime {
       'ShoppingItemDeleted',
       (args) => _emit(args, (a) => ShoppingItemDeleted(a[0] as String, a[1] as String)),
     );
+
+    connection.on('ChoreUpserted', (args) => _emit(args, (a) => ChoreUpserted(Chore.fromJson(_map(a[0])))));
+    connection.on('ChoreDeleted', (args) => _emit(args, (a) => ChoreDeleted(a[0] as String)));
 
     connection.onreconnected(({connectionId}) async {
       await _join(connection, householdId);

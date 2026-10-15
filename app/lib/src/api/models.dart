@@ -82,16 +82,31 @@ class Member {
 }
 
 class HouseholdDetails {
-  const HouseholdDetails({required this.id, required this.name, required this.myRole, required this.members});
+  const HouseholdDetails({
+    required this.id,
+    required this.name,
+    required this.timeZoneId,
+    required this.myRole,
+    required this.members,
+  });
 
   final String id;
   final String name;
+  final String timeZoneId;
   final HouseholdRole myRole;
   final List<Member> members;
+
+  Member? member(String? userId) {
+    for (final m in members) {
+      if (m.userId == userId) return m;
+    }
+    return null;
+  }
 
   factory HouseholdDetails.fromJson(Map<String, dynamic> json) => HouseholdDetails(
     id: json['id'] as String,
     name: json['name'] as String,
+    timeZoneId: json['timeZoneId'] as String? ?? 'Europe/Lisbon',
     myRole: HouseholdRole.fromApi(json['myRole'] as String),
     members: (json['members'] as List).map((m) => Member.fromJson(m as Map<String, dynamic>)).toList(),
   );
@@ -182,5 +197,132 @@ class ShoppingItem {
     addedByUserId: json['addedByUserId'] as String,
     createdAt: DateTime.parse(json['createdAt'] as String),
     updatedAt: DateTime.parse(json['updatedAt'] as String),
+  );
+}
+
+enum ChoreRecurrence {
+  none('None', 'Não se repete'),
+  daily('Daily', 'Todos os dias'),
+  weekly('Weekly', 'Todas as semanas'),
+  monthly('Monthly', 'Todos os meses');
+
+  const ChoreRecurrence(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
+
+  static ChoreRecurrence fromApi(String value) => values.firstWhere((r) => r.apiValue == value, orElse: () => none);
+}
+
+String _date(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// Uma tarefa da casa. As datas de prazo são dias (sem hora).
+class Chore {
+  const Chore({
+    required this.id,
+    required this.householdId,
+    required this.title,
+    required this.notes,
+    required this.points,
+    required this.dueDate,
+    required this.recurrence,
+    required this.assigneeUserId,
+    required this.rotationUserIds,
+    required this.isDone,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String householdId;
+  final String title;
+  final String? notes;
+  final int points;
+  final DateTime? dueDate;
+  final ChoreRecurrence recurrence;
+  final String? assigneeUserId;
+  final List<String> rotationUserIds;
+  final bool isDone;
+  final DateTime updatedAt;
+
+  bool get rotates => rotationUserIds.isNotEmpty;
+
+  factory Chore.fromJson(Map<String, dynamic> json) => Chore(
+    id: json['id'] as String,
+    householdId: json['householdId'] as String,
+    title: json['title'] as String,
+    notes: json['notes'] as String?,
+    points: json['points'] as int,
+    dueDate: json['dueDate'] == null ? null : DateTime.parse(json['dueDate'] as String),
+    recurrence: ChoreRecurrence.fromApi(json['recurrence'] as String),
+    assigneeUserId: json['assigneeUserId'] as String?,
+    rotationUserIds: (json['rotationUserIds'] as List).cast<String>(),
+    isDone: json['isDone'] as bool,
+    updatedAt: DateTime.parse(json['updatedAt'] as String),
+  );
+}
+
+/// Dados para criar ou editar uma tarefa.
+class ChoreDraft {
+  const ChoreDraft({
+    required this.title,
+    this.notes,
+    this.points = 0,
+    this.dueDate,
+    this.recurrence = ChoreRecurrence.none,
+    this.assigneeUserId,
+    this.rotationUserIds = const [],
+  });
+
+  final String title;
+  final String? notes;
+  final int points;
+  final DateTime? dueDate;
+  final ChoreRecurrence recurrence;
+  final String? assigneeUserId;
+  final List<String> rotationUserIds;
+
+  factory ChoreDraft.from(Chore chore) => ChoreDraft(
+    title: chore.title,
+    notes: chore.notes,
+    points: chore.points,
+    dueDate: chore.dueDate,
+    recurrence: chore.recurrence,
+    assigneeUserId: chore.assigneeUserId,
+    rotationUserIds: chore.rotationUserIds,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    if (notes != null && notes!.isNotEmpty) 'notes': notes,
+    'points': points,
+    if (dueDate != null) 'dueDate': _date(dueDate!),
+    'recurrence': recurrence.apiValue,
+    if (assigneeUserId != null) 'assigneeUserId': assigneeUserId,
+    'rotationUserIds': rotationUserIds,
+  };
+}
+
+class MemberChoreStats {
+  const MemberChoreStats({
+    required this.userId,
+    required this.displayName,
+    required this.color,
+    required this.completed,
+    required this.points,
+  });
+
+  final String userId;
+  final String displayName;
+  final String color;
+  final int completed;
+  final int points;
+
+  factory MemberChoreStats.fromJson(Map<String, dynamic> json) => MemberChoreStats(
+    userId: json['userId'] as String,
+    displayName: json['displayName'] as String,
+    color: json['color'] as String,
+    completed: json['completed'] as int,
+    points: json['points'] as int,
   );
 }
