@@ -13,7 +13,7 @@ import 'src/ui/app.dart';
 void main() {
   final api = ApiClient(baseUrl: AppConfig.apiUrl);
   final session = SessionController(api: api, store: const SecureTokenStore())..restore();
-  final realtime = HouseholdRealtime(baseUrl: AppConfig.apiUrl, accessToken: () => api.accessToken ?? '');
+  final realtime = HouseholdRealtime(baseUrl: AppConfig.apiUrl, accessToken: session.freshAccessToken);
   final shopping = ShoppingRepository(api: api, store: PreferencesStore())..restore();
 
   runApp(

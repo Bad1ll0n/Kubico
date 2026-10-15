@@ -12,6 +12,7 @@ import 'onboarding_screen.dart';
 import 'rewards_view.dart';
 import 'shopping_items_view.dart';
 import 'shopping_lists_view.dart';
+import 'theme.dart';
 
 /// Ecrã principal de uma casa, com as secções Compras, Tarefas, Calendário e Recompensas.
 /// Em ecrãs largos (PC, tablet) usa uma barra lateral e mostra listas e artigos lado a lado;
@@ -46,6 +47,37 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectedList = null;
       context.read<HouseholdRealtime>().connect(household.id);
     }
+  }
+
+  Future<void> _signOut(SessionController session, {required bool everywhere}) async {
+    if (everywhere) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Terminar sessão em todos os dispositivos?'),
+          content: const Text(
+            'Vais ter de entrar outra vez em todos os telemóveis e computadores. '
+            'Útil se perdeste um telemóvel ou entraste num computador que não é teu.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Terminar sessões')),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    final realtime = context.read<HouseholdRealtime>();
+    final shopping = context.read<ShoppingRepository>();
+    try {
+      await (everywhere ? session.signOutEverywhere() : session.signOut());
+    } catch (e) {
+      if (mounted) showError(context, e);
+      return;
+    }
+    await realtime.disconnect();
+    await shopping.clear();
   }
 
   void _openList(ShoppingList list, bool wide) {
@@ -118,18 +150,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         .push(MaterialPageRoute<void>(builder: (_) => HouseholdScreen(householdId: household.id))),
               ),
               PopupMenuButton<String>(
-                onSelected: (value) async {
-                  if (value == 'logout') {
-                    final realtime = context.read<HouseholdRealtime>();
-                    final shopping = context.read<ShoppingRepository>();
-                    await realtime.disconnect();
-                    await shopping.clear();
-                    await session.signOut();
-                  }
-                },
+                onSelected: (value) => _signOut(session, everywhere: value == 'logout-all'),
                 itemBuilder: (_) => [
                   PopupMenuItem(enabled: false, child: Text(session.user?.email ?? '')),
                   const PopupMenuItem(value: 'logout', child: Text('Terminar sessão')),
+                  const PopupMenuItem(value: 'logout-all', child: Text('Terminar sessão em todos os dispositivos')),
                 ],
               ),
             ],

@@ -29,14 +29,21 @@ class User {
       User(id: json['id'] as String, email: json['email'] as String, displayName: json['displayName'] as String);
 }
 
+/// Sessão iniciada: o token de acesso (dura pouco) e o refresh token, para pedir um par novo.
 class AuthResult {
-  const AuthResult({required this.accessToken, required this.user});
+  const AuthResult({required this.accessToken, required this.user, this.expiresAt, this.refreshToken});
 
   final String accessToken;
   final User user;
+  final DateTime? expiresAt;
+  final String? refreshToken;
 
-  factory AuthResult.fromJson(Map<String, dynamic> json) =>
-      AuthResult(accessToken: json['accessToken'] as String, user: User.fromJson(json['user'] as Map<String, dynamic>));
+  factory AuthResult.fromJson(Map<String, dynamic> json) => AuthResult(
+    accessToken: json['accessToken'] as String,
+    user: User.fromJson(json['user'] as Map<String, dynamic>),
+    expiresAt: json['expiresAt'] == null ? null : DateTime.parse(json['expiresAt'] as String),
+    refreshToken: json['refreshToken'] as String?,
+  );
 }
 
 class HouseholdSummary {

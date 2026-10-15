@@ -26,6 +26,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<HouseholdAccess>();
 builder.Services.AddScoped<HouseholdNotifier>();
 builder.Services.AddSingleton<TokenService>();
+builder.Services.AddScoped<SessionService>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
 builder.Services.AddOptions<JwtOptions>()

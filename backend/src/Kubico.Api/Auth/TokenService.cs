@@ -14,7 +14,7 @@ public class TokenService(IOptions<JwtOptions> options, TimeProvider clock)
     public (string Token, DateTimeOffset ExpiresAt) CreateAccessToken(User user)
     {
         var now = clock.GetUtcNow();
-        var expiresAt = now.AddDays(_options.AccessTokenLifetimeDays);
+        var expiresAt = now.AddMinutes(_options.AccessTokenLifetimeMinutes);
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey));
 
         var token = new JwtSecurityToken(

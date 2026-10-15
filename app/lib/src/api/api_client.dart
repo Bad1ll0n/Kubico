@@ -26,6 +26,13 @@ class ApiClient {
   /// Token JWT da sessão atual; null quando ninguém tem sessão iniciada.
   String? accessToken;
 
+  /// Chamado quando um pedido com sessão recebe 401 (o token de acesso expirou): renova a sessão e, se conseguir,
+  /// o pedido repete-se uma vez. Quem o define é o SessionController.
+  Future<bool> Function()? onUnauthorized;
+
+  /// Pedidos de autenticação: um 401 aqui não se resolve renovando a sessão.
+  static const _authPaths = {'/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/auth/logout'};
+
   // --- Autenticação ---
 
   Future<AuthResult> register(String email, String password, String displayName) async => AuthResult.fromJson(
@@ -34,6 +41,16 @@ class ApiClient {
 
   Future<AuthResult> login(String email, String password) async =>
       AuthResult.fromJson(await _send('POST', '/api/auth/login', body: {'email': email, 'password': password}));
+
+  /// Troca o refresh token por um par novo (o antigo deixa de servir).
+  Future<AuthResult> refreshSession(String refreshToken) async =>
+      AuthResult.fromJson(await _send('POST', '/api/auth/refresh', body: {'refreshToken': refreshToken}));
+
+  /// Termina a sessão deste dispositivo.
+  Future<void> logout(String refreshToken) => _send('POST', '/api/auth/logout', body: {'refreshToken': refreshToken});
+
+  /// Termina a sessão em todos os dispositivos.
+  Future<void> logoutEverywhere() => _send('POST', '/api/auth/logout-all');
 
   Future<Me> getMe() async => Me.fromJson(await _send('GET', '/api/me'));
 
@@ -209,7 +226,7 @@ class ApiClient {
 
   // --- HTTP ---
 
-  Future<dynamic> _send(String method, String path, {Map<String, dynamic>? body}) async {
+  Future<dynamic> _send(String method, String path, {Map<String, dynamic>? body, bool retry = true}) async {
     final request = http.Request(method, Uri.parse('$baseUrl$path'))..headers['Accept'] = 'application/json';
     if (accessToken != null) request.headers['Authorization'] = 'Bearer $accessToken';
     if (body != null) {
@@ -233,6 +250,11 @@ class ApiClient {
       }
     }
     if (response.statusCode >= 200 && response.statusCode < 300) return decoded;
+
+    final renew = onUnauthorized;
+    if (response.statusCode == 401 && retry && accessToken != null && renew != null && !_authPaths.contains(path)) {
+      if (await renew()) return _send(method, path, body: body, retry: false);
+    }
 
     throw ApiException(response.statusCode, _errorMessage(response.statusCode, decoded));
   }

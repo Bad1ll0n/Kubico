@@ -12,6 +12,7 @@ namespace Kubico.Infrastructure.Persistence;
 public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Household> Households => Set<Household>();
     public DbSet<Membership> Memberships => Set<Membership>();
     public DbSet<Invite> Invites => Set<Invite>();
@@ -39,6 +40,16 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(u => u.Email).HasMaxLength(256);
             e.Property(u => u.DisplayName).HasMaxLength(100);
             e.HasIndex(u => u.Email).IsUnique();
+        });
+
+        modelBuilder.Entity<RefreshToken>(e =>
+        {
+            e.Property(t => t.TokenHash).HasMaxLength(64);
+            e.Property(t => t.Device).HasMaxLength(200);
+            e.HasIndex(t => t.TokenHash).IsUnique();
+            e.HasIndex(t => t.FamilyId);
+            e.HasIndex(t => t.UserId);
+            e.HasOne(t => t.User).WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Household>(e =>

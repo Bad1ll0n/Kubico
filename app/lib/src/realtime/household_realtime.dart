@@ -62,7 +62,9 @@ class HouseholdRealtime {
   HouseholdRealtime({required this.baseUrl, required this.accessToken});
 
   final String baseUrl;
-  final String Function() accessToken;
+
+  /// O token para ligar (o SignalR só o envia ao ligar e ao voltar a ligar); pode renovar a sessão antes.
+  final FutureOr<String> Function() accessToken;
 
   final _events = StreamController<HouseholdEvent>.broadcast();
   final _reconnected = StreamController<void>.broadcast();
@@ -80,7 +82,7 @@ class HouseholdRealtime {
     final connection = HubConnectionBuilder()
         .withUrl(
           '$baseUrl/hubs/household',
-          options: HttpConnectionOptions(accessTokenFactory: () async => accessToken()),
+          options: HttpConnectionOptions(accessTokenFactory: () async => await accessToken()),
         )
         .withAutomaticReconnect(retryDelays: [0, 2000, 5000, 10000, 30000])
         .build();
