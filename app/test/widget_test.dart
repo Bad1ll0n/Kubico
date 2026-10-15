@@ -142,4 +142,30 @@ void main() {
     expect(find.widgetWithText(TextFormField, 'Nome'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Criar conta'), findsOneWidget);
   });
+
+  testWidgets('a app fala português de Portugal (botões e relógio de 24 horas)', (tester) async {
+    final api = ApiClient(baseUrl: 'http://api', httpClient: _fakeServer());
+    final session = SessionController(api: api, store: MemoryTokenStore());
+    await session.restore();
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider.value(value: api),
+          ChangeNotifierProvider.value(value: session),
+          Provider.value(
+            value: HouseholdRealtime(baseUrl: 'http://api', accessToken: () => ''),
+          ),
+        ],
+        child: const KubicoApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.byType(Scaffold).first);
+    final localizations = MaterialLocalizations.of(context);
+    expect(Localizations.localeOf(context), kubicoLocale);
+    expect(localizations.cancelButtonLabel, 'Cancelar');
+    expect(localizations.formatTimeOfDay(const TimeOfDay(hour: 18, minute: 5)), '18:05');
+  });
 }

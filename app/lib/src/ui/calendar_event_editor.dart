@@ -120,10 +120,6 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
   static int _daysBetween(DateTime a, DateTime b) =>
       DateTime.utc(b.year, b.month, b.day).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
 
-  /// Em Portugal usa-se o relógio de 24 horas.
-  static Widget _twentyFourHours(BuildContext context, Widget? child) =>
-      MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!);
-
   String? get _dateError {
     if (_allDay) return _end.isBefore(_start) ? 'O último dia não pode ser antes do primeiro.' : null;
     return _end.isAfter(_start) ? null : 'O fim tem de ser depois do início.';
@@ -137,7 +133,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
   );
 
   Future<TimeOfDay?> _pickTime(DateTime initial) =>
-      showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(initial), builder: _twentyFourHours);
+      showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(initial));
 
   Future<void> _pickStart({required bool time}) async {
     final date = time ? _start : await _pickDate(_start);
