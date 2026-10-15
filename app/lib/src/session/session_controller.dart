@@ -8,10 +8,13 @@ enum SessionStatus { loading, signedOut, signedIn }
 
 /// Estado global da sessão: quem está autenticado, os seus agregados e qual está aberto.
 class SessionController extends ChangeNotifier {
-  SessionController({required this.api, required TokenStore store})
-    : _store = store; // ignore: prefer_initializing_formals
+  // ignore: prefer_initializing_formals
+  SessionController({required this.api, required TokenStore store}) : _store = store {
+    api.onUnauthorized = renewSession;
+  }
 
   static const _tokenKey = 'kubico.accessToken';
+  static const _refreshKey = 'kubico.refreshToken';
   static const _householdKey = 'kubico.householdId';
 
   final ApiClient api;
@@ -21,6 +24,8 @@ class SessionController extends ChangeNotifier {
   User? user;
   List<HouseholdSummary> households = const [];
   String? _selectedHouseholdId;
+  DateTime? _accessExpiresAt;
+  Future<bool>? _renewing;
 
   HouseholdSummary? get currentHousehold {
     if (households.isEmpty) return null;
@@ -54,9 +59,58 @@ class SessionController extends ChangeNotifier {
   Future<void> register(String email, String password, String displayName) async =>
       _startSession(await api.register(email.trim(), password, displayName.trim()));
 
+  /// Termina a sessão neste dispositivo. Sem rede, termina só aqui (o refresh token expira sozinho).
   Future<void> signOut() async {
+    final refreshToken = await _store.read(_refreshKey);
+    if (refreshToken != null) {
+      try {
+        await api.logout(refreshToken);
+      } on ApiException {
+        // Sem rede ou sessão já terminada: não impede de sair.
+      }
+    }
+    await _forgetSession();
+  }
+
+  /// Termina a sessão em todos os dispositivos (por exemplo, depois de perder o telemóvel).
+  Future<void> signOutEverywhere() async {
+    await api.logoutEverywhere();
+    await _forgetSession();
+  }
+
+  /// Troca o refresh token guardado por um par novo. Só há um pedido de cada vez: vários 401 ao mesmo tempo
+  /// esperam pelo mesmo. Devolve false se não houver sessão para renovar (ou se a rede falhar).
+  Future<bool> renewSession() => _renewing ??= _renew().whenComplete(() => _renewing = null);
+
+  /// Para o tempo real (o SignalR só envia o token ao ligar): um token de acesso que dure pelo menos mais um minuto.
+  Future<String> freshAccessToken() async {
+    final expiresAt = _accessExpiresAt;
+    if (api.accessToken != null && (expiresAt == null || expiresAt.isBefore(DateTime.now().add(_margin)))) {
+      await renewSession();
+    }
+    return api.accessToken ?? '';
+  }
+
+  static const _margin = Duration(minutes: 1);
+
+  Future<bool> _renew() async {
+    final refreshToken = await _store.read(_refreshKey);
+    if (refreshToken == null) return false;
+    try {
+      await _saveTokens(await api.refreshSession(refreshToken));
+      return true;
+    } on ApiException catch (e) {
+      // O servidor terminou a sessão (expirou, ou terminou-se em todos os dispositivos).
+      if (e.isUnauthorized) await _forgetSession();
+      return false;
+    }
+  }
+
+  Future<void> _forgetSession() async {
     api.accessToken = null;
+    _accessExpiresAt = null;
     await _store.write(_tokenKey, null);
+    await _store.write(_refreshKey, null);
     _setSignedOut();
   }
 
@@ -88,9 +142,15 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> _startSession(AuthResult result) async {
-    api.accessToken = result.accessToken;
-    await _store.write(_tokenKey, result.accessToken);
+    await _saveTokens(result);
     await refresh();
+  }
+
+  Future<void> _saveTokens(AuthResult result) async {
+    api.accessToken = result.accessToken;
+    _accessExpiresAt = result.expiresAt;
+    await _store.write(_tokenKey, result.accessToken);
+    await _store.write(_refreshKey, result.refreshToken);
   }
 
   void _setSignedOut() {

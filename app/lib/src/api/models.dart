@@ -29,14 +29,48 @@ class User {
       User(id: json['id'] as String, email: json['email'] as String, displayName: json['displayName'] as String);
 }
 
+/// Sessão iniciada: o token de acesso (dura pouco) e o refresh token, para pedir um par novo.
 class AuthResult {
-  const AuthResult({required this.accessToken, required this.user});
+  const AuthResult({required this.accessToken, required this.user, this.expiresAt, this.refreshToken});
 
   final String accessToken;
   final User user;
+  final DateTime? expiresAt;
+  final String? refreshToken;
 
-  factory AuthResult.fromJson(Map<String, dynamic> json) =>
-      AuthResult(accessToken: json['accessToken'] as String, user: User.fromJson(json['user'] as Map<String, dynamic>));
+  factory AuthResult.fromJson(Map<String, dynamic> json) => AuthResult(
+    accessToken: json['accessToken'] as String,
+    user: User.fromJson(json['user'] as Map<String, dynamic>),
+    expiresAt: json['expiresAt'] == null ? null : DateTime.parse(json['expiresAt'] as String),
+    refreshToken: json['refreshToken'] as String?,
+  );
+}
+
+/// Uma sessão iniciada num dispositivo. [device] é android, ios, windows, macos, linux ou web.
+class DeviceSession {
+  const DeviceSession({
+    required this.id,
+    required this.device,
+    required this.startedAt,
+    required this.lastActiveAt,
+    required this.isCurrent,
+  });
+
+  final String id;
+  final String? device;
+  final DateTime startedAt;
+  final DateTime lastActiveAt;
+
+  /// A sessão deste dispositivo.
+  final bool isCurrent;
+
+  factory DeviceSession.fromJson(Map<String, dynamic> json) => DeviceSession(
+    id: json['id'] as String,
+    device: json['device'] as String?,
+    startedAt: DateTime.parse(json['startedAt'] as String).toLocal(),
+    lastActiveAt: DateTime.parse(json['lastActiveAt'] as String).toLocal(),
+    isCurrent: json['isCurrent'] as bool,
+  );
 }
 
 class HouseholdSummary {
@@ -143,6 +177,14 @@ class ShoppingList {
 
   int get pendingCount => itemCount - checkedCount;
 
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'householdId': householdId,
+    'name': name,
+    'itemCount': itemCount,
+    'checkedCount': checkedCount,
+  };
+
   factory ShoppingList.fromJson(Map<String, dynamic> json) => ShoppingList(
     id: json['id'] as String,
     householdId: json['householdId'] as String,
@@ -186,6 +228,18 @@ class ShoppingItem {
     createdAt: createdAt,
     updatedAt: updatedAt,
   );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'listId': listId,
+    'name': name,
+    'quantity': quantity,
+    'category': category,
+    'isChecked': isChecked,
+    'addedByUserId': addedByUserId,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
 
   factory ShoppingItem.fromJson(Map<String, dynamic> json) => ShoppingItem(
     id: json['id'] as String,
@@ -350,6 +404,8 @@ class CalendarEvent {
     required this.participantUserIds,
     required this.dropOffUserId,
     required this.pickUpUserId,
+    this.seriesId,
+    this.originalDate,
     required this.updatedAt,
   });
 
@@ -371,7 +427,13 @@ class CalendarEvent {
   /// Boleias: quem leva e quem vai buscar.
   final String? dropOffUserId;
   final String? pickUpUserId;
+
+  /// Numa alteração a um só dia de uma série: a série e o dia que substitui.
+  final String? seriesId;
+  final DateTime? originalDate;
   final DateTime updatedAt;
+
+  bool get isRecurring => recurrence != null;
 
   factory CalendarEvent.fromJson(Map<String, dynamic> json) => CalendarEvent(
     id: json['id'] as String,
@@ -388,6 +450,8 @@ class CalendarEvent {
     participantUserIds: (json['participantUserIds'] as List).cast<String>(),
     dropOffUserId: json['dropOffUserId'] as String?,
     pickUpUserId: json['pickUpUserId'] as String?,
+    seriesId: json['seriesId'] as String?,
+    originalDate: _day(json['originalDate']),
     updatedAt: DateTime.parse(json['updatedAt'] as String),
   );
 }
@@ -397,6 +461,7 @@ class CalendarEvent {
 class CalendarOccurrence {
   const CalendarOccurrence({
     required this.eventId,
+    required this.occurrenceDate,
     required this.startsAt,
     required this.endsAt,
     required this.startDate,
@@ -405,6 +470,9 @@ class CalendarOccurrence {
   });
 
   final String eventId;
+
+  /// O dia que identifica esta ocorrência dentro da série (para alterar ou apagar só esta).
+  final DateTime occurrenceDate;
   final DateTime? startsAt;
   final DateTime? endsAt;
   final DateTime? startDate;
@@ -423,6 +491,7 @@ class CalendarOccurrence {
 
   factory CalendarOccurrence.fromJson(Map<String, dynamic> json) => CalendarOccurrence(
     eventId: json['eventId'] as String,
+    occurrenceDate: DateTime.parse(json['occurrenceDate'] as String),
     startsAt: _instant(json['startsAt']),
     endsAt: _instant(json['endsAt']),
     startDate: _day(json['startDate']),
@@ -501,6 +570,19 @@ class CalendarEventDraft {
   final String? dropOffUserId;
   final String? pickUpUserId;
 
+  CalendarEventDraft copyWith({DateTime? start, DateTime? end}) => CalendarEventDraft(
+    title: title,
+    start: start ?? this.start,
+    end: end ?? this.end,
+    isAllDay: isAllDay,
+    notes: notes,
+    location: location,
+    recurrence: recurrence,
+    participantUserIds: participantUserIds,
+    dropOffUserId: dropOffUserId,
+    pickUpUserId: pickUpUserId,
+  );
+
   factory CalendarEventDraft.from(CalendarEvent event) => CalendarEventDraft(
     title: event.title,
     start: (event.isAllDay ? event.startDate : event.startsAt)!,
@@ -528,6 +610,17 @@ class CalendarEventDraft {
     if (dropOffUserId != null) 'dropOffUserId': dropOffUserId,
     if (pickUpUserId != null) 'pickUpUserId': pickUpUserId,
   };
+}
+
+/// Endereço pessoal (iCalendar) para subscrever o calendário da casa noutras apps.
+class CalendarFeed {
+  const CalendarFeed({required this.url, required this.webcalUrl});
+
+  final String url;
+  final String webcalUrl;
+
+  factory CalendarFeed.fromJson(Map<String, dynamic> json) =>
+      CalendarFeed(url: json['url'] as String, webcalUrl: json['webcalUrl'] as String);
 }
 
 enum RecurrenceFrequency {
@@ -604,4 +697,258 @@ class Recurrence {
       if (until != null) 'UNTIL=${apiDate(until!).replaceAll('-', '')}',
     ].join(';');
   }
+}
+
+enum RedemptionStatus {
+  pending('Pending', 'À espera de aprovação'),
+  approved('Approved', 'Aprovado'),
+  rejected('Rejected', 'Recusado');
+
+  const RedemptionStatus(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
+
+  static RedemptionStatus fromApi(String value) => values.firstWhere((s) => s.apiValue == value, orElse: () => pending);
+}
+
+/// Uma recompensa que se troca por pontos das tarefas.
+class Reward {
+  const Reward({
+    required this.id,
+    required this.householdId,
+    required this.title,
+    required this.description,
+    required this.cost,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String householdId;
+  final String title;
+  final String? description;
+  final int cost;
+  final DateTime updatedAt;
+
+  factory Reward.fromJson(Map<String, dynamic> json) => Reward(
+    id: json['id'] as String,
+    householdId: json['householdId'] as String,
+    title: json['title'] as String,
+    description: json['description'] as String?,
+    cost: json['cost'] as int,
+    updatedAt: DateTime.parse(json['updatedAt'] as String),
+  );
+}
+
+/// Dados para criar ou editar uma recompensa.
+class RewardDraft {
+  const RewardDraft({required this.title, this.description, required this.cost});
+
+  final String title;
+  final String? description;
+  final int cost;
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    if (description != null && description!.isNotEmpty) 'description': description,
+    'cost': cost,
+  };
+}
+
+/// Um pedido de troca de pontos por uma recompensa. Guarda o nome e o custo de quando foi feito.
+class RewardRedemption {
+  const RewardRedemption({
+    required this.id,
+    required this.householdId,
+    required this.rewardId,
+    required this.userId,
+    required this.rewardTitle,
+    required this.points,
+    required this.status,
+    required this.requestedAt,
+    required this.decidedAt,
+  });
+
+  final String id;
+  final String householdId;
+  final String? rewardId;
+  final String userId;
+  final String rewardTitle;
+  final int points;
+  final RedemptionStatus status;
+  final DateTime requestedAt;
+  final DateTime? decidedAt;
+
+  factory RewardRedemption.fromJson(Map<String, dynamic> json) => RewardRedemption(
+    id: json['id'] as String,
+    householdId: json['householdId'] as String,
+    rewardId: json['rewardId'] as String?,
+    userId: json['userId'] as String,
+    rewardTitle: json['rewardTitle'] as String,
+    points: json['points'] as int,
+    status: RedemptionStatus.fromApi(json['status'] as String),
+    requestedAt: DateTime.parse(json['requestedAt'] as String).toLocal(),
+    decidedAt: _instant(json['decidedAt']),
+  );
+}
+
+/// Saldo de um membro: ganhos nas tarefas, já trocados, reservados (pedidos à espera) e disponíveis.
+class MemberPoints {
+  const MemberPoints({
+    required this.userId,
+    required this.displayName,
+    required this.color,
+    required this.earned,
+    required this.spent,
+    required this.reserved,
+    required this.available,
+  });
+
+  final String userId;
+  final String displayName;
+  final String color;
+  final int earned;
+  final int spent;
+  final int reserved;
+  final int available;
+
+  factory MemberPoints.fromJson(Map<String, dynamic> json) => MemberPoints(
+    userId: json['userId'] as String,
+    displayName: json['displayName'] as String,
+    color: json['color'] as String,
+    earned: json['earned'] as int,
+    spent: json['spent'] as int,
+    reserved: json['reserved'] as int,
+    available: json['available'] as int,
+  );
+}
+
+/// As recompensas da casa, os pedidos recentes (pendentes primeiro) e o saldo de cada membro.
+class RewardsOverview {
+  const RewardsOverview({required this.rewards, required this.redemptions, required this.points});
+
+  final List<Reward> rewards;
+  final List<RewardRedemption> redemptions;
+  final List<MemberPoints> points;
+
+  MemberPoints? pointsOf(String? userId) {
+    for (final p in points) {
+      if (p.userId == userId) return p;
+    }
+    return null;
+  }
+
+  factory RewardsOverview.fromJson(Map<String, dynamic> json) {
+    final rewards = json['rewards'] as List;
+    final redemptions = json['redemptions'] as List;
+    final points = json['points'] as List;
+    return RewardsOverview(
+      rewards: [for (final r in rewards) Reward.fromJson(r as Map<String, dynamic>)],
+      redemptions: [for (final r in redemptions) RewardRedemption.fromJson(r as Map<String, dynamic>)],
+      points: [for (final p in points) MemberPoints.fromJson(p as Map<String, dynamic>)],
+    );
+  }
+}
+
+/// Um aviso pessoal (de qualquer casa): uma tarefa ou um evento que passou a ser teu, um pedido de recompensa…
+class AppNotification {
+  const AppNotification({
+    required this.id,
+    required this.householdId,
+    required this.kind,
+    required this.title,
+    required this.body,
+    required this.entityId,
+    required this.createdAt,
+    required this.isRead,
+  });
+
+  final String id;
+  final String householdId;
+
+  /// ChoreAssigned, EventAssigned, RideAssigned, RewardRequested ou RewardDecided.
+  final String kind;
+  final String title;
+  final String? body;
+  final String? entityId;
+  final DateTime createdAt;
+  final bool isRead;
+
+  AppNotification read() => AppNotification(
+    id: id,
+    householdId: householdId,
+    kind: kind,
+    title: title,
+    body: body,
+    entityId: entityId,
+    createdAt: createdAt,
+    isRead: true,
+  );
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) => AppNotification(
+    id: json['id'] as String,
+    householdId: json['householdId'] as String,
+    kind: json['kind'] as String,
+    title: json['title'] as String,
+    body: json['body'] as String?,
+    entityId: json['entityId'] as String?,
+    createdAt: DateTime.parse(json['createdAt'] as String).toLocal(),
+    isRead: json['isRead'] as bool,
+  );
+}
+
+enum NotificationDelivery {
+  immediate('Immediate', 'Logo que acontece'),
+  dailyDigest('DailyDigest', 'Um resumo por dia'),
+  inAppOnly('InAppOnly', 'Só aqui na app');
+
+  const NotificationDelivery(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
+
+  static NotificationDelivery fromApi(String value) =>
+      values.firstWhere((d) => d.apiValue == value, orElse: () => immediate);
+}
+
+/// "19:00:00" → 19:00 (as horas vêm do servidor como TimeOnly).
+({int hour, int minute}) _time(String value) {
+  final parts = value.split(':');
+  return (hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+}
+
+String _timeJson(({int hour, int minute}) t) =>
+    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
+
+/// Como cada membro quer receber os avisos no telemóvel, e as horas de silêncio.
+class NotificationPreferences {
+  const NotificationPreferences({
+    required this.delivery,
+    required this.digestAt,
+    required this.quietFrom,
+    required this.quietUntil,
+    required this.timeZoneId,
+  });
+
+  final NotificationDelivery delivery;
+  final ({int hour, int minute}) digestAt;
+  final ({int hour, int minute})? quietFrom;
+  final ({int hour, int minute})? quietUntil;
+  final String timeZoneId;
+
+  factory NotificationPreferences.fromJson(Map<String, dynamic> json) => NotificationPreferences(
+    delivery: NotificationDelivery.fromApi(json['delivery'] as String),
+    digestAt: _time(json['digestAt'] as String),
+    quietFrom: json['quietFrom'] == null ? null : _time(json['quietFrom'] as String),
+    quietUntil: json['quietUntil'] == null ? null : _time(json['quietUntil'] as String),
+    timeZoneId: json['timeZoneId'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'delivery': delivery.apiValue,
+    'digestAt': _timeJson(digestAt),
+    'quietFrom': quietFrom == null ? null : _timeJson(quietFrom!),
+    'quietUntil': quietUntil == null ? null : _timeJson(quietUntil!),
+    'timeZoneId': timeZoneId,
+  };
 }

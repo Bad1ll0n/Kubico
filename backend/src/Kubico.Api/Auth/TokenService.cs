@@ -11,10 +11,13 @@ public class TokenService(IOptions<JwtOptions> options, TimeProvider clock)
 {
     private readonly JwtOptions _options = options.Value;
 
-    public (string Token, DateTimeOffset ExpiresAt) CreateAccessToken(User user)
+    /// <summary>Claim com a sessão (família de refresh tokens) de onde veio o token: diz qual é "este dispositivo".</summary>
+    public const string SessionClaim = "sid";
+
+    public (string Token, DateTimeOffset ExpiresAt) CreateAccessToken(User user, Guid? sessionId = null)
     {
         var now = clock.GetUtcNow();
-        var expiresAt = now.AddDays(_options.AccessTokenLifetimeDays);
+        var expiresAt = now.AddMinutes(_options.AccessTokenLifetimeMinutes);
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey));
 
         var token = new JwtSecurityToken(
@@ -25,6 +28,7 @@ public class TokenService(IOptions<JwtOptions> options, TimeProvider clock)
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 new Claim(JwtRegisteredClaimNames.Name, user.DisplayName),
+                .. sessionId is { } sid ? [new Claim(SessionClaim, sid.ToString())] : Array.Empty<Claim>(),
             ],
             notBefore: now.UtcDateTime,
             expires: expiresAt.UtcDateTime,

@@ -1,5 +1,6 @@
 using Kubico.Api.Calendar;
 using Kubico.Api.Chores;
+using Kubico.Api.Rewards;
 using Kubico.Api.Shopping;
 using Microsoft.AspNetCore.SignalR;
 
@@ -16,6 +17,13 @@ public static class HouseholdEvents
     public const string ChoreDeleted = "ChoreDeleted";
     public const string CalendarEventUpserted = "CalendarEventUpserted";
     public const string CalendarEventDeleted = "CalendarEventDeleted";
+    public const string RewardUpserted = "RewardUpserted";
+    public const string RewardDeleted = "RewardDeleted";
+    public const string RedemptionUpserted = "RedemptionUpserted";
+    public const string RedemptionDeleted = "RedemptionDeleted";
+
+    /// <summary>Um aviso pessoal novo (vai só para o canal da pessoa, não para a casa toda).</summary>
+    public const string NotificationCreated = "NotificationCreated";
 }
 
 public class HouseholdNotifier(IHubContext<HouseholdHub> hub)
@@ -43,6 +51,18 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub)
 
     public Task CalendarEventDeleted(Guid householdId, Guid eventId, CancellationToken ct) =>
         Group(householdId).SendAsync(HouseholdEvents.CalendarEventDeleted, eventId, ct);
+
+    public Task RewardUpserted(Guid householdId, RewardDto reward, CancellationToken ct) =>
+        Group(householdId).SendAsync(HouseholdEvents.RewardUpserted, reward, ct);
+
+    public Task RewardDeleted(Guid householdId, Guid rewardId, CancellationToken ct) =>
+        Group(householdId).SendAsync(HouseholdEvents.RewardDeleted, rewardId, ct);
+
+    public Task RedemptionUpserted(Guid householdId, RedemptionDto redemption, CancellationToken ct) =>
+        Group(householdId).SendAsync(HouseholdEvents.RedemptionUpserted, redemption, ct);
+
+    public Task RedemptionDeleted(Guid householdId, Guid redemptionId, CancellationToken ct) =>
+        Group(householdId).SendAsync(HouseholdEvents.RedemptionDeleted, redemptionId, ct);
 
     private IClientProxy Group(Guid householdId) => hub.Clients.Group(HouseholdHub.GroupName(householdId));
 }

@@ -18,13 +18,23 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  ApiClient({required this.baseUrl, http.Client? httpClient}) : _http = httpClient ?? http.Client();
+  ApiClient({required this.baseUrl, http.Client? httpClient, this.deviceKind}) : _http = httpClient ?? http.Client();
 
   final String baseUrl;
   final http.Client _http;
 
+  /// Em que tipo de dispositivo corre a app (android, ios, windows, macos, linux, web), para a lista de sessões.
+  final String? deviceKind;
+
   /// Token JWT da sessão atual; null quando ninguém tem sessão iniciada.
   String? accessToken;
+
+  /// Chamado quando um pedido com sessão recebe 401 (o token de acesso expirou): renova a sessão e, se conseguir,
+  /// o pedido repete-se uma vez. Quem o define é o SessionController.
+  Future<bool> Function()? onUnauthorized;
+
+  /// Pedidos de autenticação: um 401 aqui não se resolve renovando a sessão.
+  static const _authPaths = {'/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/auth/logout'};
 
   // --- Autenticação ---
 
@@ -34,6 +44,24 @@ class ApiClient {
 
   Future<AuthResult> login(String email, String password) async =>
       AuthResult.fromJson(await _send('POST', '/api/auth/login', body: {'email': email, 'password': password}));
+
+  /// Troca o refresh token por um par novo (o antigo deixa de servir).
+  Future<AuthResult> refreshSession(String refreshToken) async =>
+      AuthResult.fromJson(await _send('POST', '/api/auth/refresh', body: {'refreshToken': refreshToken}));
+
+  /// Termina a sessão deste dispositivo.
+  Future<void> logout(String refreshToken) => _send('POST', '/api/auth/logout', body: {'refreshToken': refreshToken});
+
+  /// Termina a sessão em todos os dispositivos.
+  Future<void> logoutEverywhere() => _send('POST', '/api/auth/logout-all');
+
+  /// Os dispositivos com sessão iniciada (o deste vem marcado).
+  Future<List<DeviceSession>> getSessions() async => [
+    for (final s in await _send('GET', '/api/auth/sessions') as List) DeviceSession.fromJson(s as Map<String, dynamic>),
+  ];
+
+  /// Termina a sessão noutro dispositivo.
+  Future<void> endSession(String sessionId) => _send('DELETE', '/api/auth/sessions/$sessionId');
 
   Future<Me> getMe() async => Me.fromJson(await _send('GET', '/api/me'));
 
@@ -69,9 +97,11 @@ class ApiClient {
           .map((i) => ShoppingItem.fromJson(i as Map<String, dynamic>))
           .toList();
 
+  /// [id] é gerado na app quando o artigo foi criado sem rede: reenviar não o duplica.
   Future<ShoppingItem> addItem(
     String householdId,
     String listId, {
+    String? id,
     required String name,
     String? quantity,
     String? category,
@@ -80,6 +110,7 @@ class ApiClient {
       'POST',
       _itemsPath(householdId, listId),
       body: {
+        'id': ?id,
         'name': name,
         if (quantity != null && quantity.isNotEmpty) 'quantity': quantity,
         if (category != null && category.isNotEmpty) 'category': category,
@@ -143,15 +174,101 @@ class ApiClient {
   Future<void> deleteEvent(String householdId, String eventId) =>
       _send('DELETE', '/api/households/$householdId/events/$eventId');
 
+  /// Altera só a ocorrência de [date] de uma série ou, com [following], essa e as seguintes.
+  Future<CalendarEvent> updateOccurrence(
+    String householdId,
+    String eventId,
+    DateTime date,
+    CalendarEventDraft draft, {
+    bool following = false,
+  }) async => CalendarEvent.fromJson(
+    await _send('PUT', _occurrencePath(householdId, eventId, date, following), body: draft.toJson()),
+  );
+
+  /// Apaga só a ocorrência de [date] de uma série ou, com [following], essa e as seguintes.
+  Future<void> deleteOccurrence(String householdId, String eventId, DateTime date, {bool following = false}) =>
+      _send('DELETE', _occurrencePath(householdId, eventId, date, following));
+
+  /// O endereço pessoal para subscrever o calendário da casa (é criado no primeiro pedido).
+  Future<CalendarFeed> getCalendarFeed(String householdId) async =>
+      CalendarFeed.fromJson(await _send('POST', '/api/households/$householdId/calendar-feed'));
+
+  /// Desativa o endereço atual e devolve um novo.
+  Future<CalendarFeed> renewCalendarFeed(String householdId) async {
+    await _send('DELETE', '/api/households/$householdId/calendar-feed');
+    return getCalendarFeed(householdId);
+  }
+
+  // --- Recompensas ---
+
+  Future<RewardsOverview> getRewards(String householdId) async =>
+      RewardsOverview.fromJson(await _send('GET', '/api/households/$householdId/rewards') as Map<String, dynamic>);
+
+  Future<Reward> createReward(String householdId, RewardDraft draft) async =>
+      Reward.fromJson(await _send('POST', '/api/households/$householdId/rewards', body: draft.toJson()));
+
+  Future<Reward> updateReward(String householdId, String rewardId, RewardDraft draft) async =>
+      Reward.fromJson(await _send('PUT', '/api/households/$householdId/rewards/$rewardId', body: draft.toJson()));
+
+  Future<void> deleteReward(String householdId, String rewardId) =>
+      _send('DELETE', '/api/households/$householdId/rewards/$rewardId');
+
+  /// Pede a recompensa: fica à espera de um adulto, ou aprovada logo se quem pede for adulto.
+  Future<RewardRedemption> redeemReward(String householdId, String rewardId) async => RewardRedemption.fromJson(
+    await _send('POST', '/api/households/$householdId/rewards/$rewardId/redeem') as Map<String, dynamic>,
+  );
+
+  Future<RewardRedemption> decideRedemption(String householdId, String redemptionId, {required bool approve}) async {
+    final action = approve ? 'approve' : 'reject';
+    final json = await _send('POST', '/api/households/$householdId/redemptions/$redemptionId/$action');
+    return RewardRedemption.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// Cancela um pedido que ainda está à espera; os pontos voltam.
+  Future<void> cancelRedemption(String householdId, String redemptionId) =>
+      _send('DELETE', '/api/households/$householdId/redemptions/$redemptionId');
+
+  // --- Avisos ---
+
+  /// Os avisos mais recentes (de todas as casas) e quantos estão por ler.
+  Future<(List<AppNotification>, int)> getNotifications() async {
+    final json = await _send('GET', '/api/notifications') as Map<String, dynamic>;
+    final items = json['items'] as List;
+    return ([for (final n in items) AppNotification.fromJson(n as Map<String, dynamic>)], json['unreadCount'] as int);
+  }
+
+  /// Marca como lidos os avisos indicados ou, sem [ids], todos.
+  Future<void> markNotificationsRead([List<String>? ids]) =>
+      _send('POST', '/api/notifications/read', body: {'ids': ?ids});
+
+  Future<NotificationPreferences> getNotificationPreferences() async =>
+      NotificationPreferences.fromJson(await _send('GET', '/api/notifications/preferences') as Map<String, dynamic>);
+
+  Future<NotificationPreferences> saveNotificationPreferences(NotificationPreferences preferences) async =>
+      NotificationPreferences.fromJson(
+        await _send('PUT', '/api/notifications/preferences', body: preferences.toJson()) as Map<String, dynamic>,
+      );
+
+  /// O token push deste telemóvel (do Firebase), para receber os avisos fora da app.
+  Future<void> registerPushDevice(String token, String platform) =>
+      _send('POST', '/api/notifications/devices', body: {'token': token, 'platform': platform});
+
+  Future<void> unregisterPushDevice(String token) =>
+      _send('POST', '/api/notifications/devices/unregister', body: {'token': token});
+
+  String _occurrencePath(String householdId, String eventId, DateTime date, bool following) =>
+      '${_eventsPath(householdId)}/$eventId/occurrences/${apiDate(date)}?scope=${following ? 'following' : 'this'}';
+
   String _eventsPath(String householdId) => '/api/households/$householdId/events';
 
   String _itemsPath(String householdId, String listId) => '/api/households/$householdId/lists/$listId/items';
 
   // --- HTTP ---
 
-  Future<dynamic> _send(String method, String path, {Map<String, dynamic>? body}) async {
+  Future<dynamic> _send(String method, String path, {Map<String, dynamic>? body, bool retry = true}) async {
     final request = http.Request(method, Uri.parse('$baseUrl$path'))..headers['Accept'] = 'application/json';
     if (accessToken != null) request.headers['Authorization'] = 'Bearer $accessToken';
+    if (deviceKind != null) request.headers['X-Kubico-Device'] = deviceKind!;
     if (body != null) {
       request.headers['Content-Type'] = 'application/json';
       request.body = jsonEncode(body);
@@ -173,6 +290,11 @@ class ApiClient {
       }
     }
     if (response.statusCode >= 200 && response.statusCode < 300) return decoded;
+
+    final renew = onUnauthorized;
+    if (response.statusCode == 401 && retry && accessToken != null && renew != null && !_authPaths.contains(path)) {
+      if (await renew()) return _send(method, path, body: body, retry: false);
+    }
 
     throw ApiException(response.statusCode, _errorMessage(response.statusCode, decoded));
   }

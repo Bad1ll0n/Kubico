@@ -18,14 +18,16 @@ class CalendarEventDeleteRequested extends CalendarEventEditorResult {
   const CalendarEventDeleteRequested();
 }
 
-/// Abre o editor como folha inferior (telemóvel) ou diálogo (PC). Um evento novo começa em [day].
+/// Abre o editor como folha inferior (telemóvel) ou diálogo (PC). Um evento novo começa em [day]; num evento que
+/// se repete, o editor mostra as datas da [occurrence] escolhida.
 Future<CalendarEventEditorResult?> showCalendarEventEditor(
   BuildContext context, {
   required List<Member> members,
   required DateTime day,
   CalendarEvent? event,
+  CalendarOccurrence? occurrence,
 }) {
-  final editor = _CalendarEventEditor(members: members, day: day, event: event);
+  final editor = _CalendarEventEditor(members: members, day: day, event: event, occurrence: occurrence);
   if (MediaQuery.sizeOf(context).width >= 700) {
     return showDialog<CalendarEventEditorResult>(
       context: context,
@@ -43,11 +45,12 @@ Future<CalendarEventEditorResult?> showCalendarEventEditor(
 }
 
 class _CalendarEventEditor extends StatefulWidget {
-  const _CalendarEventEditor({required this.members, required this.day, this.event});
+  const _CalendarEventEditor({required this.members, required this.day, this.event, this.occurrence});
 
   final List<Member> members;
   final DateTime day;
   final CalendarEvent? event;
+  final CalendarOccurrence? occurrence;
 
   @override
   State<_CalendarEventEditor> createState() => _CalendarEventEditorState();
@@ -71,6 +74,9 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
 
   bool get _isNew => widget.event == null;
 
+  /// Uma alteração a um só dia de uma série não se repete.
+  bool get _canRepeat => widget.event?.seriesId == null;
+
   @override
   void initState() {
     super.initState();
@@ -85,9 +91,14 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
       _end = _start.add(const Duration(hours: 1));
     } else {
       final draft = CalendarEventDraft.from(event);
+      final occurrence = widget.occurrence;
       _allDay = draft.isAllDay;
       _start = draft.start;
       _end = draft.end;
+      if (occurrence != null && event.isRecurring) {
+        _start = (occurrence.startDate ?? occurrence.startsAt)!;
+        _end = (occurrence.endDate ?? occurrence.endsAt)!;
+      }
     }
 
     final recurrence = Recurrence.parse(event?.recurrence);
@@ -120,10 +131,6 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
   static int _daysBetween(DateTime a, DateTime b) =>
       DateTime.utc(b.year, b.month, b.day).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
 
-  /// Em Portugal usa-se o relógio de 24 horas.
-  static Widget _twentyFourHours(BuildContext context, Widget? child) =>
-      MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!);
-
   String? get _dateError {
     if (_allDay) return _end.isBefore(_start) ? 'O último dia não pode ser antes do primeiro.' : null;
     return _end.isAfter(_start) ? null : 'O fim tem de ser depois do início.';
@@ -137,7 +144,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
   );
 
   Future<TimeOfDay?> _pickTime(DateTime initial) =>
-      showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(initial), builder: _twentyFourHours);
+      showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(initial));
 
   Future<void> _pickStart({required bool time}) async {
     final date = time ? _start : await _pickDate(_start);
@@ -194,7 +201,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
 
   Recurrence? _recurrence() {
     final frequency = _frequency;
-    if (frequency == null) return null;
+    if (frequency == null || !_canRepeat) return null;
     final weekdays = frequency == RecurrenceFrequency.weekly ? _weekdays : const <int>[];
     return Recurrence(frequency, interval: _interval, weekdays: weekdays, count: _count, until: _until);
   }
@@ -214,24 +221,6 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
       pickUpUserId: _allDay ? null : _pickUp,
     );
     Navigator.pop(context, CalendarEventSaved(draft));
-  }
-
-  Future<void> _delete() async {
-    if (widget.event?.recurrence != null) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Apagar evento?'),
-          content: const Text('Este evento repete-se: todas as ocorrências vão ser apagadas.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Apagar')),
-          ],
-        ),
-      );
-      if (confirmed != true || !mounted) return;
-    }
-    Navigator.pop(context, const CalendarEventDeleteRequested());
   }
 
   Widget _rideField(String label, String? value, ValueChanged<String?> onChanged) {
@@ -299,17 +288,19 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
               textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(labelText: 'Local (opcional)'),
             ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<RecurrenceFrequency?>(
-              initialValue: _frequency,
-              decoration: const InputDecoration(labelText: 'Repetição'),
-              items: [
-                const DropdownMenuItem<RecurrenceFrequency?>(value: null, child: Text('Não se repete')),
-                for (final f in RecurrenceFrequency.values) DropdownMenuItem(value: f, child: Text(f.label)),
-              ],
-              onChanged: _setFrequency,
-            ),
-            if (_frequency == RecurrenceFrequency.weekly) ...[
+            if (_canRepeat) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<RecurrenceFrequency?>(
+                initialValue: _frequency,
+                decoration: const InputDecoration(labelText: 'Repetição'),
+                items: [
+                  const DropdownMenuItem<RecurrenceFrequency?>(value: null, child: Text('Não se repete')),
+                  for (final f in RecurrenceFrequency.values) DropdownMenuItem(value: f, child: Text(f.label)),
+                ],
+                onChanged: _setFrequency,
+              ),
+            ],
+            if (_canRepeat && _frequency == RecurrenceFrequency.weekly) ...[
               const SizedBox(height: 12),
               Wrap(
                 spacing: 6,
@@ -326,7 +317,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
                 ],
               ),
             ],
-            if (_frequency != null)
+            if (_canRepeat && _frequency != null)
               Row(
                 children: [
                   Expanded(
@@ -380,7 +371,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
               children: [
                 if (!_isNew)
                   TextButton.icon(
-                    onPressed: _delete,
+                    onPressed: () => Navigator.pop(context, const CalendarEventDeleteRequested()),
                     icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
                     label: Text('Apagar', style: TextStyle(color: theme.colorScheme.error)),
                   ),

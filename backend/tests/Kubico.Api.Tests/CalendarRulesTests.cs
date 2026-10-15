@@ -125,6 +125,31 @@ public class CalendarRulesTests
         Assert.Empty(conflicts[3]);
     }
 
+    [Fact]
+    public void Excluded_occurrences_are_skipped_but_still_count()
+    {
+        var swimming = Timed("Natação", Utc(2026, 11, 3, 18), hours: 1, recurrence: "FREQ=WEEKLY;COUNT=3");
+        swimming.Exclude(new DateOnly(2026, 11, 10));
+
+        var dates = swimming.Occurrences(Utc(2026, 11, 1), Utc(2026, 12, 31), Lisbon).Select(o => o.Date);
+
+        Assert.Equal(new[] { new DateOnly(2026, 11, 3), new DateOnly(2026, 11, 17) }, dates);
+        Assert.True(swimming.HasOccurrenceOn(new DateOnly(2026, 11, 10), Lisbon));
+        Assert.False(swimming.HasOccurrenceOn(new DateOnly(2026, 11, 11), Lisbon));
+    }
+
+    [Fact]
+    public void Ending_a_series_keeps_what_came_before_and_turns_count_into_until()
+    {
+        var swimming = Timed("Natação", Utc(2026, 11, 3, 18), hours: 1, recurrence: "FREQ=WEEKLY;COUNT=10");
+        swimming.Exclude(new DateOnly(2026, 11, 24));
+
+        Assert.True(swimming.EndBefore(new DateOnly(2026, 11, 17), Lisbon));
+        Assert.Equal("FREQ=WEEKLY;UNTIL=20261110", swimming.Recurrence);
+        Assert.Empty(swimming.ExcludedDates);
+        Assert.False(swimming.EndBefore(new DateOnly(2026, 11, 3), Lisbon), "desde o início não sobra nada");
+    }
+
     private static IReadOnlyList<IReadOnlySet<Guid>> FindConflicts(params CalendarEvent[] events) =>
         CalendarConflicts.Find([.. events.SelectMany(e => e.Occurrences(Utc(2026, 11, 1), Utc(2026, 12, 1), Lisbon))]);
 

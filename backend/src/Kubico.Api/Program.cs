@@ -5,7 +5,9 @@ using Kubico.Api.Calendar;
 using Kubico.Api.Chores;
 using Kubico.Api.Common;
 using Kubico.Api.Households;
+using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
+using Kubico.Api.Rewards;
 using Kubico.Api.Shopping;
 using Kubico.Domain.Users;
 using Kubico.Infrastructure;
@@ -25,6 +27,26 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<HouseholdAccess>();
 builder.Services.AddScoped<HouseholdNotifier>();
 builder.Services.AddSingleton<TokenService>();
+builder.Services.AddScoped<SessionService>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<NotificationDispatcher>();
+
+// Avisos no telemóvel: Firebase Cloud Messaging quando há conta de serviço (Push:Fcm:ServiceAccountJson);
+// sem ela, os avisos ficam só na app.
+builder.Services.AddOptions<FcmOptions>().Bind(builder.Configuration.GetSection(FcmOptions.SectionName));
+builder.Services.AddHttpClient(nameof(FcmPushSender));
+builder.Services.AddSingleton<IPushSender>(sp =>
+{
+    var fcm = sp.GetRequiredService<IOptions<FcmOptions>>();
+    return fcm.Value.IsConfigured
+        ? ActivatorUtilities.CreateInstance<FcmPushSender>(
+            sp, sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(FcmPushSender)))
+        : ActivatorUtilities.CreateInstance<LogPushSender>(sp);
+});
+if (builder.Configuration.GetValue("Notifications:DispatchEnabled", true))
+{
+    builder.Services.AddHostedService<NotificationWorker>();
+}
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
 builder.Services.AddOptions<JwtOptions>()
@@ -112,6 +134,9 @@ api.MapHouseholdEndpoints();
 api.MapShoppingEndpoints();
 api.MapChoreEndpoints();
 api.MapCalendarEndpoints();
+api.MapCalendarFeedEndpoints();
+api.MapRewardEndpoints();
+api.MapNotificationEndpoints();
 
 app.MapHub<HouseholdHub>(HouseholdHub.Path);
 

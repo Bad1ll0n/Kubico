@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../api/api_client.dart';
 import '../api/models.dart';
 import '../realtime/household_realtime.dart';
-import 'theme.dart';
+import '../shopping/shopping_repository.dart';
 
-/// Artigos de uma lista, sincronizados em tempo real com os outros membros.
+/// Artigos de uma lista, sincronizados em tempo real com os outros membros. Funciona sem rede: as alterações
+/// aparecem logo e são enviadas quando a ligação voltar (ver [ShoppingRepository]).
 class ShoppingItemsView extends StatefulWidget {
   const ShoppingItemsView({super.key, required this.householdId, required this.list, this.showTitle = false});
 
@@ -27,15 +27,20 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
   Map<String, ShoppingItem>? _items;
   Object? _error;
 
-  ApiClient get _api => context.read<ApiClient>();
+  late final ShoppingRepository _shopping;
+  String get _householdId => widget.householdId;
+  String get _listId => widget.list.id;
 
   @override
   void initState() {
     super.initState();
     final realtime = context.read<HouseholdRealtime>();
+    _shopping = context.read<ShoppingRepository>();
     _subscriptions
       ..add(realtime.events.listen(_onEvent))
       ..add(realtime.reconnected.listen((_) => _load()));
+    // A fila de alterações enviou-se (ou a rede voltou): o servidor tem a versão final.
+    _shopping.addListener(_onShoppingChanged);
     _load();
   }
 
@@ -44,6 +49,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     for (final s in _subscriptions) {
       s.cancel();
     }
+    _shopping.removeListener(_onShoppingChanged);
     _input.dispose();
     _inputFocus.dispose();
     super.dispose();
@@ -51,7 +57,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
 
   Future<void> _load() async {
     try {
-      final items = await _api.getItems(widget.householdId, widget.list.id);
+      final items = await _shopping.items(_householdId, _listId);
       if (mounted) {
         setState(() {
           _items = {for (final i in items) i.id: i};
@@ -61,6 +67,16 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
+  }
+
+  /// Havia alterações à espera por falta de rede: quando todas chegarem, relê a lista do servidor.
+  var _waitedOffline = false;
+
+  void _onShoppingChanged() {
+    final waiting = _shopping.pendingCount > 0;
+    if (_waitedOffline && !waiting) _load();
+    _waitedOffline = waiting && (_waitedOffline || _shopping.isOffline);
+    if (mounted) setState(() {});
   }
 
   void _onEvent(HouseholdEvent event) {
@@ -81,48 +97,29 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     setState(() => (_items ??= {})[item.id] = item);
   }
 
-  Future<void> _add() async {
+  // As alterações aparecem logo; o repositório envia-as (já, ou quando a rede voltar).
+
+  void _add() {
     final (name, quantity) = parseItemInput(_input.text);
     if (name.isEmpty) return;
     _input.clear();
     _inputFocus.requestFocus();
-    try {
-      _upsert(await _api.addItem(widget.householdId, widget.list.id, name: name, quantity: quantity));
-    } catch (e) {
-      if (mounted) showError(context, e);
-    }
+    _upsert(_shopping.addItem(_householdId, _listId, name: name, quantity: quantity));
   }
 
-  Future<void> _toggle(ShoppingItem item) async {
-    // Otimista: marca já e corrige se o servidor recusar.
+  void _toggle(ShoppingItem item) {
     setState(() => _items![item.id] = item.copyWith(isChecked: !item.isChecked));
-    try {
-      _upsert(await _api.setItemChecked(widget.householdId, widget.list.id, item.id, !item.isChecked));
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _items![item.id] = item);
-      showError(context, e);
-    }
+    _shopping.setChecked(_householdId, _listId, item.id, !item.isChecked);
   }
 
-  Future<void> _delete(ShoppingItem item) async {
+  void _delete(ShoppingItem item) {
     setState(() => _items!.remove(item.id));
-    try {
-      await _api.deleteItem(widget.householdId, widget.list.id, item.id);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _items![item.id] = item);
-      showError(context, e);
-    }
+    _shopping.deleteItem(_householdId, _listId, item.id);
   }
 
-  Future<void> _clearChecked() async {
-    try {
-      await _api.clearChecked(widget.householdId, widget.list.id);
-      setState(() => _items!.removeWhere((_, i) => i.isChecked));
-    } catch (e) {
-      if (mounted) showError(context, e);
-    }
+  void _clearChecked() {
+    setState(() => _items!.removeWhere((_, i) => i.isChecked));
+    _shopping.clearChecked(_householdId, _listId);
   }
 
   @override
@@ -149,6 +146,8 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
 
     return Column(
       children: [
+        if (_shopping.isOffline || _shopping.pendingCount > 0)
+          _SyncBanner(offline: _shopping.isOffline, pending: _shopping.pendingCount),
         if (widget.showTitle)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -238,6 +237,32 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
   static int _byCategoryThenDate(ShoppingItem a, ShoppingItem b) {
     final category = (a.category ?? '￿').toLowerCase().compareTo((b.category ?? '￿').toLowerCase());
     return category != 0 ? category : a.createdAt.compareTo(b.createdAt);
+  }
+}
+
+/// Avisa que não há rede (e quantas alterações esperam) ou que as alterações estão a ser enviadas.
+class _SyncBanner extends StatelessWidget {
+  const _SyncBanner({required this.offline, required this.pending});
+
+  final bool offline;
+  final int pending;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final waiting = switch (pending) {
+      0 => '',
+      1 => ' 1 alteração por enviar.',
+      _ => ' $pending alterações por enviar.',
+    };
+    return Material(
+      color: theme.colorScheme.secondaryContainer,
+      child: ListTile(
+        dense: true,
+        leading: Icon(offline ? Icons.cloud_off : Icons.cloud_upload_outlined),
+        title: Text(offline ? 'Sem ligação: podes continuar a usar a lista.$waiting' : 'A enviar as alterações…'),
+      ),
+    );
   }
 }
 

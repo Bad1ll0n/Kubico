@@ -7,6 +7,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../realtime/household_realtime.dart';
 import 'calendar_event_editor.dart';
+import 'calendar_feed_dialog.dart';
 import 'dates_pt.dart';
 import 'theme.dart';
 
@@ -72,6 +73,43 @@ String describeRecurrence(Recurrence r) {
 }
 
 String _initial(String name) => name.isEmpty ? '?' : name[0].toUpperCase();
+
+/// A que ocorrências de um evento que se repete se aplica uma alteração.
+enum RecurringScope {
+  onlyThis('Só este evento'),
+  following('Este e os seguintes'),
+  all('Todos os eventos');
+
+  const RecurringScope(this.label);
+  final String label;
+}
+
+int _daysBetween(DateTime a, DateTime b) =>
+    DateTime.utc(b.year, b.month, b.day).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
+
+/// Para "todos os eventos": o editor mostrou a [occurrence] escolhida, por isso a série muda com o mesmo desvio
+/// (passar esta ocorrência das 18:00 para as 19:00 passa todas para as 19:00).
+CalendarEventDraft draftForSeries(CalendarEventDraft edited, CalendarEvent series, CalendarOccurrence occurrence) {
+  if (edited.isAllDay && series.isAllDay) {
+    final shift = _daysBetween(occurrence.startDate!, edited.start);
+    final span = _daysBetween(edited.start, edited.end);
+    final first = series.startDate!;
+    final start = DateTime(first.year, first.month, first.day + shift);
+    return edited.copyWith(start: start, end: DateTime(start.year, start.month, start.day + span));
+  }
+  if (!edited.isAllDay && !series.isAllDay) {
+    final start = series.startsAt!.add(edited.start.difference(occurrence.startsAt!));
+    return edited.copyWith(start: start, end: start.add(edited.end.difference(edited.start)));
+  }
+
+  // Passou de dia inteiro para hora marcada (ou o contrário): fica no primeiro dia da série, com as horas novas.
+  final first = series.startDate ?? series.startsAt!;
+  final start = DateTime(first.year, first.month, first.day, edited.start.hour, edited.start.minute);
+  final length = edited.isAllDay
+      ? Duration(days: _daysBetween(edited.start, edited.end))
+      : edited.end.difference(edited.start);
+  return edited.copyWith(start: start, end: start.add(length));
+}
 
 /// Calendário partilhado da casa: vistas de dia, semana e mês, com a cor de cada membro,
 /// feriados nacionais e avisos de conflito. Sincroniza em tempo real.
@@ -177,24 +215,58 @@ class _CalendarViewState extends State<CalendarView> {
     return '$who ${names.length == 1 ? 'tem' : 'têm'} outro compromisso a essa hora';
   }
 
-  Future<void> _edit([CalendarEvent? event]) async {
+  Future<void> _edit([CalendarEvent? event, CalendarOccurrence? occurrence]) async {
     final details = _details;
     if (details == null) return;
-    final result = await showCalendarEventEditor(context, members: details.members, day: _selected, event: event);
+    final result = await showCalendarEventEditor(
+      context,
+      members: details.members,
+      day: _selected,
+      event: event,
+      occurrence: occurrence,
+    );
     if (result == null || !mounted) return;
+
+    // Num evento que se repete, pergunta se a alteração é só desta ocorrência, das seguintes ou de todas.
+    final repeats = event != null && occurrence != null && event.isRecurring;
+    final scope = repeats ? await _askScope(deleting: result is CalendarEventDeleteRequested) : RecurringScope.all;
+    if (scope == null || !mounted) return;
+
     try {
       switch (result) {
         case CalendarEventSaved(:final draft) when event == null:
           await _afterSave(await _api.createEvent(_householdId, draft));
+        case CalendarEventSaved(:final draft) when !repeats || scope == RecurringScope.all:
+          final series = repeats ? draftForSeries(draft, event, occurrence) : draft;
+          await _afterSave(await _api.updateEvent(_householdId, event!.id, series));
         case CalendarEventSaved(:final draft):
-          await _afterSave(await _api.updateEvent(_householdId, event!.id, draft));
-        case CalendarEventDeleteRequested():
+          final following = scope == RecurringScope.following;
+          final date = occurrence!.occurrenceDate;
+          await _afterSave(await _api.updateOccurrence(_householdId, event!.id, date, draft, following: following));
+        case CalendarEventDeleteRequested() when !repeats || scope == RecurringScope.all:
           await _api.deleteEvent(_householdId, event!.id);
+          await _load();
+        case CalendarEventDeleteRequested():
+          final following = scope == RecurringScope.following;
+          await _api.deleteOccurrence(_householdId, event!.id, occurrence!.occurrenceDate, following: following);
           await _load();
       }
     } catch (e) {
       if (mounted) showError(context, e);
     }
+  }
+
+  Future<RecurringScope?> _askScope({required bool deleting}) {
+    return showDialog<RecurringScope>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(deleting ? 'Apagar evento que se repete' : 'Alterar evento que se repete'),
+        children: [
+          for (final scope in RecurringScope.values)
+            SimpleDialogOption(onPressed: () => Navigator.pop(context, scope), child: Text(scope.label)),
+        ],
+      ),
+    );
   }
 
   /// Depois de guardar, abre o dia do evento e avisa se alguém não está disponível.
@@ -262,6 +334,11 @@ class _CalendarViewState extends State<CalendarView> {
                 icon: const Icon(Icons.chevron_right),
               ),
               TextButton(onPressed: () => _go(DateTime.now()), child: const Text('Hoje')),
+              IconButton(
+                tooltip: 'Ver noutros calendários',
+                onPressed: () => showCalendarFeedDialog(context, householdId: _householdId),
+                icon: const Icon(Icons.share_outlined),
+              ),
             ],
           ),
         ],
@@ -335,7 +412,7 @@ class _CalendarViewState extends State<CalendarView> {
       color: _colorFor(event),
       details: _details,
       conflicts: occurrence.conflictUserIds.isEmpty ? null : _unavailable(occurrence.conflictUserIds),
-      onTap: widget.household.role.canManageContent ? () => _edit(event) : null,
+      onTap: widget.household.role.canManageContent ? () => _edit(event, occurrence) : null,
     );
   }
 }

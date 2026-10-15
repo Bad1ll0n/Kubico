@@ -1,6 +1,7 @@
-/// Nomes de dias e meses e formatos de data em português de Portugal.
+/// Nomes de dias e meses e formatos de data em português de Portugal, usados pelo calendário.
 ///
-/// A app ainda não carrega as localizações do Material, por isso o calendário formata as datas aqui.
+/// São fixos (não dependem das localizações do Material) para os títulos e a grelha do calendário
+/// terem sempre o mesmo formato, também nos testes.
 library;
 
 const _months = [

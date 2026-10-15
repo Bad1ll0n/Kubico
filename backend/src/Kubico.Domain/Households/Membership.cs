@@ -14,4 +14,9 @@ public class Membership
     /// <summary>Cor do membro em hexadecimal (#RRGGBB), usada no calendário, tarefas, etc.</summary>
     public string Color { get; set; } = "#4F7CAC";
     public DateTimeOffset JoinedAt { get; set; }
+
+    /// <summary>
+    /// Segredo do endereço pessoal para subscrever o calendário da casa (Google, Outlook, Apple). Null = sem endereço.
+    /// </summary>
+    public string? CalendarFeedToken { get; set; }
 }

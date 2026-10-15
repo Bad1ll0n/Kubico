@@ -51,13 +51,26 @@ class CalendarEventDeleted extends HouseholdEvent {
   final String eventId;
 }
 
+/// Um aviso pessoal novo (chega pelo canal da pessoa, seja qual for a casa aberta).
+class NotificationReceived extends HouseholdEvent {
+  const NotificationReceived(this.notification);
+  final AppNotification notification;
+}
+
+/// Mudou alguma coisa nas recompensas ou nos pedidos (o ecrã volta a ler tudo, porque os saldos mudam).
+class RewardsChanged extends HouseholdEvent {
+  const RewardsChanged();
+}
+
 /// Ligação SignalR ao agregado aberto. Volta a ligar-se sozinha quando a rede falha
 /// e avisa (via [reconnected]) para os ecrãs recarregarem o que possam ter perdido.
 class HouseholdRealtime {
   HouseholdRealtime({required this.baseUrl, required this.accessToken});
 
   final String baseUrl;
-  final String Function() accessToken;
+
+  /// O token para ligar (o SignalR só o envia ao ligar e ao voltar a ligar); pode renovar a sessão antes.
+  final FutureOr<String> Function() accessToken;
 
   final _events = StreamController<HouseholdEvent>.broadcast();
   final _reconnected = StreamController<void>.broadcast();
@@ -75,7 +88,7 @@ class HouseholdRealtime {
     final connection = HubConnectionBuilder()
         .withUrl(
           '$baseUrl/hubs/household',
-          options: HttpConnectionOptions(accessTokenFactory: () async => accessToken()),
+          options: HttpConnectionOptions(accessTokenFactory: () async => await accessToken()),
         )
         .withAutomaticReconnect(retryDelays: [0, 2000, 5000, 10000, 30000])
         .build();
@@ -102,6 +115,15 @@ class HouseholdRealtime {
       (args) => _emit(args, (a) => CalendarEventUpserted(CalendarEvent.fromJson(_map(a[0])))),
     );
     connection.on('CalendarEventDeleted', (args) => _emit(args, (a) => CalendarEventDeleted(a[0] as String)));
+
+    connection.on(
+      'NotificationCreated',
+      (args) => _emit(args, (a) => NotificationReceived(AppNotification.fromJson(_map(a[0])))),
+    );
+
+    for (final name in ['RewardUpserted', 'RewardDeleted', 'RedemptionUpserted', 'RedemptionDeleted']) {
+      connection.on(name, (args) => _emit(args, (_) => const RewardsChanged()));
+    }
 
     connection.onreconnected(({connectionId}) async {
       await _join(connection, householdId);
@@ -134,6 +156,10 @@ class HouseholdRealtime {
     await _events.close();
     await _reconnected.close();
   }
+
+  /// Para os testes: injeta um evento como se tivesse chegado do servidor.
+  @visibleForTesting
+  void emitForTest(HouseholdEvent event) => _events.add(event);
 
   Future<void> _join(HubConnection connection, String householdId) =>
       connection.invoke('JoinHousehold', args: [householdId]);

@@ -141,6 +141,28 @@ public class ShoppingTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFa
         return (await response.Content.ReadFromJsonAsync<ShoppingListDto>(TestJson.Options))!;
     }
 
+    [Fact]
+    public async Task Resending_an_item_with_the_same_id_does_not_duplicate_it()
+    {
+        var (client, _) = await factory.CreateUserAsync();
+        var household = await HouseholdTests.CreateHousehold(client, "Casa");
+        var list = await CreateList(client, household.Id, "Supermercado");
+        var pharmacy = await CreateList(client, household.Id, "Farmácia");
+        var url = $"/api/households/{household.Id}/lists/{list.Id}/items";
+        var id = Guid.NewGuid();
+
+        var first = await client.PostAsJsonAsync(url, new AddShoppingItemRequest("Leite", Id: id), TestJson.Options);
+        var again = await client.PostAsJsonAsync(url, new AddShoppingItemRequest("Leite", Id: id), TestJson.Options);
+        var elsewhere = await client.PostAsJsonAsync(
+            $"/api/households/{household.Id}/lists/{pharmacy.Id}/items", new AddShoppingItemRequest("Leite", Id: id), TestJson.Options);
+        var items = await client.GetFromJsonAsync<List<ShoppingItemDto>>(url, TestJson.Options);
+
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, elsewhere.StatusCode);
+        Assert.Equal(id, Assert.Single(items!).Id);
+    }
+
     private static async Task<ShoppingItemDto> AddItem(HttpClient client, string url, AddShoppingItemRequest request)
     {
         var response = await client.PostAsJsonAsync(url, request);

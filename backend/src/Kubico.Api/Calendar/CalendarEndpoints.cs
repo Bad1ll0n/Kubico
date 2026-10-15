@@ -1,9 +1,12 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Security.Claims;
 using Kubico.Api.Common;
+using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Calendar;
 using Kubico.Domain.Households;
+using Kubico.Domain.Notifications;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -42,14 +45,18 @@ public record CalendarEventDto(
     IReadOnlyList<Guid> ParticipantUserIds,
     Guid? DropOffUserId,
     Guid? PickUpUserId,
+    Guid? SeriesId,
+    DateOnly? OriginalDate,
     DateTimeOffset UpdatedAt);
 
 /// <summary>
-/// Uma ocorrência no intervalo pedido. <c>ConflictUserIds</c> são os membros que estão noutro evento
-/// ao mesmo tempo (ou ocupados quando têm de levar ou ir buscar).
+/// Uma ocorrência no intervalo pedido. <c>OccurrenceDate</c> identifica-a dentro da série (para alterar ou apagar
+/// só esta). <c>ConflictUserIds</c> são os membros que estão noutro evento ao mesmo tempo (ou ocupados quando
+/// têm de levar ou ir buscar).
 /// </summary>
 public record CalendarOccurrenceDto(
     Guid EventId,
+    DateOnly OccurrenceDate,
     DateTimeOffset? StartsAt,
     DateTimeOffset? EndsAt,
     DateOnly? StartDate,
@@ -80,6 +87,8 @@ public static class CalendarEndpoints
         events.MapPost("/", CreateEvent);
         events.MapPut("/{eventId:guid}", UpdateEvent);
         events.MapDelete("/{eventId:guid}", DeleteEvent);
+        events.MapPut("/{eventId:guid}/occurrences/{date}", UpdateOccurrence);
+        events.MapDelete("/{eventId:guid}/occurrences/{date}", DeleteOccurrence);
 
         return api;
     }
@@ -153,6 +162,7 @@ public static class CalendarEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -183,6 +193,7 @@ public static class CalendarEndpoints
 
         var dto = ToDto(calendarEvent);
         await notifier.CalendarEventUpserted(householdId, dto, ct);
+        await NotifyInvolved(notifications, db, calendarEvent, [], userId, ct);
         return Results.Created($"/api/households/{householdId}/events/{calendarEvent.Id}", dto);
     }
 
@@ -194,6 +205,7 @@ public static class CalendarEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -204,8 +216,7 @@ public static class CalendarEndpoints
             return error;
         }
 
-        var calendarEvent = await db.CalendarEvents
-            .SingleOrDefaultAsync(e => e.Id == eventId && e.HouseholdId == householdId, ct);
+        var calendarEvent = await FindEvent(db, householdId, eventId, ct);
         if (calendarEvent is null)
         {
             return Results.NotFound();
@@ -216,11 +227,22 @@ public static class CalendarEndpoints
             return invalid;
         }
 
-        Apply(calendarEvent, request, clock.GetUtcNow());
+        if (calendarEvent.SeriesId is not null && !string.IsNullOrWhiteSpace(request.Recurrence))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["Recurrence"] = ["Uma alteração a um só dia de uma série não se pode repetir."],
+            });
+        }
+
+        var before = Involved(calendarEvent);
+        var removed = await UpdateSeries(db, calendarEvent, request, clock.GetUtcNow(), ct);
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(calendarEvent);
         await notifier.CalendarEventUpserted(householdId, dto, ct);
+        await NotifyDeleted(notifier, householdId, removed, ct);
+        await NotifyInvolved(notifications, db, calendarEvent, before, principal.GetUserId(), ct);
         return Results.Ok(dto);
     }
 
@@ -240,18 +262,277 @@ public static class CalendarEndpoints
             return error;
         }
 
-        var calendarEvent = await db.CalendarEvents
-            .SingleOrDefaultAsync(e => e.Id == eventId && e.HouseholdId == householdId, ct);
+        var calendarEvent = await FindEvent(db, householdId, eventId, ct);
         if (calendarEvent is null)
         {
             return Results.NotFound();
         }
 
+        var removed = await RemoveExceptions(db, calendarEvent.Id, _ => true, ct);
         db.CalendarEvents.Remove(calendarEvent);
         await db.SaveChangesAsync(ct);
-        await notifier.CalendarEventDeleted(householdId, eventId, ct);
+        await NotifyDeleted(notifier, householdId, [.. removed, eventId], ct);
         return Results.NoContent();
     }
+
+    /// <summary>
+    /// Altera uma ocorrência de uma série: só essa (<c>scope=this</c>, que passa a ser uma exceção sem repetição)
+    /// ou essa e as seguintes (<c>scope=following</c>: a série termina antes e começa outra com os dados enviados).
+    /// </summary>
+    private static async Task<IResult> UpdateOccurrence(
+        Guid householdId,
+        Guid eventId,
+        DateOnly date,
+        string? scope,
+        SaveEventRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        HouseholdNotifier notifier,
+        NotificationService notifications,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct, r => r.CanManageContent());
+        if (error is not null)
+        {
+            return error;
+        }
+
+        if (ParseScope(scope) is not { } following)
+        {
+            return InvalidScope();
+        }
+
+        var (series, zone) = await FindSeries(db, householdId, eventId, date, ct);
+        if (series is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (await Validate(db, householdId, request, ct) is { } invalid)
+        {
+            return invalid;
+        }
+
+        var now = clock.GetUtcNow();
+        var before = Involved(series);
+        if (following && !series.EndBefore(date, zone))
+        {
+            // É a primeira ocorrência: "esta e as seguintes" é a série toda.
+            var removedAll = await UpdateSeries(db, series, request, now, ct);
+            await db.SaveChangesAsync(ct);
+            var seriesDto = ToDto(series);
+            await notifier.CalendarEventUpserted(householdId, seriesDto, ct);
+            await NotifyDeleted(notifier, householdId, removedAll, ct);
+            await NotifyInvolved(notifications, db, series, before, userId, ct);
+            return Results.Ok(seriesDto);
+        }
+
+        series.UpdatedAt = now;
+        List<Guid> removed = [];
+        CalendarEvent changed;
+        var isNew = true;
+        if (following)
+        {
+            removed = await RemoveExceptions(db, series.Id, d => d >= date, ct);
+            changed = new CalendarEvent
+            {
+                HouseholdId = householdId,
+                Title = request.Title,
+                CreatedByUserId = userId,
+                CreatedAt = now,
+            };
+            Apply(changed, request, now);
+        }
+        else
+        {
+            // Só esta: sai da série e passa a ser um evento próprio, que se lembra do dia que substitui.
+            var existing = await db.CalendarEvents
+                .SingleOrDefaultAsync(e => e.SeriesId == series.Id && e.OriginalDate == date, ct);
+            isNew = existing is null;
+            changed = existing ?? new CalendarEvent
+            {
+                HouseholdId = householdId,
+                Title = request.Title,
+                SeriesId = series.Id,
+                OriginalDate = date,
+                CreatedByUserId = userId,
+                CreatedAt = now,
+            };
+            Apply(changed, request with { Recurrence = null }, now);
+            series.Exclude(date);
+        }
+
+        if (isNew)
+        {
+            db.CalendarEvents.Add(changed);
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        var dto = ToDto(changed);
+        await notifier.CalendarEventUpserted(householdId, ToDto(series), ct);
+        await notifier.CalendarEventUpserted(householdId, dto, ct);
+        await NotifyDeleted(notifier, householdId, removed, ct);
+        await NotifyInvolved(notifications, db, changed, before, userId, ct);
+        return isNew ? Results.Created($"/api/households/{householdId}/events/{changed.Id}", dto) : Results.Ok(dto);
+    }
+
+    /// <summary>Apaga uma ocorrência de uma série: só essa (<c>scope=this</c>) ou essa e as seguintes.</summary>
+    private static async Task<IResult> DeleteOccurrence(
+        Guid householdId,
+        Guid eventId,
+        DateOnly date,
+        string? scope,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        HouseholdNotifier notifier,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var (_, error) = await access.RequireMemberAsync(
+            principal.GetUserId(), householdId, ct, r => r.CanManageContent());
+        if (error is not null)
+        {
+            return error;
+        }
+
+        if (ParseScope(scope) is not { } following)
+        {
+            return InvalidScope();
+        }
+
+        var (series, zone) = await FindSeries(db, householdId, eventId, date, ct);
+        if (series is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (following && !series.EndBefore(date, zone))
+        {
+            // Desde a primeira ocorrência: não sobra nada da série.
+            var removedAll = await RemoveExceptions(db, series.Id, _ => true, ct);
+            db.CalendarEvents.Remove(series);
+            await db.SaveChangesAsync(ct);
+            await NotifyDeleted(notifier, householdId, [.. removedAll, series.Id], ct);
+            return Results.NoContent();
+        }
+
+        if (!following)
+        {
+            series.Exclude(date);
+        }
+
+        var removed = await RemoveExceptions(db, series.Id, d => following ? d >= date : d == date, ct);
+        series.UpdatedAt = clock.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        await notifier.CalendarEventUpserted(householdId, ToDto(series), ct);
+        await NotifyDeleted(notifier, householdId, removed, ct);
+        return Results.NoContent();
+    }
+
+    private static Task<CalendarEvent?> FindEvent(
+        KubicoDbContext db, Guid householdId, Guid eventId, CancellationToken ct) =>
+        db.CalendarEvents.SingleOrDefaultAsync(e => e.Id == eventId && e.HouseholdId == householdId, ct);
+
+    /// <summary>A série com uma ocorrência nesse dia e o fuso da casa; a série vem null se não existir.</summary>
+    private static async Task<(CalendarEvent? Series, TimeZoneInfo Zone)> FindSeries(
+        KubicoDbContext db, Guid householdId, Guid eventId, DateOnly date, CancellationToken ct)
+    {
+        var zone = (await db.Households.AsNoTracking().SingleAsync(h => h.Id == householdId, ct)).TimeZone;
+        var series = await FindEvent(db, householdId, eventId, ct);
+        return series is { IsRecurring: true } && series.HasOccurrenceOn(date, zone) ? (series, zone) : (null, zone);
+    }
+
+    /// <summary>
+    /// Aplica um PUT a um evento inteiro. Mudar o início ou a repetição de uma série desfaz as exceções, porque os
+    /// dias deixam de corresponder às ocorrências; devolve os ids das exceções apagadas.
+    /// </summary>
+    private static async Task<List<Guid>> UpdateSeries(
+        KubicoDbContext db, CalendarEvent calendarEvent, SaveEventRequest request, DateTimeOffset now, CancellationToken ct)
+    {
+        var schedule = (calendarEvent.StartsAt, calendarEvent.StartDate, calendarEvent.Recurrence);
+        Apply(calendarEvent, request, now);
+        if (schedule == (calendarEvent.StartsAt, calendarEvent.StartDate, calendarEvent.Recurrence))
+        {
+            return [];
+        }
+
+        calendarEvent.ExcludedDates = [];
+        return await RemoveExceptions(db, calendarEvent.Id, _ => true, ct);
+    }
+
+    /// <summary>Apaga as exceções de uma série cujo dia original satisfaz <paramref name="which"/>.</summary>
+    private static async Task<List<Guid>> RemoveExceptions(
+        KubicoDbContext db, Guid seriesId, Func<DateOnly, bool> which, CancellationToken ct)
+    {
+        var exceptions = (await db.CalendarEvents.Where(e => e.SeriesId == seriesId).ToListAsync(ct))
+            .Where(e => which(e.OriginalDate!.Value))
+            .ToList();
+        db.CalendarEvents.RemoveRange(exceptions);
+        return [.. exceptions.Select(e => e.Id)];
+    }
+
+    /// <summary>Quem está no evento: participantes e quem leva ou vai buscar.</summary>
+    private static HashSet<Guid> Involved(CalendarEvent e) =>
+        [.. e.ParticipantUserIds, .. new[] { e.DropOffUserId, e.PickUpUserId }.OfType<Guid>()];
+
+    /// <summary>Avisa quem passou a estar no evento (e não estava antes), com o dia e a hora.</summary>
+    private static async Task NotifyInvolved(
+        NotificationService notifications,
+        KubicoDbContext db,
+        CalendarEvent e,
+        IEnumerable<Guid> before,
+        Guid actorId,
+        CancellationToken ct)
+    {
+        var added = Involved(e).Except(before).ToList();
+        if (added.Count == 0)
+        {
+            return;
+        }
+
+        var zone = (await db.Households.AsNoTracking().SingleAsync(h => h.Id == e.HouseholdId, ct)).TimeZone;
+        var when = e.IsAllDay
+            ? e.StartDate!.Value.ToString("dd/MM", CultureInfo.InvariantCulture) + " (todo o dia)"
+            : TimeZoneInfo.ConvertTime(e.StartsAt!.Value, zone).ToString("dd/MM 'às' HH:mm", CultureInfo.InvariantCulture);
+        foreach (var userId in added)
+        {
+            var (kind, title) = (userId == e.DropOffUserId, userId == e.PickUpUserId) switch
+            {
+                (true, true) => (NotificationKind.RideAssigned, $"Tens de levar e ir buscar: {e.Title}"),
+                (true, false) => (NotificationKind.RideAssigned, $"Tens de levar: {e.Title}"),
+                (false, true) => (NotificationKind.RideAssigned, $"Tens de ir buscar: {e.Title}"),
+                _ => (NotificationKind.EventAssigned, $"Novo evento: {e.Title}"),
+            };
+            await notifications.NotifyAsync(e.HouseholdId, [userId], actorId, kind, title, when, e.Id, ct);
+        }
+    }
+
+    private static async Task NotifyDeleted(
+        HouseholdNotifier notifier, Guid householdId, IEnumerable<Guid> eventIds, CancellationToken ct)
+    {
+        foreach (var eventId in eventIds)
+        {
+            await notifier.CalendarEventDeleted(householdId, eventId, ct);
+        }
+    }
+
+    /// <summary>true = "esta e as seguintes"; false = "só esta"; null = valor inválido.</summary>
+    private static bool? ParseScope(string? scope) => scope?.ToLowerInvariant() switch
+    {
+        null or "this" => false,
+        "following" => true,
+        _ => null,
+    };
+
+    private static IResult InvalidScope() => Results.ValidationProblem(new Dictionary<string, string[]>
+    {
+        ["scope"] = ["Indica se é só este evento (this) ou este e os seguintes (following)."],
+    });
 
     /// <summary>Datas coerentes, repetição suportada, e participantes e boleias que são membros desta casa.</summary>
     private static async Task<IResult?> Validate(
@@ -342,10 +623,11 @@ public static class CalendarEndpoints
 
     private static CalendarEventDto ToDto(CalendarEvent e) => new(
         e.Id, e.HouseholdId, e.Title, e.Notes, e.Location, e.IsAllDay, e.StartsAt, e.EndsAt, e.StartDate, e.EndDate,
-        e.Recurrence, e.ParticipantUserIds, e.DropOffUserId, e.PickUpUserId, e.UpdatedAt);
+        e.Recurrence, e.ParticipantUserIds, e.DropOffUserId, e.PickUpUserId, e.SeriesId, e.OriginalDate, e.UpdatedAt);
 
     private static CalendarOccurrenceDto ToDto(EventOccurrence o, IReadOnlySet<Guid> conflicts) => new(
         o.Event.Id,
+        o.Date,
         o.IsAllDay ? null : o.Start,
         o.IsAllDay ? null : o.End,
         o.StartDate,

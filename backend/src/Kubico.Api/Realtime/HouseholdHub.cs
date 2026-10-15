@@ -15,6 +15,15 @@ public class HouseholdHub(HouseholdAccess access) : Hub
 
     public static string GroupName(Guid householdId) => $"household:{householdId}";
 
+    /// <summary>Canal pessoal: os avisos de cada membro (de qualquer casa) chegam por aqui.</summary>
+    public static string UserGroupName(Guid userId) => $"user:{userId}";
+
+    public override async Task OnConnectedAsync()
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, UserGroupName(Context.User!.GetUserId()));
+        await base.OnConnectedAsync();
+    }
+
     public async Task JoinHousehold(Guid householdId)
     {
         var role = await access.GetRoleAsync(Context.User!.GetUserId(), householdId, Context.ConnectionAborted);

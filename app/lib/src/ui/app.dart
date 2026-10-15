@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import '../session/session_controller.dart';
@@ -6,6 +7,9 @@ import 'auth_screen.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
 import 'theme.dart';
+
+/// A app fala português de Portugal: datas, horas (24 h) e semanas a começar à segunda-feira.
+const kubicoLocale = Locale('pt', 'PT');
 
 class KubicoApp extends StatelessWidget {
   const KubicoApp({super.key});
@@ -17,6 +21,9 @@ class KubicoApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
+      locale: kubicoLocale,
+      supportedLocales: const [kubicoLocale],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       home: const _Root(),
     );
   }

@@ -1,9 +1,12 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Security.Claims;
 using Kubico.Api.Common;
+using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
+using Kubico.Domain.Notifications;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -98,6 +101,7 @@ public static class ChoreEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -128,6 +132,7 @@ public static class ChoreEndpoints
 
         var dto = ToDto(chore);
         await notifier.ChoreUpserted(householdId, dto, ct);
+        await NotifyAssignee(notifications, chore, null, userId, $"Tarefa para ti: {chore.Title}", ct);
         return Results.Created($"/api/households/{householdId}/chores/{chore.Id}", dto);
     }
 
@@ -139,6 +144,7 @@ public static class ChoreEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -160,11 +166,14 @@ public static class ChoreEndpoints
             return invalid;
         }
 
+        var previousAssignee = chore.AssigneeUserId;
         Apply(chore, request, clock.GetUtcNow());
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(chore);
         await notifier.ChoreUpserted(householdId, dto, ct);
+        await NotifyAssignee(
+            notifications, chore, previousAssignee, principal.GetUserId(), $"Tarefa para ti: {chore.Title}", ct);
         return Results.Ok(dto);
     }
 
@@ -203,6 +212,7 @@ public static class ChoreEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -235,6 +245,7 @@ public static class ChoreEndpoints
         }
 
         var now = clock.GetUtcNow();
+        var previousAssignee = chore.AssigneeUserId;
         var completion = chore.Complete(userId, now, chore.Household.Today(now));
 
         // O Id já vem preenchido; sem Add explícito o EF trataria o registo como existente (UPDATE).
@@ -243,6 +254,7 @@ public static class ChoreEndpoints
 
         var dto = ToDto(chore);
         await notifier.ChoreUpserted(householdId, dto, ct);
+        await NotifyAssignee(notifications, chore, previousAssignee, userId, $"É a tua vez: {chore.Title}", ct);
         return Results.Ok(new ChoreCompletedDto(dto, completion.Points));
     }
 
@@ -291,6 +303,20 @@ public static class ChoreEndpoints
         var household = await db.Households.AsNoTracking().SingleAsync(h => h.Id == householdId, ct);
         var today = household.Today(now);
         return Results.Ok(new ChoreStatsDto(today.AddDays(-period), today, stats));
+    }
+
+    /// <summary>Avisa quem passou a ser responsável pela tarefa (atribuída, ou a sua vez na rotação).</summary>
+    private static Task NotifyAssignee(
+        NotificationService notifications, Chore chore, Guid? previousAssignee, Guid actorId, string title, CancellationToken ct)
+    {
+        if (chore.AssigneeUserId is not { } assignee || assignee == previousAssignee)
+        {
+            return Task.CompletedTask;
+        }
+
+        var due = chore.DueDate is { } date ? "Prazo: " + date.ToString("dd/MM", CultureInfo.InvariantCulture) : null;
+        return notifications.NotifyAsync(
+            chore.HouseholdId, [assignee], actorId, NotificationKind.ChoreAssigned, title, due, chore.Id, ct);
     }
 
     /// <summary>O responsável e a rotação têm de ser membros desta casa.</summary>
