@@ -46,18 +46,19 @@ O CI (`.github/workflows/ci.yml`) corre build com `-warnaserror`, testes, `dart 
 - **Datas**: instantes em `DateTimeOffset` UTC; prazos em `DateOnly`. "Hoje" calcula-se com `Household.Today(now)` (fuso da casa, por omissão Europe/Lisbon). Usa sempre `TimeProvider`, nunca `DateTime.Now`.
 - **EF Core**: entidades com `Id` já preenchido adicionadas por navegação têm de ser registadas com `db.X.Add(...)`, senão o EF faz UPDATE em vez de INSERT.
 - **Enums** viajam como texto em JSON (`JsonStringEnumConverter`) e na base de dados.
-- **Calendário**: eventos com hora usam `StartsAt`/`EndsAt` (UTC); de dia inteiro, `StartDate`/`EndDate` (inclusive). A repetição é uma RRULE canónica (`RecurrenceRule`, subconjunto da RFC 5545) e as ocorrências, os conflitos e os feriados calculam-se no servidor, no fuso da casa (`GET /events?from&to`, até 92 dias).
+- **Calendário**: eventos com hora usam `StartsAt`/`EndsAt` (UTC); de dia inteiro, `StartDate`/`EndDate` (inclusive). A repetição é uma RRULE canónica (`RecurrenceRule`, subconjunto da RFC 5545) e as ocorrências, os conflitos e os feriados calculam-se no servidor, no fuso da casa (`GET /events?from&to`, até 92 dias). Dias apagados vão para `ExcludedDates`; um dia alterado é um evento próprio com `SeriesId`/`OriginalDate`. O feed ICS (`IcsWriter`) tem de refletir tudo isto (RRULE, EXDATE, RECURRENCE-ID).
+- **Avisos**: cria-os com `NotificationService.NotifyAsync` (nunca vão para quem fez a alteração); chegam pelo canal pessoal do SignalR (`user:{id}`) e o `NotificationDispatcher` envia-os para os telemóveis segundo as preferências.
+- **Listas de compras na app**: as alterações passam pelo `ShoppingRepository` (cópia local + fila), não pelo `ApiClient` diretamente; os artigos novos levam o id gerado na app.
+- **Sessão**: token de acesso de 15 minutos e refresh token rotativo (`SessionService`); a app renova sozinha num 401. Nos testes, os tokens de acesso duram 1 dia porque o relógio falso está à meia-noite — os testes que avançam o relógio usam um servidor próprio.
 - **Erros** devolvem ProblemDetails com `title` em português, pronto a mostrar; a app mostra o `title` ou a primeira mensagem de validação.
 - **Textos visíveis ao utilizador em português de Portugal.** Código, nomes de classes e commits técnicos podem ser em inglês; comentários em português.
 - Cada funcionalidade nova leva testes de integração no backend (incluindo permissões e isolamento entre casas) e testes na app.
 
 ## Estado e próximos passos
 
-Feito: contas (JWT), casas e convites, listas de compras em tempo real, tarefas recorrentes com rotação e pontos, calendário partilhado (repetições, boleias, conflitos, feriados).
+Feito: contas (refresh tokens, terminar sessão em todos os dispositivos), casas e convites, listas de compras em tempo real e sem rede, tarefas recorrentes com rotação e pontos, recompensas, calendário partilhado (repetições e exceções, boleias, conflitos, feriados, subscrição ICS), avisos (na app e no telemóvel via FCM), app em pt-PT.
 
 A seguir (por esta ordem, salvo indicação em contrário):
-1. Calendário: sync Google/Outlook e exceções em eventos que se repetem (editar ou apagar só uma ocorrência).
-2. Recompensas trocáveis por pontos.
-3. Modo offline na lista de compras.
-4. Refresh tokens.
-5. Notificações push.
+1. Avisos no telemóvel do lado da app: projeto Firebase, `flutterfire configure`, `firebase_messaging` e registo do token em `POST /api/notifications/devices` (precisa da conta Firebase do utilizador).
+2. Sync nos dois sentidos do calendário com Google e Outlook (precisa de credenciais OAuth).
+3. Lista de dispositivos com sessão iniciada.
