@@ -69,9 +69,11 @@ class ApiClient {
           .map((i) => ShoppingItem.fromJson(i as Map<String, dynamic>))
           .toList();
 
+  /// [id] é gerado na app quando o artigo foi criado sem rede: reenviar não o duplica.
   Future<ShoppingItem> addItem(
     String householdId,
     String listId, {
+    String? id,
     required String name,
     String? quantity,
     String? category,
@@ -80,6 +82,7 @@ class ApiClient {
       'POST',
       _itemsPath(householdId, listId),
       body: {
+        'id': ?id,
         'name': name,
         if (quantity != null && quantity.isNotEmpty) 'quantity': quantity,
         if (category != null && category.isNotEmpty) 'category': category,

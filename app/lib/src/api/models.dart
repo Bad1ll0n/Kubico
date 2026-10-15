@@ -143,6 +143,14 @@ class ShoppingList {
 
   int get pendingCount => itemCount - checkedCount;
 
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'householdId': householdId,
+    'name': name,
+    'itemCount': itemCount,
+    'checkedCount': checkedCount,
+  };
+
   factory ShoppingList.fromJson(Map<String, dynamic> json) => ShoppingList(
     id: json['id'] as String,
     householdId: json['householdId'] as String,
@@ -186,6 +194,18 @@ class ShoppingItem {
     createdAt: createdAt,
     updatedAt: updatedAt,
   );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'listId': listId,
+    'name': name,
+    'quantity': quantity,
+    'category': category,
+    'isChecked': isChecked,
+    'addedByUserId': addedByUserId,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
 
   factory ShoppingItem.fromJson(Map<String, dynamic> json) => ShoppingItem(
     id: json['id'] as String,

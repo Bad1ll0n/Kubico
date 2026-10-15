@@ -12,10 +12,15 @@ namespace Kubico.Api.Shopping;
 public record CreateShoppingListRequest(
     [property: Required, StringLength(100, MinimumLength = 1)] string Name);
 
+/// <summary>
+/// Novo artigo. A app pode mandar o <c>Id</c> (gerado no telemóvel): assim, reenviar o mesmo pedido depois de
+/// estar sem rede não duplica o artigo.
+/// </summary>
 public record AddShoppingItemRequest(
     [property: Required, StringLength(200, MinimumLength = 1)] string Name,
     [property: StringLength(50)] string? Quantity = null,
-    [property: StringLength(50)] string? Category = null);
+    [property: StringLength(50)] string? Category = null,
+    Guid? Id = null);
 
 /// <summary>Atualização parcial: só os campos enviados (não nulos) são alterados.</summary>
 public record UpdateShoppingItemRequest(
@@ -191,9 +196,18 @@ public static class ShoppingEndpoints
             return Results.NotFound();
         }
 
+        if (request.Id is { } id && await db.ShoppingItems.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id, ct) is { } existing)
+        {
+            // Pedido repetido (a app voltou a enviá-lo): devolve o artigo que já existe.
+            return existing.ListId == listId
+                ? Results.Ok(ToDto(existing))
+                : Results.Problem(title: "Este artigo já existe noutra lista.", statusCode: StatusCodes.Status409Conflict);
+        }
+
         var now = clock.GetUtcNow();
         var item = new ShoppingItem
         {
+            Id = request.Id ?? Guid.NewGuid(),
             ListId = listId,
             Name = request.Name.Trim(),
             Quantity = Clean(request.Quantity),

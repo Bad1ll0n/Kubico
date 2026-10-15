@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../api/models.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
+import '../shopping/shopping_repository.dart';
 import 'calendar_view.dart';
 import 'chores_view.dart';
 import 'household_screen.dart';
@@ -119,7 +120,10 @@ class _HomeScreenState extends State<HomeScreen> {
               PopupMenuButton<String>(
                 onSelected: (value) async {
                   if (value == 'logout') {
-                    await context.read<HouseholdRealtime>().disconnect();
+                    final realtime = context.read<HouseholdRealtime>();
+                    final shopping = context.read<ShoppingRepository>();
+                    await realtime.disconnect();
+                    await shopping.clear();
                     await session.signOut();
                   }
                 },

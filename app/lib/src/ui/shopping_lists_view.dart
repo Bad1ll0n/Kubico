@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../realtime/household_realtime.dart';
+import '../shopping/shopping_repository.dart';
 import 'theme.dart';
 
 class ShoppingListsView extends StatefulWidget {
@@ -53,7 +54,7 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
 
   Future<void> _load() async {
     try {
-      final lists = await _api.getLists(widget.household.id);
+      final lists = await context.read<ShoppingRepository>().lists(widget.household.id);
       if (mounted) {
         setState(() {
           _lists = lists;
