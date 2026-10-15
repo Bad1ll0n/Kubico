@@ -1,9 +1,12 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Security.Claims;
 using Kubico.Api.Common;
+using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Calendar;
 using Kubico.Domain.Households;
+using Kubico.Domain.Notifications;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -159,6 +162,7 @@ public static class CalendarEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -189,6 +193,7 @@ public static class CalendarEndpoints
 
         var dto = ToDto(calendarEvent);
         await notifier.CalendarEventUpserted(householdId, dto, ct);
+        await NotifyInvolved(notifications, db, calendarEvent, [], userId, ct);
         return Results.Created($"/api/households/{householdId}/events/{calendarEvent.Id}", dto);
     }
 
@@ -200,6 +205,7 @@ public static class CalendarEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -229,12 +235,14 @@ public static class CalendarEndpoints
             });
         }
 
+        var before = Involved(calendarEvent);
         var removed = await UpdateSeries(db, calendarEvent, request, clock.GetUtcNow(), ct);
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(calendarEvent);
         await notifier.CalendarEventUpserted(householdId, dto, ct);
         await NotifyDeleted(notifier, householdId, removed, ct);
+        await NotifyInvolved(notifications, db, calendarEvent, before, principal.GetUserId(), ct);
         return Results.Ok(dto);
     }
 
@@ -281,6 +289,7 @@ public static class CalendarEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -308,6 +317,7 @@ public static class CalendarEndpoints
         }
 
         var now = clock.GetUtcNow();
+        var before = Involved(series);
         if (following && !series.EndBefore(date, zone))
         {
             // É a primeira ocorrência: "esta e as seguintes" é a série toda.
@@ -316,6 +326,7 @@ public static class CalendarEndpoints
             var seriesDto = ToDto(series);
             await notifier.CalendarEventUpserted(householdId, seriesDto, ct);
             await NotifyDeleted(notifier, householdId, removedAll, ct);
+            await NotifyInvolved(notifications, db, series, before, userId, ct);
             return Results.Ok(seriesDto);
         }
 
@@ -365,6 +376,7 @@ public static class CalendarEndpoints
         await notifier.CalendarEventUpserted(householdId, ToDto(series), ct);
         await notifier.CalendarEventUpserted(householdId, dto, ct);
         await NotifyDeleted(notifier, householdId, removed, ct);
+        await NotifyInvolved(notifications, db, changed, before, userId, ct);
         return isNew ? Results.Created($"/api/households/{householdId}/events/{changed.Id}", dto) : Results.Ok(dto);
     }
 
@@ -462,6 +474,42 @@ public static class CalendarEndpoints
             .ToList();
         db.CalendarEvents.RemoveRange(exceptions);
         return [.. exceptions.Select(e => e.Id)];
+    }
+
+    /// <summary>Quem está no evento: participantes e quem leva ou vai buscar.</summary>
+    private static HashSet<Guid> Involved(CalendarEvent e) =>
+        [.. e.ParticipantUserIds, .. new[] { e.DropOffUserId, e.PickUpUserId }.OfType<Guid>()];
+
+    /// <summary>Avisa quem passou a estar no evento (e não estava antes), com o dia e a hora.</summary>
+    private static async Task NotifyInvolved(
+        NotificationService notifications,
+        KubicoDbContext db,
+        CalendarEvent e,
+        IEnumerable<Guid> before,
+        Guid actorId,
+        CancellationToken ct)
+    {
+        var added = Involved(e).Except(before).ToList();
+        if (added.Count == 0)
+        {
+            return;
+        }
+
+        var zone = (await db.Households.AsNoTracking().SingleAsync(h => h.Id == e.HouseholdId, ct)).TimeZone;
+        var when = e.IsAllDay
+            ? e.StartDate!.Value.ToString("dd/MM", CultureInfo.InvariantCulture) + " (todo o dia)"
+            : TimeZoneInfo.ConvertTime(e.StartsAt!.Value, zone).ToString("dd/MM 'às' HH:mm", CultureInfo.InvariantCulture);
+        foreach (var userId in added)
+        {
+            var (kind, title) = (userId == e.DropOffUserId, userId == e.PickUpUserId) switch
+            {
+                (true, true) => (NotificationKind.RideAssigned, $"Tens de levar e ir buscar: {e.Title}"),
+                (true, false) => (NotificationKind.RideAssigned, $"Tens de levar: {e.Title}"),
+                (false, true) => (NotificationKind.RideAssigned, $"Tens de ir buscar: {e.Title}"),
+                _ => (NotificationKind.EventAssigned, $"Novo evento: {e.Title}"),
+            };
+            await notifications.NotifyAsync(e.HouseholdId, [userId], actorId, kind, title, when, e.Id, ct);
+        }
     }
 
     private static async Task NotifyDeleted(

@@ -51,6 +51,12 @@ class CalendarEventDeleted extends HouseholdEvent {
   final String eventId;
 }
 
+/// Um aviso pessoal novo (chega pelo canal da pessoa, seja qual for a casa aberta).
+class NotificationReceived extends HouseholdEvent {
+  const NotificationReceived(this.notification);
+  final AppNotification notification;
+}
+
 /// Mudou alguma coisa nas recompensas ou nos pedidos (o ecrã volta a ler tudo, porque os saldos mudam).
 class RewardsChanged extends HouseholdEvent {
   const RewardsChanged();
@@ -110,6 +116,11 @@ class HouseholdRealtime {
     );
     connection.on('CalendarEventDeleted', (args) => _emit(args, (a) => CalendarEventDeleted(a[0] as String)));
 
+    connection.on(
+      'NotificationCreated',
+      (args) => _emit(args, (a) => NotificationReceived(AppNotification.fromJson(_map(a[0])))),
+    );
+
     for (final name in ['RewardUpserted', 'RewardDeleted', 'RedemptionUpserted', 'RedemptionDeleted']) {
       connection.on(name, (args) => _emit(args, (_) => const RewardsChanged()));
     }
@@ -145,6 +156,10 @@ class HouseholdRealtime {
     await _events.close();
     await _reconnected.close();
   }
+
+  /// Para os testes: injeta um evento como se tivesse chegado do servidor.
+  @visibleForTesting
+  void emitForTest(HouseholdEvent event) => _events.add(event);
 
   Future<void> _join(HubConnection connection, String householdId) =>
       connection.invoke('JoinHousehold', args: [householdId]);

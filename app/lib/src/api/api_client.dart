@@ -217,6 +217,34 @@ class ApiClient {
   Future<void> cancelRedemption(String householdId, String redemptionId) =>
       _send('DELETE', '/api/households/$householdId/redemptions/$redemptionId');
 
+  // --- Avisos ---
+
+  /// Os avisos mais recentes (de todas as casas) e quantos estão por ler.
+  Future<(List<AppNotification>, int)> getNotifications() async {
+    final json = await _send('GET', '/api/notifications') as Map<String, dynamic>;
+    final items = json['items'] as List;
+    return ([for (final n in items) AppNotification.fromJson(n as Map<String, dynamic>)], json['unreadCount'] as int);
+  }
+
+  /// Marca como lidos os avisos indicados ou, sem [ids], todos.
+  Future<void> markNotificationsRead([List<String>? ids]) =>
+      _send('POST', '/api/notifications/read', body: {'ids': ?ids});
+
+  Future<NotificationPreferences> getNotificationPreferences() async =>
+      NotificationPreferences.fromJson(await _send('GET', '/api/notifications/preferences') as Map<String, dynamic>);
+
+  Future<NotificationPreferences> saveNotificationPreferences(NotificationPreferences preferences) async =>
+      NotificationPreferences.fromJson(
+        await _send('PUT', '/api/notifications/preferences', body: preferences.toJson()) as Map<String, dynamic>,
+      );
+
+  /// O token push deste telemóvel (do Firebase), para receber os avisos fora da app.
+  Future<void> registerPushDevice(String token, String platform) =>
+      _send('POST', '/api/notifications/devices', body: {'token': token, 'platform': platform});
+
+  Future<void> unregisterPushDevice(String token) =>
+      _send('POST', '/api/notifications/devices/unregister', body: {'token': token});
+
   String _occurrencePath(String householdId, String eventId, DateTime date, bool following) =>
       '${_eventsPath(householdId)}/$eventId/occurrences/${apiDate(date)}?scope=${following ? 'following' : 'this'}';
 

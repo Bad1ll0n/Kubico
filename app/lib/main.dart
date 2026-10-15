@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'src/api/api_client.dart';
 import 'src/config.dart';
+import 'src/notifications/notification_center.dart';
 import 'src/realtime/household_realtime.dart';
 import 'src/session/session_controller.dart';
 import 'src/session/token_store.dart';
@@ -15,6 +16,7 @@ void main() {
   final session = SessionController(api: api, store: const SecureTokenStore())..restore();
   final realtime = HouseholdRealtime(baseUrl: AppConfig.apiUrl, accessToken: session.freshAccessToken);
   final shopping = ShoppingRepository(api: api, store: PreferencesStore())..restore();
+  final notifications = NotificationCenter(api: api, realtime: realtime);
 
   runApp(
     MultiProvider(
@@ -23,6 +25,7 @@ void main() {
         ChangeNotifierProvider.value(value: session),
         Provider.value(value: realtime),
         ChangeNotifierProvider.value(value: shopping),
+        ChangeNotifierProvider.value(value: notifications),
       ],
       child: const KubicoApp(),
     ),

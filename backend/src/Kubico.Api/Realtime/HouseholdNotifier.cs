@@ -21,6 +21,9 @@ public static class HouseholdEvents
     public const string RewardDeleted = "RewardDeleted";
     public const string RedemptionUpserted = "RedemptionUpserted";
     public const string RedemptionDeleted = "RedemptionDeleted";
+
+    /// <summary>Um aviso pessoal novo (vai só para o canal da pessoa, não para a casa toda).</summary>
+    public const string NotificationCreated = "NotificationCreated";
 }
 
 public class HouseholdNotifier(IHubContext<HouseholdHub> hub)

@@ -1,8 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Kubico.Api.Common;
+using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Households;
+using Kubico.Domain.Notifications;
 using Kubico.Domain.Rewards;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -208,6 +210,7 @@ public static class RewardEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -255,6 +258,25 @@ public static class RewardEndpoints
 
         var dto = ToDto(redemption);
         await notifier.RedemptionUpserted(householdId, dto, ct);
+
+        if (redemption.Status == RedemptionStatus.Pending)
+        {
+            var adults = await db.Memberships
+                .Where(m => m.HouseholdId == householdId && (m.Role == HouseholdRole.Admin || m.Role == HouseholdRole.Adult))
+                .Select(m => m.UserId)
+                .ToListAsync(ct);
+            var name = await db.Users.Where(u => u.Id == userId).Select(u => u.DisplayName).SingleAsync(ct);
+            await notifications.NotifyAsync(
+                householdId,
+                adults,
+                userId,
+                NotificationKind.RewardRequested,
+                $"{name} pediu: {reward.Title}",
+                $"{reward.Cost} pontos. Aprova ou recusa na app.",
+                redemption.Id,
+                ct);
+        }
+
         return Results.Created($"/api/households/{householdId}/redemptions/{redemption.Id}", dto);
     }
 
@@ -265,9 +287,10 @@ public static class RewardEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct) =>
-        Decide(approve: true, householdId, redemptionId, principal, db, access, notifier, clock, ct);
+        Decide(approve: true, householdId, redemptionId, principal, db, access, notifier, notifications, clock, ct);
 
     private static Task<IResult> Reject(
         Guid householdId,
@@ -276,9 +299,10 @@ public static class RewardEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct) =>
-        Decide(approve: false, householdId, redemptionId, principal, db, access, notifier, clock, ct);
+        Decide(approve: false, householdId, redemptionId, principal, db, access, notifier, notifications, clock, ct);
 
     private static async Task<IResult> Decide(
         bool approve,
@@ -288,6 +312,7 @@ public static class RewardEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -315,6 +340,15 @@ public static class RewardEndpoints
 
         var dto = ToDto(redemption);
         await notifier.RedemptionUpserted(householdId, dto, ct);
+        await notifications.NotifyAsync(
+            householdId,
+            [redemption.UserId],
+            userId,
+            NotificationKind.RewardDecided,
+            (approve ? "Aprovado: " : "Recusado: ") + redemption.RewardTitle,
+            approve ? "Aproveita!" : "Os pontos voltaram para ti.",
+            redemption.Id,
+            ct);
         return Results.Ok(dto);
     }
 

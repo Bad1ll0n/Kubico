@@ -38,6 +38,9 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
         // O relógio dos testes está à meia-noite e o JWT é validado com o relógio real: um token de acesso
         // de 15 minutos já estaria expirado. Os testes dos refresh tokens usam o relógio falso (ver RefreshTokenTests).
         builder.UseSetting("Jwt:AccessTokenLifetimeMinutes", "1440");
+
+        // O envio dos avisos para os telemóveis corre nos testes à mão (NotificationDispatcher), com o relógio falso.
+        builder.UseSetting("Notifications:DispatchEnabled", "false");
         builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(Clock));
     }
 

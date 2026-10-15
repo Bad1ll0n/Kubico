@@ -822,3 +822,106 @@ class RewardsOverview {
     );
   }
 }
+
+/// Um aviso pessoal (de qualquer casa): uma tarefa ou um evento que passou a ser teu, um pedido de recompensa…
+class AppNotification {
+  const AppNotification({
+    required this.id,
+    required this.householdId,
+    required this.kind,
+    required this.title,
+    required this.body,
+    required this.entityId,
+    required this.createdAt,
+    required this.isRead,
+  });
+
+  final String id;
+  final String householdId;
+
+  /// ChoreAssigned, EventAssigned, RideAssigned, RewardRequested ou RewardDecided.
+  final String kind;
+  final String title;
+  final String? body;
+  final String? entityId;
+  final DateTime createdAt;
+  final bool isRead;
+
+  AppNotification read() => AppNotification(
+    id: id,
+    householdId: householdId,
+    kind: kind,
+    title: title,
+    body: body,
+    entityId: entityId,
+    createdAt: createdAt,
+    isRead: true,
+  );
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) => AppNotification(
+    id: json['id'] as String,
+    householdId: json['householdId'] as String,
+    kind: json['kind'] as String,
+    title: json['title'] as String,
+    body: json['body'] as String?,
+    entityId: json['entityId'] as String?,
+    createdAt: DateTime.parse(json['createdAt'] as String).toLocal(),
+    isRead: json['isRead'] as bool,
+  );
+}
+
+enum NotificationDelivery {
+  immediate('Immediate', 'Logo que acontece'),
+  dailyDigest('DailyDigest', 'Um resumo por dia'),
+  inAppOnly('InAppOnly', 'Só aqui na app');
+
+  const NotificationDelivery(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
+
+  static NotificationDelivery fromApi(String value) =>
+      values.firstWhere((d) => d.apiValue == value, orElse: () => immediate);
+}
+
+/// "19:00:00" → 19:00 (as horas vêm do servidor como TimeOnly).
+({int hour, int minute}) _time(String value) {
+  final parts = value.split(':');
+  return (hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+}
+
+String _timeJson(({int hour, int minute}) t) =>
+    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
+
+/// Como cada membro quer receber os avisos no telemóvel, e as horas de silêncio.
+class NotificationPreferences {
+  const NotificationPreferences({
+    required this.delivery,
+    required this.digestAt,
+    required this.quietFrom,
+    required this.quietUntil,
+    required this.timeZoneId,
+  });
+
+  final NotificationDelivery delivery;
+  final ({int hour, int minute}) digestAt;
+  final ({int hour, int minute})? quietFrom;
+  final ({int hour, int minute})? quietUntil;
+  final String timeZoneId;
+
+  factory NotificationPreferences.fromJson(Map<String, dynamic> json) => NotificationPreferences(
+    delivery: NotificationDelivery.fromApi(json['delivery'] as String),
+    digestAt: _time(json['digestAt'] as String),
+    quietFrom: json['quietFrom'] == null ? null : _time(json['quietFrom'] as String),
+    quietUntil: json['quietUntil'] == null ? null : _time(json['quietUntil'] as String),
+    timeZoneId: json['timeZoneId'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'delivery': delivery.apiValue,
+    'digestAt': _timeJson(digestAt),
+    'quietFrom': quietFrom == null ? null : _timeJson(quietFrom!),
+    'quietUntil': quietUntil == null ? null : _timeJson(quietUntil!),
+    'timeZoneId': timeZoneId,
+  };
+}

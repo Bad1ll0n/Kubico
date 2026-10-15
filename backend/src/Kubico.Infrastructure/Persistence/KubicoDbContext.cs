@@ -1,6 +1,7 @@
 using Kubico.Domain.Calendar;
 using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
+using Kubico.Domain.Notifications;
 using Kubico.Domain.Rewards;
 using Kubico.Domain.Shopping;
 using Kubico.Domain.Users;
@@ -23,6 +24,9 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
     public DbSet<Reward> Rewards => Set<Reward>();
     public DbSet<RewardRedemption> RewardRedemptions => Set<RewardRedemption>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
+    public DbSet<PushDevice> PushDevices => Set<PushDevice>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -142,6 +146,34 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
 
             // O histórico fica, mesmo que a recompensa seja apagada.
             e.HasOne<Reward>().WithMany().HasForeignKey(r => r.RewardId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Notification>(e =>
+        {
+            e.Property(n => n.Title).HasMaxLength(200);
+            e.Property(n => n.Body).HasMaxLength(500);
+            e.Property(n => n.Kind).HasConversion<string>().HasMaxLength(30);
+            e.HasIndex(n => new { n.UserId, n.CreatedAt });
+            e.HasIndex(n => n.PushedAt);
+            e.HasOne<User>().WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Household>().WithMany().HasForeignKey(n => n.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NotificationPreferences>(e =>
+        {
+            e.HasKey(p => p.UserId);
+            e.Property(p => p.Delivery).HasConversion<string>().HasMaxLength(20);
+            e.Property(p => p.TimeZoneId).HasMaxLength(64);
+            e.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PushDevice>(e =>
+        {
+            e.Property(d => d.Token).HasMaxLength(512);
+            e.Property(d => d.Platform).HasMaxLength(20);
+            e.HasIndex(d => d.Token).IsUnique();
+            e.HasIndex(d => d.UserId);
+            e.HasOne<User>().WithMany().HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

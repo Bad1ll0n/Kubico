@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../api/models.dart';
+import '../notifications/notification_center.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import '../shopping/shopping_repository.dart';
 import 'calendar_view.dart';
 import 'chores_view.dart';
 import 'household_screen.dart';
+import 'notifications_screen.dart';
 import 'onboarding_screen.dart';
 import 'rewards_view.dart';
 import 'shopping_items_view.dart';
@@ -46,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _connectedHouseholdId = household.id;
       _selectedList = null;
       context.read<HouseholdRealtime>().connect(household.id);
+      context.read<NotificationCenter>().load();
     }
   }
 
@@ -70,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final realtime = context.read<HouseholdRealtime>();
     final shopping = context.read<ShoppingRepository>();
+    final notifications = context.read<NotificationCenter>();
     try {
       await (everywhere ? session.signOutEverywhere() : session.signOut());
     } catch (e) {
@@ -78,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     await realtime.disconnect();
     await shopping.clear();
+    notifications.clear();
   }
 
   void _openList(ShoppingList list, bool wide) {
@@ -142,6 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
           appBar: AppBar(
             title: _HouseholdSwitcher(session: session, current: household),
             actions: [
+              const NotificationsBell(),
               IconButton(
                 tooltip: 'Membros e convites',
                 icon: const Icon(Icons.group_outlined),
