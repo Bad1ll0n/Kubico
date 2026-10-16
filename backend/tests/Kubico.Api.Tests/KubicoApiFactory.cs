@@ -41,6 +41,9 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
 
         // O envio dos avisos para os telemóveis corre nos testes à mão (NotificationDispatcher), com o relógio falso.
         builder.UseSetting("Notifications:DispatchEnabled", "false");
+
+        // A sincronização com calendários externos também (CalendarSyncService, com serviços falsos).
+        builder.UseSetting("CalendarSync:Enabled", "false");
         builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(Clock));
     }
 

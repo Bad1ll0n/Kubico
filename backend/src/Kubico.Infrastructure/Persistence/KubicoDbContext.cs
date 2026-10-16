@@ -5,12 +5,13 @@ using Kubico.Domain.Notifications;
 using Kubico.Domain.Rewards;
 using Kubico.Domain.Shopping;
 using Kubico.Domain.Users;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Kubico.Infrastructure.Persistence;
 
-public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbContext(options)
+public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -27,6 +28,11 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
     public DbSet<PushDevice> PushDevices => Set<PushDevice>();
+    public DbSet<CalendarConnection> CalendarConnections => Set<CalendarConnection>();
+    public DbSet<CalendarEventLink> CalendarEventLinks => Set<CalendarEventLink>();
+
+    /// <summary>As chaves que cifram os tokens das contas ligadas (têm de sobreviver a reinícios e a novas versões).</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -174,6 +180,29 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasIndex(d => d.Token).IsUnique();
             e.HasIndex(d => d.UserId);
             e.HasOne<User>().WithMany().HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CalendarConnection>(e =>
+        {
+            e.Property(c => c.Provider).HasConversion<string>().HasMaxLength(20);
+            e.Property(c => c.Status).HasConversion<string>().HasMaxLength(20);
+            e.Property(c => c.AccountEmail).HasMaxLength(256);
+            e.Property(c => c.ExternalCalendarId).HasMaxLength(512);
+            e.Property(c => c.ProtectedRefreshToken).HasMaxLength(4000);
+            e.Property(c => c.SyncCursor).HasMaxLength(1000);
+            e.Property(c => c.LastError).HasMaxLength(1000);
+            e.HasIndex(c => new { c.HouseholdId, c.UserId, c.Provider }).IsUnique();
+            e.HasOne<Household>().WithMany().HasForeignKey(c => c.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CalendarEventLink>(e =>
+        {
+            e.Property(l => l.ExternalId).HasMaxLength(512);
+            e.Property(l => l.ExternalVersion).HasMaxLength(200);
+            e.HasIndex(l => new { l.ConnectionId, l.EventId }).IsUnique();
+            e.HasIndex(l => new { l.ConnectionId, l.ExternalId });
+            e.HasOne<CalendarConnection>().WithMany().HasForeignKey(l => l.ConnectionId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

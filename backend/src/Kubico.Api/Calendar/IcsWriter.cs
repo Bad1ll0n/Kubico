@@ -100,7 +100,7 @@ public sealed class IcsWriter
 
         if (RecurrenceRule.TryParse(e.Recurrence, out var rule))
         {
-            yield return $"RRULE:{Rule(rule, e)}";
+            yield return $"RRULE:{RuleText(rule, e.IsAllDay, _zone)}";
 
             // Os dias substituídos por uma exceção não vão no EXDATE: a exceção ocupa o lugar deles.
             var excluded = e.ExcludedDates.Where(d => !replaced.Contains((e.Id, d))).Order().ToList();
@@ -125,15 +125,15 @@ public sealed class IcsWriter
     }
 
     /// <summary>Com hora marcada, a RFC 5545 pede o UNTIL em UTC: o fim do último dia, no fuso da casa.</summary>
-    private string Rule(RecurrenceRule rule, CalendarEvent e)
+    public static string RuleText(RecurrenceRule rule, bool isAllDay, TimeZoneInfo zone)
     {
-        if (e.IsAllDay || rule.Until is not { } until)
+        if (isAllDay || rule.Until is not { } until)
         {
             return rule.ToString();
         }
 
         var withoutUntil = rule with { Until = null };
-        var end = ZonedTime.StartOfDay(until.AddDays(1), _zone).AddSeconds(-1);
+        var end = ZonedTime.StartOfDay(until.AddDays(1), zone).AddSeconds(-1);
         return $"{withoutUntil};UNTIL={Utc(end)}";
     }
 

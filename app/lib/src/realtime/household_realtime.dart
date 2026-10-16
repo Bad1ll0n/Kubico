@@ -62,6 +62,12 @@ class RewardsChanged extends HouseholdEvent {
   const RewardsChanged();
 }
 
+/// Mudou uma ligação deste membro ao Google Calendar ou ao Outlook (ligada, sincronizada, desligada).
+/// Chega pelo canal pessoal; o ecrã das ligações volta a ler tudo.
+class CalendarConnectionsChanged extends HouseholdEvent {
+  const CalendarConnectionsChanged();
+}
+
 /// Ligação SignalR ao agregado aberto. Volta a ligar-se sozinha quando a rede falha
 /// e avisa (via [reconnected]) para os ecrãs recarregarem o que possam ter perdido.
 class HouseholdRealtime {
@@ -123,6 +129,10 @@ class HouseholdRealtime {
 
     for (final name in ['RewardUpserted', 'RewardDeleted', 'RedemptionUpserted', 'RedemptionDeleted']) {
       connection.on(name, (args) => _emit(args, (_) => const RewardsChanged()));
+    }
+
+    for (final name in ['CalendarConnectionUpserted', 'CalendarConnectionDeleted']) {
+      connection.on(name, (args) => _emit(args, (_) => const CalendarConnectionsChanged()));
     }
 
     connection.onreconnected(({connectionId}) async {

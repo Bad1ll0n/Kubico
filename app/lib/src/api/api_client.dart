@@ -199,6 +199,27 @@ class ApiClient {
     return getCalendarFeed(householdId);
   }
 
+  // --- Google Calendar e Outlook ---
+
+  Future<CalendarSyncOverview> getCalendarSync(String householdId) async => CalendarSyncOverview.fromJson(
+    await _send('GET', '/api/households/$householdId/calendar-sync') as Map<String, dynamic>,
+  );
+
+  /// A página onde a pessoa autoriza o Kubico na sua conta (abre-se no navegador).
+  Future<Uri> authorizeCalendarSync(String householdId, CalendarProvider provider) async {
+    final json = await _send('POST', '/api/households/$householdId/calendar-sync/${provider.name}/authorize');
+    return Uri.parse((json as Map<String, dynamic>)['url'] as String);
+  }
+
+  Future<CalendarConnection> syncCalendarConnection(String householdId, String connectionId) async =>
+      CalendarConnection.fromJson(
+        await _send('POST', '/api/households/$householdId/calendar-sync/$connectionId/sync') as Map<String, dynamic>,
+      );
+
+  /// Desliga a conta: o calendário do Kubico é apagado lá; os eventos ficam no Kubico.
+  Future<void> disconnectCalendar(String householdId, String connectionId) =>
+      _send('DELETE', '/api/households/$householdId/calendar-sync/$connectionId');
+
   // --- Recompensas ---
 
   Future<RewardsOverview> getRewards(String householdId) async =>
