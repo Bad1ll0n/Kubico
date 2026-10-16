@@ -84,12 +84,11 @@ KUBICO_API_URL=http://localhost:5281 flutter test test/live_api_test.dart
 - `Cors__AllowedOrigins__0`: domínio da app web.
 - Aplicar migrações no deploy (`Database__MigrateOnStartup=true` ou `dotnet ef database update`).
 - `PublicBaseUrl` (opcional): endereço público da API (ex.: `https://api.kubico.pt`), para os endereços de subscrição do calendário quando a API está atrás de um proxy.
-- `Push__Fcm__ServiceAccountJson` (opcional): o JSON da conta de serviço do Firebase, para os avisos chegarem aos telemóveis. Sem ele, os avisos ficam só na app.
+- `Push__Fcm__ServiceAccountFile` (ou `Push__Fcm__ServiceAccountJson`, com o conteúdo): a chave da conta de serviço do projeto Firebase `kubico-casa`, para os avisos chegarem aos telemóveis. Sem ela, os avisos ficam só na app. Em desenvolvimento: `dotnet user-secrets set "Push:Fcm:ServiceAccountFile" "C:\Users\Badillon\segredos\kubico-firebase.json" --project backend/src/Kubico.Api`.
 - `Jwt__AccessTokenLifetimeMinutes` (15) e `Jwt__RefreshTokenLifetimeDays` (60), se quiseres outras durações de sessão.
 
 ## Próximos passos
 
-1. Avisos no telemóvel: criar o projeto Firebase, correr `flutterfire configure` e juntar o `firebase_messaging` à app, que regista o token em `POST /api/notifications/devices`. O servidor já envia pelo FCM.
-2. Calendário: sync nos dois sentidos com Google e Outlook (precisa de credenciais OAuth da Google e da Microsoft). Por agora, o calendário da casa vê-se nessas apps através do endereço de subscrição.
+1. Calendário: sync nos dois sentidos com Google e Outlook (precisa de credenciais OAuth da Google e da Microsoft). Por agora, o calendário da casa vê-se nessas apps através do endereço de subscrição.
 
 A especificação completa do produto está no documento "App de Gestão Familiar e da Casa — Especificação".

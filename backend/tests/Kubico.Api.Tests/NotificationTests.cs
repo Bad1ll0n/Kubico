@@ -373,7 +373,7 @@ public class FcmPushSenderTests
             Assert.Equal("Bearer ya29.teste", request.Headers.Authorization!.ToString());
             var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync()).RootElement.GetProperty("message");
             messages.Add(body.Clone());
-            return body.GetProperty("token").GetString() == "desinstalado"
+            return body.GetProperty("fid").GetString() == "desinstalado"
                 ? new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("""{"error":{"status":"NOT_FOUND"}}""") }
                 : Json("""{"name":"projects/kubico-teste/messages/1"}""");
         });
@@ -392,6 +392,32 @@ public class FcmPushSenderTests
         Assert.Equal(1, tokenRequests);
         Assert.Equal("Tarefa para ti: Lixo", messages[0].GetProperty("notification").GetProperty("title").GetString());
         Assert.Equal("ChoreAssigned", messages[1].GetProperty("data").GetProperty("kind").GetString());
+    }
+
+    [Fact]
+    public void Service_account_can_come_from_a_file_instead_of_the_json()
+    {
+        using var rsa = RSA.Create(2048);
+        var path = Path.Combine(Path.GetTempPath(), $"kubico-firebase-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(new
+        {
+            project_id = "kubico-teste",
+            client_email = "push@kubico-teste.iam.gserviceaccount.com",
+            private_key = rsa.ExportPkcs8PrivateKeyPem(),
+        }));
+        try
+        {
+            var options = new FcmOptions { ServiceAccountFile = path };
+            var sender = new FcmPushSender(
+                new HttpClient(), Options.Create(options), TimeProvider.System, NullLogger<FcmPushSender>.Instance);
+
+            Assert.True(options.IsConfigured);
+            Assert.NotNull(sender);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     private static HttpResponseMessage Json(string json) =>

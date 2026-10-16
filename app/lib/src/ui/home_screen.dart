@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../api/models.dart';
 import '../notifications/notification_center.dart';
+import '../notifications/push_registration.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import '../shopping/shopping_repository.dart';
@@ -38,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   String? _connectedHouseholdId;
+  var _pushRegistered = false;
   ShoppingList? _selectedList;
   int _section = 0;
 
@@ -50,6 +52,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectedList = null;
       context.read<HouseholdRealtime>().connect(household.id);
       context.read<NotificationCenter>().load();
+      if (!_pushRegistered) {
+        _pushRegistered = true;
+        context.read<PushRegistration>().register();
+      }
     }
   }
 
@@ -75,7 +81,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final realtime = context.read<HouseholdRealtime>();
     final shopping = context.read<ShoppingRepository>();
     final notifications = context.read<NotificationCenter>();
+    final push = context.read<PushRegistration>();
     try {
+      // Ainda com sessão: o telemóvel deixa de receber os avisos desta conta.
+      await push.unregister();
       await (everywhere ? session.signOutEverywhere() : session.signOut());
     } catch (e) {
       if (mounted) showError(context, e);
