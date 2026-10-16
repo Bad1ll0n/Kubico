@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 
-/// De onde vem o token push deste dispositivo (o Firebase Cloud Messaging, quando a app o tem configurado).
+/// De onde vem o identificador push deste dispositivo (no Firebase Cloud Messaging, o FID).
 abstract class PushTokenSource {
   /// android, ios ou web; null quando este dispositivo não recebe avisos fora da app (Windows, Linux).
   String? get platform;
@@ -39,16 +39,19 @@ class NoPushTokenSource implements PushTokenSource {
 /// Liga o telemóvel à conta para receber avisos fora da app: regista o token ao entrar (e sempre que o Firebase o
 /// renova) e apaga-o ao terminar a sessão, para os avisos não irem parar ao telemóvel de outra pessoa.
 class PushRegistration {
-  PushRegistration({required this.api, required this.source});
+  /// [source] pode chegar mais tarde (o Firebase arranca em paralelo com a app).
+  // ignore: prefer_initializing_formals
+  PushRegistration({required this.api, required FutureOr<PushTokenSource> source}) : _source = source;
 
   final ApiClient api;
-  final PushTokenSource source;
+  final FutureOr<PushTokenSource> _source;
 
   String? _token;
   StreamSubscription<String>? _refreshes;
 
   /// Depois de entrar. Falhas (sem rede, autorização recusada) não impedem de usar a app.
   Future<void> register() async {
+    final source = await _source;
     final platform = source.platform;
     if (platform == null) return;
     try {
@@ -71,6 +74,7 @@ class PushRegistration {
 
   /// Antes de terminar a sessão (ainda com sessão, para o pedido ser aceite).
   Future<void> unregister() async {
+    final source = await _source;
     await _refreshes?.cancel();
     _refreshes = null;
     final token = _token;

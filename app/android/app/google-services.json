@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "451544355263",
+    "project_id": "kubico-casa",
+    "storage_bucket": "kubico-casa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:451544355263:android:876152e5d8816643a8d10a",
+        "android_client_info": {
+          "package_name": "pt.kubico.kubico"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBIsk6s_F-WXZM-TiO8sPCCp93zuRT0CG4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -46,7 +46,13 @@ public class FcmOptions
     /// <summary>O JSON da conta de serviço do Firebase (Definições do projeto → Contas de serviço → Gerar chave).</summary>
     public string? ServiceAccountJson { get; set; }
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(ServiceAccountJson);
+    /// <summary>Em alternativa ao JSON: o caminho do ficheiro descarregado (mais fácil de pôr nos user-secrets).</summary>
+    public string? ServiceAccountFile { get; set; }
+
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ServiceAccountJson) || !string.IsNullOrWhiteSpace(ServiceAccountFile);
+
+    public string ReadServiceAccount() =>
+        !string.IsNullOrWhiteSpace(ServiceAccountJson) ? ServiceAccountJson : File.ReadAllText(ServiceAccountFile!);
 }
 
 /// <summary>
@@ -58,8 +64,8 @@ public class FcmPushSender(HttpClient http, IOptions<FcmOptions> options, TimePr
 {
     private const string Scope = "https://www.googleapis.com/auth/firebase.messaging";
 
-    private readonly ServiceAccount _account = JsonSerializer.Deserialize<ServiceAccount>(options.Value.ServiceAccountJson!)
-        ?? throw new InvalidOperationException("Push:Fcm:ServiceAccountJson inválido.");
+    private readonly ServiceAccount _account = JsonSerializer.Deserialize<ServiceAccount>(options.Value.ReadServiceAccount())
+        ?? throw new InvalidOperationException("A conta de serviço do Firebase (Push:Fcm) é inválida.");
 
     private readonly SemaphoreSlim _tokenLock = new(1, 1);
     private string? _accessToken;
@@ -70,11 +76,12 @@ public class FcmPushSender(HttpClient http, IOptions<FcmOptions> options, TimePr
         var url = $"https://fcm.googleapis.com/v1/projects/{_account.ProjectId}/messages:send";
         using var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
+            // O destino é o Firebase Installation ID (FID) que a app registou ("token" está obsoleto).
             Content = JsonContent.Create(new
             {
                 message = new
                 {
-                    token = deviceToken,
+                    fid = deviceToken,
                     notification = new { title = message.Title, body = message.Body },
                     data = message.Data,
                 },
