@@ -55,9 +55,7 @@ public static class CalendarFeedEndpoints
             await db.SaveChangesAsync(ct);
         }
 
-        // Atrás de um proxy, PublicBaseUrl diz o endereço público da API (ex.: https://api.kubico.pt).
-        var baseUrl = configuration["PublicBaseUrl"]?.TrimEnd('/') ?? $"{http.Scheme}://{http.Host}{http.PathBase}";
-        var url = $"{baseUrl}/api/calendar-feeds/{membership.CalendarFeedToken}.ics";
+        var url = $"{PublicUrls.BaseUrl(http, configuration)}/api/calendar-feeds/{membership.CalendarFeedToken}.ics";
         return Results.Ok(new CalendarFeedDto(url, "webcal" + url[url.IndexOf("://", StringComparison.Ordinal)..]));
     }
 

@@ -147,6 +147,16 @@ class _FakeApi {
       final url = 'https://api.kubico.test/api/calendar-feeds/segredo-$feeds.ics';
       return _json({'url': url, 'webcalUrl': url.replaceFirst('https', 'webcal')});
     }
+    if (path == '/api/households/h1/calendar-sync') {
+      return _json({
+        'canConnect': false,
+        'providers': [
+          {'provider': 'Google', 'available': true},
+          {'provider': 'Microsoft', 'available': false},
+        ],
+        'connections': <Object>[],
+      });
+    }
     if (path.contains('/occurrences/')) {
       occurrenceChanges.add('${request.method} $path?${request.url.query}');
       if (request.method == 'DELETE') return http.Response('', 204);
@@ -380,6 +390,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('https://api.kubico.test/api/calendar-feeds/segredo-2.ics'), findsOneWidget);
     expect(find.text('https://api.kubico.test/api/calendar-feeds/segredo-1.ics'), findsNothing);
+
+    // Daqui também se chega às contas ligadas (nos dois sentidos).
+    await tester.tap(find.text('Ligar ao Google Calendar ou ao Outlook'));
+    await tester.pumpAndSettle();
+    expect(find.text('Google Calendar e Outlook'), findsOneWidget);
+    expect(find.text('Só os adultos da casa podem ligar contas.'), findsOneWidget);
   });
 
   testWidgets('um adulto cria um evento e é avisado do conflito', (tester) async {

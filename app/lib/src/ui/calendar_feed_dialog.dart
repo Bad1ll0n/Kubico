@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import 'calendar_sync_screen.dart';
 
 /// Mostra o endereço pessoal para subscrever o calendário da casa no Google Calendar, no Outlook ou no iPhone.
 Future<void> showCalendarFeedDialog(BuildContext context, {required String householdId}) => showDialog<void>(
@@ -46,6 +47,13 @@ class _CalendarFeedDialogState extends State<_CalendarFeedDialog> {
   /// O endereço antigo deixa de funcionar (por exemplo, se foi partilhado por engano).
   Future<void> _renew() => _load(context.read<ApiClient>().renewCalendarFeed(widget.householdId));
 
+  /// Fecha esta janela e abre o ecrã das contas ligadas.
+  void _openSync() {
+    final navigator = Navigator.of(context);
+    navigator.pop();
+    navigator.push(MaterialPageRoute<void>(builder: (_) => CalendarSyncScreen(householdId: widget.householdId)));
+  }
+
   void _copy(String url) {
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Endereço copiado.')));
@@ -57,12 +65,28 @@ class _CalendarFeedDialogState extends State<_CalendarFeedDialog> {
     final feed = _feed;
     return AlertDialog(
       title: const Text('Ver noutros calendários'),
+      scrollable: true,
       content: SizedBox(
         width: 480,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text('Nos dois sentidos', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 4),
+            const Text(
+              'Liga a tua conta Google ou Microsoft: os eventos da casa aparecem lá e o que mudares lá também muda '
+              'no Kubico.',
+            ),
+            const SizedBox(height: 8),
+            FilledButton.tonalIcon(
+              onPressed: _openSync,
+              icon: const Icon(Icons.sync),
+              label: const Text('Ligar ao Google Calendar ou ao Outlook'),
+            ),
+            const Divider(height: 32),
+            Text('Só para ver', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 4),
             const Text(
               'Subscreve este endereço no Google Calendar, no Outlook ou no iPhone para veres os eventos da casa '
               'junto dos teus. As alterações aparecem lá ao fim de algum tempo (no Google, até umas horas).',

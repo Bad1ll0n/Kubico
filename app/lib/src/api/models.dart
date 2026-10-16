@@ -623,6 +623,76 @@ class CalendarFeed {
       CalendarFeed(url: json['url'] as String, webcalUrl: json['webcalUrl'] as String);
 }
 
+/// Um serviço de calendário com que o Kubico sincroniza nos dois sentidos. [name] é o que vai no endereço da API.
+enum CalendarProvider {
+  google('Google', 'Google Calendar', 'conta Google'),
+  microsoft('Microsoft', 'Outlook', 'conta Microsoft');
+
+  const CalendarProvider(this.apiValue, this.label, this.account);
+
+  final String apiValue;
+  final String label;
+
+  /// Como se chama a conta ("Ligar a conta Google").
+  final String account;
+
+  static CalendarProvider? fromApi(String value) => values.where((p) => p.apiValue == value).firstOrNull;
+}
+
+/// A ligação deste membro a uma conta Google ou Microsoft. [lastError] já vem pronto a mostrar.
+class CalendarConnection {
+  const CalendarConnection({
+    required this.id,
+    required this.householdId,
+    required this.provider,
+    required this.accountEmail,
+    required this.needsReconnect,
+    required this.lastSyncedAt,
+    required this.lastError,
+  });
+
+  final String id;
+  final String householdId;
+  final CalendarProvider provider;
+  final String accountEmail;
+
+  /// O acesso à conta expirou ou foi retirado: é preciso voltar a ligar.
+  final bool needsReconnect;
+  final DateTime? lastSyncedAt;
+  final String? lastError;
+
+  factory CalendarConnection.fromJson(Map<String, dynamic> json) => CalendarConnection(
+    id: json['id'] as String,
+    householdId: json['householdId'] as String,
+    provider: CalendarProvider.fromApi(json['provider'] as String) ?? CalendarProvider.google,
+    accountEmail: json['accountEmail'] as String,
+    needsReconnect: json['status'] == 'NeedsReconnect',
+    lastSyncedAt: _instant(json['lastSyncedAt']),
+    lastError: json['lastError'] as String?,
+  );
+}
+
+/// Que serviços o servidor tem configurados, se quem pede pode ligar contas (só adultos) e as suas ligações.
+class CalendarSyncOverview {
+  const CalendarSyncOverview({required this.canConnect, required this.available, required this.connections});
+
+  final bool canConnect;
+  final Set<CalendarProvider> available;
+  final List<CalendarConnection> connections;
+
+  CalendarConnection? connectionFor(CalendarProvider provider) =>
+      connections.where((c) => c.provider == provider).firstOrNull;
+
+  factory CalendarSyncOverview.fromJson(Map<String, dynamic> json) => CalendarSyncOverview(
+    canConnect: json['canConnect'] as bool,
+    available: {
+      for (final p in json['providers'] as List)
+        if ((p as Map<String, dynamic>)['available'] == true) ?CalendarProvider.fromApi(p['provider'] as String),
+    },
+    connections: [for (final c in json['connections'] as List) CalendarConnection.fromJson(c as Map<String, dynamic>)],
+  );
+}
+
 enum RecurrenceFrequency {
   daily('DAILY', 'Todos os dias', 'dias'),
   weekly('WEEKLY', 'Todas as semanas', 'semanas'),

@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using Kubico.Api.Auth;
 using Kubico.Api.Calendar;
+using Kubico.Api.Calendar.Sync;
 using Kubico.Api.Chores;
 using Kubico.Api.Common;
 using Kubico.Api.Households;
@@ -13,6 +14,7 @@ using Kubico.Domain.Users;
 using Kubico.Infrastructure;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -46,6 +48,24 @@ builder.Services.AddSingleton<IPushSender>(sp =>
 if (builder.Configuration.GetValue("Notifications:DispatchEnabled", true))
 {
     builder.Services.AddHostedService<NotificationWorker>();
+}
+
+// Sincronização com o Google Calendar e o Outlook: as credenciais OAuth vêm de CalendarSync:Google e
+// CalendarSync:Microsoft; sem elas, o serviço aparece como indisponível. Os tokens guardados são cifrados com
+// chaves que ficam na base de dados (têm de sobreviver a reinícios).
+builder.Services.AddDataProtection().SetApplicationName("Kubico").PersistKeysToDbContext<KubicoDbContext>();
+builder.Services.AddOptions<CalendarSyncOptions>().Bind(builder.Configuration.GetSection(CalendarSyncOptions.SectionName));
+builder.Services.AddHttpClient<GoogleCalendarProvider>();
+builder.Services.AddHttpClient<MicrosoftCalendarProvider>();
+builder.Services.AddTransient<ICalendarProvider>(sp => sp.GetRequiredService<GoogleCalendarProvider>());
+builder.Services.AddTransient<ICalendarProvider>(sp => sp.GetRequiredService<MicrosoftCalendarProvider>());
+builder.Services.AddSingleton<CalendarSecrets>();
+builder.Services.AddSingleton<CalendarSyncLocks>();
+builder.Services.AddSingleton<CalendarSyncTrigger>();
+builder.Services.AddScoped<CalendarSyncService>();
+if (builder.Configuration.GetValue("CalendarSync:Enabled", true))
+{
+    builder.Services.AddHostedService<CalendarSyncWorker>();
 }
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
@@ -135,6 +155,7 @@ api.MapShoppingEndpoints();
 api.MapChoreEndpoints();
 api.MapCalendarEndpoints();
 api.MapCalendarFeedEndpoints();
+api.MapCalendarSyncEndpoints();
 api.MapRewardEndpoints();
 api.MapNotificationEndpoints();
 

@@ -621,7 +621,7 @@ public static class CalendarEndpoints
         calendarEvent.UpdatedAt = now;
     }
 
-    private static CalendarEventDto ToDto(CalendarEvent e) => new(
+    internal static CalendarEventDto ToDto(CalendarEvent e) => new(
         e.Id, e.HouseholdId, e.Title, e.Notes, e.Location, e.IsAllDay, e.StartsAt, e.EndsAt, e.StartDate, e.EndDate,
         e.Recurrence, e.ParticipantUserIds, e.DropOffUserId, e.PickUpUserId, e.SeriesId, e.OriginalDate, e.UpdatedAt);
 

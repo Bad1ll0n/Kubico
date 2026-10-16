@@ -1,4 +1,5 @@
 using Kubico.Api.Calendar;
+using Kubico.Api.Calendar.Sync;
 using Kubico.Api.Chores;
 using Kubico.Api.Rewards;
 using Kubico.Api.Shopping;
@@ -24,9 +25,17 @@ public static class HouseholdEvents
 
     /// <summary>Um aviso pessoal novo (vai só para o canal da pessoa, não para a casa toda).</summary>
     public const string NotificationCreated = "NotificationCreated";
+
+    /// <summary>Uma ligação a um calendário externo mudou (estado, última sincronização). Só para o dono.</summary>
+    public const string CalendarConnectionUpserted = "CalendarConnectionUpserted";
+    public const string CalendarConnectionDeleted = "CalendarConnectionDeleted";
 }
 
-public class HouseholdNotifier(IHubContext<HouseholdHub> hub)
+/// <summary>
+/// Avisa as apps das alterações em tempo real. As alterações ao calendário também pedem uma sincronização com os
+/// calendários externos ligados.
+/// </summary>
+public class HouseholdNotifier(IHubContext<HouseholdHub> hub, CalendarSyncTrigger calendarSync)
 {
     public Task ShoppingListUpserted(Guid householdId, ShoppingListDto list, CancellationToken ct) =>
         Group(householdId).SendAsync(HouseholdEvents.ShoppingListUpserted, list, ct);
@@ -46,11 +55,23 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub)
     public Task ChoreDeleted(Guid householdId, Guid choreId, CancellationToken ct) =>
         Group(householdId).SendAsync(HouseholdEvents.ChoreDeleted, choreId, ct);
 
-    public Task CalendarEventUpserted(Guid householdId, CalendarEventDto calendarEvent, CancellationToken ct) =>
-        Group(householdId).SendAsync(HouseholdEvents.CalendarEventUpserted, calendarEvent, ct);
+    public Task CalendarEventUpserted(Guid householdId, CalendarEventDto calendarEvent, CancellationToken ct)
+    {
+        calendarSync.Request(householdId);
+        return Group(householdId).SendAsync(HouseholdEvents.CalendarEventUpserted, calendarEvent, ct);
+    }
 
-    public Task CalendarEventDeleted(Guid householdId, Guid eventId, CancellationToken ct) =>
-        Group(householdId).SendAsync(HouseholdEvents.CalendarEventDeleted, eventId, ct);
+    public Task CalendarEventDeleted(Guid householdId, Guid eventId, CancellationToken ct)
+    {
+        calendarSync.Request(householdId);
+        return Group(householdId).SendAsync(HouseholdEvents.CalendarEventDeleted, eventId, ct);
+    }
+
+    public Task CalendarConnectionUpserted(Guid userId, CalendarConnectionDto connection, CancellationToken ct) =>
+        User(userId).SendAsync(HouseholdEvents.CalendarConnectionUpserted, connection, ct);
+
+    public Task CalendarConnectionDeleted(Guid userId, Guid householdId, Guid connectionId, CancellationToken ct) =>
+        User(userId).SendAsync(HouseholdEvents.CalendarConnectionDeleted, householdId, connectionId, ct);
 
     public Task RewardUpserted(Guid householdId, RewardDto reward, CancellationToken ct) =>
         Group(householdId).SendAsync(HouseholdEvents.RewardUpserted, reward, ct);
@@ -65,4 +86,6 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub)
         Group(householdId).SendAsync(HouseholdEvents.RedemptionDeleted, redemptionId, ct);
 
     private IClientProxy Group(Guid householdId) => hub.Clients.Group(HouseholdHub.GroupName(householdId));
+
+    private IClientProxy User(Guid userId) => hub.Clients.Group(HouseholdHub.UserGroupName(userId));
 }
