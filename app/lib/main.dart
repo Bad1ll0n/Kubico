@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'src/api/api_client.dart';
 import 'src/config.dart';
 import 'src/notifications/notification_center.dart';
+import 'src/notifications/push_registration.dart';
 import 'src/realtime/household_realtime.dart';
 import 'src/session/device_kind.dart';
 import 'src/session/session_controller.dart';
@@ -19,6 +20,9 @@ void main() {
   final shopping = ShoppingRepository(api: api, store: PreferencesStore())..restore();
   final notifications = NotificationCenter(api: api, realtime: realtime);
 
+  // Avisos fora da app: ainda sem Firebase configurado, ficam só no sino.
+  final push = PushRegistration(api: api, source: const NoPushTokenSource());
+
   runApp(
     MultiProvider(
       providers: [
@@ -27,6 +31,7 @@ void main() {
         Provider.value(value: realtime),
         ChangeNotifierProvider.value(value: shopping),
         ChangeNotifierProvider.value(value: notifications),
+        Provider.value(value: push),
       ],
       child: const KubicoApp(),
     ),
