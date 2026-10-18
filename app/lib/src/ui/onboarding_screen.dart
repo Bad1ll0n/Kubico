@@ -46,7 +46,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.canGoBack ? 'Adicionar casa' : 'Bem-vindo, ${session.user?.displayName ?? ''}'),
+        title: Text(widget.canGoBack ? 'Adicionar casa' : 'Olá, ${session.user?.displayName ?? ''}'),
         actions: [
           if (!widget.canGoBack)
             IconButton(tooltip: 'Sair', icon: const Icon(Icons.logout), onPressed: session.signOut),

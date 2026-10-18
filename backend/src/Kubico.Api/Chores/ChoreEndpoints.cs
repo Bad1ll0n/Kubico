@@ -370,7 +370,7 @@ public static class ChoreEndpoints
         chore.UpdatedAt = now;
     }
 
-    private static ChoreDto ToDto(Chore c) => new(
+    internal static ChoreDto ToDto(Chore c) => new(
         c.Id, c.HouseholdId, c.Title, c.Notes, c.Points, c.DueDate, c.Recurrence,
         c.AssigneeUserId, c.RotationUserIds, c.IsDone, c.CompletedAt, c.UpdatedAt);
 }

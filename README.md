@@ -7,7 +7,8 @@ App para gerir tudo o que é de casa: famílias com várias contas, calendário 
 ## O que já funciona
 
 - **Contas**: registo e entrada com email e palavra-passe. A sessão renova-se sozinha (token de acesso de 15 minutos e refresh token rotativo de 60 dias) e pode terminar-se em todos os dispositivos, ou só num, a partir da lista de dispositivos com sessão iniciada.
-- **Casas (agregados)**: criar uma casa, convidar membros com um código, papéis (Administrador, Adulto, Criança, Convidado), cor por membro, várias casas por utilizador.
+- **Casas (agregados)**: criar uma casa, convidar membros com um código, papéis (Administrador, Adulto, Criança, Convidado), cor por membro, várias casas por utilizador. O administrador muda papéis, tira pessoas da casa e pode passar a administração a outra pessoa; qualquer membro pode sair. Quem sai deixa as rotações e os eventos, e as suas tarefas passam a quem vem a seguir; o histórico fica. A casa tem sempre um administrador, e é apagada quando sai o último membro.
+- **Perfis de criança com PIN**: um adulto cria um perfil para cada criança, sem email. No telemóvel ou tablet dela, a criança escreve o código da família, escolhe o seu nome e escreve o PIN (4 a 6 algarismos). Ao fim de 5 PINs errados, o perfil fica bloqueado 15 minutos; um adulto pode mudar o PIN e gerar um código da família novo.
 - **Listas de compras partilhadas em tempo real**: criar listas, adicionar artigos ("2 leite" separa a quantidade), marcar como comprado, limpar o carrinho. Quem tem a mesma lista aberta vê as alterações na hora (SignalR). **Funcionam sem rede**: a app guarda uma cópia e as alterações feitas no supermercado sem ligação são enviadas quando a rede voltar, sem duplicar artigos.
 - **Tarefas e rotinas**: tarefas únicas ou recorrentes (diárias, semanais, mensais), responsável ou "qualquer pessoa", rotação automática entre membros a cada conclusão, pontos e resumo dos últimos 30 dias por membro. As crianças só concluem as suas tarefas ou as de qualquer pessoa. Tarefas em atraso saltam para o período seguinte sem acumular.
 - **Calendário partilhado**: vistas de dia, semana e mês; eventos com hora ou de dia inteiro (vários dias incluídos), com repetição diária, semanal (em vários dias da semana), mensal ou anual, até uma data. Cada evento tem participantes (com a cor de cada membro) e boleias: quem leva e quem vai buscar. A app avisa quando alguém está em dois eventos ao mesmo tempo ou tem de levar/ir buscar alguém enquanto está noutro compromisso. Mostra os feriados nacionais de Portugal. A mudança de hora não desloca as repetições (às 18:00 continua às 18:00). Num evento que se repete, dá para alterar ou apagar só esse dia, esse e os seguintes, ou todos. Cada membro tem um endereço pessoal para ver o calendário da casa no Google Calendar, no Outlook ou no iPhone (iCalendar).
@@ -68,8 +69,8 @@ flutter run --dart-define=API_URL=https://api.exemplo.pt
 ## Testes
 
 ```bash
-cd backend && dotnet test        # 117 testes (integração e regras de negócio)
-cd app && flutter test           # 48 testes unitários e de widgets
+cd backend && dotnet test        # 124 testes (integração e regras de negócio)
+cd app && flutter test           # 56 testes unitários e de widgets
 ```
 
 Teste da app contra uma API real (tempo real incluído):

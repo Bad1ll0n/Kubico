@@ -14,6 +14,12 @@ public class Household
 
     public DateTimeOffset CreatedAt { get; set; }
 
+    /// <summary>
+    /// O código da família: com ele e o PIN, as crianças entram nos seus perfis. Null = ainda não foi criado
+    /// (ou foi revogado).
+    /// </summary>
+    public string? ChildSignInCode { get; set; }
+
     public const string DefaultTimeZoneId = "Europe/Lisbon";
 
     /// <summary>Fuso da casa; se o sistema não o conhecer, usa UTC.</summary>

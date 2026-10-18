@@ -41,7 +41,8 @@ O CI (`.github/workflows/ci.yml`) corre build com `-warnaserror`, testes, `dart 
 ## Convenções
 
 - **Tudo o que pertence à casa tem `HouseholdId`.** Os endpoints ficam em `/api/households/{householdId}/...` e começam sempre por `HouseholdAccess.RequireMemberAsync` (não-membros recebem 404, não 403).
-- **Papéis**: Admin, Adult, Child, Guest. `CanManageContent()` (Admin/Adult) para criar/apagar conteúdo; `CanManageMembers()` (Admin) para convites.
+- **Papéis**: Admin, Adult, Child, Guest. `CanManageContent()` (Admin/Adult) para criar/apagar conteúdo; `CanManageMembers()` (Admin) para convites, papéis e tirar membros. A casa tem sempre um administrador (`MemberEndpoints`). Tirar alguém passa pelo `MembershipService.RemoveAsync`, que arruma rotações, eventos, pedidos de recompensa, ligações ao Google/Outlook e avisos dessa casa; quando sai o último membro com conta, a casa é apagada.
+- **Perfis de criança**: são `User` sem email, com `ManagedByHouseholdId` (a casa que os gere) e `PinHash`; o papel é sempre Child e não criam nem entram noutras casas. Entram em `/api/auth/child/login` com o código da família (`Household.ChildSignInCode`), o id do perfil e o PIN; 5 PINs errados bloqueiam o perfil 15 minutos (`User.RegisterWrongPin`). O `UserDto` tem `Email` nulo e `IsChildProfile`.
 - **Tempo real**: cada alteração notifica o grupo da casa via `HouseholdNotifier` (`<Entidade>Upserted` / `<Entidade>Deleted`). Os nomes dos eventos têm de coincidir com `app/lib/src/realtime/household_realtime.dart`. Os clientes fazem upsert idempotente e ignoram versões mais antigas (`UpdatedAt`).
 - **Datas**: instantes em `DateTimeOffset` UTC; prazos em `DateOnly`. "Hoje" calcula-se com `Household.Today(now)` (fuso da casa, por omissão Europe/Lisbon). Usa sempre `TimeProvider`, nunca `DateTime.Now`.
 - **EF Core**: entidades com `Id` já preenchido adicionadas por navegação têm de ser registadas com `db.X.Add(...)`, senão o EF faz UPDATE em vez de INSERT.
@@ -57,7 +58,7 @@ O CI (`.github/workflows/ci.yml`) corre build com `-warnaserror`, testes, `dart 
 
 ## Estado e próximos passos
 
-Feito: contas (refresh tokens, lista de dispositivos com sessão, terminar sessão num ou em todos), casas e convites, listas de compras em tempo real e sem rede, tarefas recorrentes com rotação e pontos, recompensas, calendário partilhado (repetições e exceções, boleias, conflitos, feriados, subscrição ICS, sync nos dois sentidos com Google Calendar e Outlook), avisos (na app e no telemóvel via FCM, projeto Firebase `kubico-casa`, Android e web), app em pt-PT.
+Feito: contas (refresh tokens, lista de dispositivos com sessão, terminar sessão num ou em todos), casas e convites, gestão de membros (papéis, tirar, sair, passar a administração), perfis de criança com PIN, listas de compras em tempo real e sem rede, tarefas recorrentes com rotação e pontos, recompensas, calendário partilhado (repetições e exceções, boleias, conflitos, feriados, subscrição ICS, sync nos dois sentidos com Google Calendar e Outlook), avisos (na app e no telemóvel via FCM, projeto Firebase `kubico-casa`, Android e web), app em pt-PT.
 
 A seguir (por esta ordem, salvo indicação em contrário):
 1. Avisos no iPhone (precisa de conta Apple Developer e da chave APNs no Firebase).

@@ -73,6 +73,34 @@ public class Chore
         return completion;
     }
 
+    /// <summary>
+    /// Alguém saiu da casa: sai da rotação e, se a tarefa era sua, passa a quem vinha a seguir (ou a qualquer
+    /// pessoa, se não houver rotação). Devolve true se a tarefa mudou.
+    /// </summary>
+    public bool RemoveMember(Guid userId, DateTimeOffset now)
+    {
+        var index = RotationUserIds.IndexOf(userId);
+        var wasAssignee = AssigneeUserId == userId;
+        if (index < 0 && !wasAssignee)
+        {
+            return false;
+        }
+
+        if (index >= 0)
+        {
+            RotationUserIds = [.. RotationUserIds.Where(id => id != userId)];
+        }
+
+        if (wasAssignee)
+        {
+            // Quem vinha a seguir ocupa agora a posição de quem saiu.
+            AssigneeUserId = RotationUserIds.Count == 0 ? null : RotationUserIds[Math.Max(index, 0) % RotationUserIds.Count];
+        }
+
+        UpdatedAt = now;
+        return true;
+    }
+
     /// <summary>Próximo prazo depois de hoje, saltando os períodos que já passaram.</summary>
     public static DateOnly NextDueDate(DateOnly from, ChoreRecurrence recurrence, DateOnly today)
     {

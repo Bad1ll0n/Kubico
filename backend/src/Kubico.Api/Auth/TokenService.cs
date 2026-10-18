@@ -26,7 +26,7 @@ public class TokenService(IOptions<JwtOptions> options, TimeProvider clock)
             claims:
             [
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-                new Claim(JwtRegisteredClaimNames.Email, user.Email),
+                .. user.Email is { } email ? [new Claim(JwtRegisteredClaimNames.Email, email)] : Array.Empty<Claim>(),
                 new Claim(JwtRegisteredClaimNames.Name, user.DisplayName),
                 .. sessionId is { } sid ? [new Claim(SessionClaim, sid.ToString())] : Array.Empty<Claim>(),
             ],

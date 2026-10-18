@@ -34,7 +34,14 @@ class ApiClient {
   Future<bool> Function()? onUnauthorized;
 
   /// Pedidos de autenticação: um 401 aqui não se resolve renovando a sessão.
-  static const _authPaths = {'/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/auth/logout'};
+  static const _authPaths = {
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/refresh',
+    '/api/auth/logout',
+    '/api/auth/child/profiles',
+    '/api/auth/child/login',
+  };
 
   // --- Autenticação ---
 
@@ -78,6 +85,52 @@ class ApiClient {
 
   Future<HouseholdSummary> acceptInvite(String code) async =>
       HouseholdSummary.fromJson(await _send('POST', '/api/invites/${Uri.encodeComponent(code.trim())}/accept'));
+
+  // --- Membros e perfis de criança ---
+
+  Future<Member> updateMemberRole(String householdId, String userId, HouseholdRole role) async => Member.fromJson(
+    await _send('PUT', '/api/households/$householdId/members/$userId/role', body: {'role': role.apiValue})
+        as Map<String, dynamic>,
+  );
+
+  /// Tira alguém da casa (só administradores). Um perfil de criança é apagado.
+  Future<void> removeMember(String householdId, String userId) =>
+      _send('DELETE', '/api/households/$householdId/members/$userId');
+
+  /// Sai da casa. Se for o último membro com conta, a casa é apagada.
+  Future<void> leaveHousehold(String householdId) => _send('POST', '/api/households/$householdId/leave');
+
+  /// Passa a administração: a outra pessoa fica administradora e quem passa fica adulto.
+  Future<void> transferAdmin(String householdId, String userId) =>
+      _send('POST', '/api/households/$householdId/transfer-admin', body: {'userId': userId});
+
+  Future<Member> createChildProfile(String householdId, {required String name, required String pin}) async =>
+      Member.fromJson(
+        await _send('POST', '/api/households/$householdId/children', body: {'displayName': name, 'pin': pin})
+            as Map<String, dynamic>,
+      );
+
+  Future<void> setChildPin(String householdId, String userId, String pin) =>
+      _send('PUT', '/api/households/$householdId/children/$userId/pin', body: {'pin': pin});
+
+  /// O código da família, com que as crianças entram nos seus perfis (é criado no primeiro pedido).
+  Future<String> getFamilyCode(String householdId) async =>
+      (await _send('POST', '/api/households/$householdId/family-code') as Map<String, dynamic>)['code'] as String;
+
+  /// O código atual deixa de servir; devolve um novo.
+  Future<String> renewFamilyCode(String householdId) async {
+    await _send('DELETE', '/api/households/$householdId/family-code');
+    return getFamilyCode(householdId);
+  }
+
+  Future<List<ChildProfileOption>> childProfiles(String familyCode) async => [
+    for (final p in await _send('POST', '/api/auth/child/profiles', body: {'familyCode': familyCode}) as List)
+      ChildProfileOption.fromJson(p as Map<String, dynamic>),
+  ];
+
+  Future<AuthResult> childLogin(String familyCode, String userId, String pin) async => AuthResult.fromJson(
+    await _send('POST', '/api/auth/child/login', body: {'familyCode': familyCode, 'userId': userId, 'pin': pin}),
+  );
 
   // --- Listas de compras ---
 
