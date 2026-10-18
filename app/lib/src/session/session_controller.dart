@@ -26,6 +26,9 @@ class SessionController extends ChangeNotifier {
 
   /// Esta conta mantém o Kubico (vê as mensagens enviadas da ajuda).
   bool isSupport = false;
+
+  /// Um convite que chegou por link (?convite=…) e espera que a pessoa entre ou crie conta.
+  String? pendingInvite;
   String? _selectedHouseholdId;
   DateTime? _accessExpiresAt;
   Future<bool>? _renewing;
@@ -181,6 +184,7 @@ class SessionController extends ChangeNotifier {
 
   Future<void> joinHousehold(String code) async {
     final joined = await api.acceptInvite(code);
+    pendingInvite = null;
     await refresh();
     await selectHousehold(joined.id);
   }

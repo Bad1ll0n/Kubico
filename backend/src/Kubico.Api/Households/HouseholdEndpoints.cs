@@ -28,6 +28,9 @@ public record HouseholdDto(Guid Id, string Name, string TimeZoneId, HouseholdRol
 
 public record InviteDto(string Code, HouseholdRole Role, DateTimeOffset ExpiresAt);
 
+public record InvitePreviewDto(
+    Guid HouseholdId, string HouseholdName, HouseholdRole Role, DateTimeOffset ExpiresAt, bool AlreadyMember);
+
 /// <summary><c>IsSupport</c>: esta conta mantém o Kubico e lê as mensagens enviadas da ajuda.</summary>
 public record MeDto(UserDto User, IReadOnlyList<HouseholdSummaryDto> Households, bool IsSupport = false);
 
@@ -50,6 +53,7 @@ public static class HouseholdEndpoints
         households.MapGet("/{householdId:guid}", GetHousehold);
         households.MapPost("/{householdId:guid}/invites", CreateInvite);
 
+        api.MapGet("/invites/{code}", PreviewInvite).WithTags("Households").RequireAuthorization();
         api.MapPost("/invites/{code}/accept", AcceptInvite).WithTags("Households").RequireAuthorization();
 
         return api;
@@ -177,6 +181,24 @@ public static class HouseholdEndpoints
         await db.SaveChangesAsync(ct);
 
         return Results.Ok(new InviteDto(invite.Code, invite.Role, invite.ExpiresAt));
+    }
+
+    /// <summary>Antes de aceitar: que casa é, com que papel, e se a pessoa já lá está (para a app perguntar).</summary>
+    private static async Task<IResult> PreviewInvite(
+        string code, ClaimsPrincipal principal, KubicoDbContext db, TimeProvider clock, CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var normalized = code.Trim().ToUpperInvariant();
+        var invite = await db.Invites.AsNoTracking()
+            .Include(i => i.Household)
+            .SingleOrDefaultAsync(i => i.Code == normalized, ct);
+        if (invite is null || invite.IsExpired(clock.GetUtcNow()))
+        {
+            return Results.Problem(title: "Convite inválido ou expirado.", statusCode: StatusCodes.Status404NotFound);
+        }
+
+        var alreadyMember = await db.Memberships.AnyAsync(m => m.HouseholdId == invite.HouseholdId && m.UserId == userId, ct);
+        return Results.Ok(new InvitePreviewDto(invite.HouseholdId, invite.Household.Name, invite.Role, invite.ExpiresAt, alreadyMember));
     }
 
     private static async Task<IResult> AcceptInvite(

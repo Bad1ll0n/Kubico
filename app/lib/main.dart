@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'src/api/api_client.dart';
 import 'src/config.dart';
+import 'src/households/invite_link.dart';
 import 'src/notifications/firebase_push.dart';
 import 'src/notifications/notification_center.dart';
 import 'src/notifications/push_registration.dart';
@@ -19,6 +21,10 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   final api = ApiClient(baseUrl: AppConfig.apiUrl, deviceKind: currentDeviceKind());
   final session = SessionController(api: api, store: const SecureTokenStore())..restore();
+
+  // Um link de convite (…/?convite=CÓDIGO) abre a app web com o código à espera.
+  final invite = kIsWeb ? Uri.base.queryParameters['convite'] : null;
+  session.pendingInvite = invite == null ? null : inviteCodeFrom(invite);
   final realtime = HouseholdRealtime(baseUrl: AppConfig.apiUrl, accessToken: session.freshAccessToken);
   final shopping = ShoppingRepository(api: api, store: PreferencesStore())..restore();
   final notifications = NotificationCenter(api: api, realtime: realtime);

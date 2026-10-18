@@ -83,6 +83,10 @@ class ApiClient {
   Future<Invite> createInvite(String householdId, HouseholdRole role) async =>
       Invite.fromJson(await _send('POST', '/api/households/$householdId/invites', body: {'role': role.apiValue}));
 
+  Future<InvitePreview> previewInvite(String code) async => InvitePreview.fromJson(
+    await _send('GET', '/api/invites/${Uri.encodeComponent(code.trim())}') as Map<String, dynamic>,
+  );
+
   Future<HouseholdSummary> acceptInvite(String code) async =>
       HouseholdSummary.fromJson(await _send('POST', '/api/invites/${Uri.encodeComponent(code.trim())}/accept'));
 

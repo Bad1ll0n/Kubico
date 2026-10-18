@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../households/invite_link.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import 'dates_pt.dart';
@@ -480,23 +482,43 @@ class _InviteDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final expires = MaterialLocalizations.of(context).formatMediumDate(invite.expiresAt);
+    final link = inviteLink(invite.code);
     return AlertDialog(
       title: const Text('Código de convite'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SelectableText(
-            invite.code,
-            style: theme.textTheme.headlineMedium?.copyWith(letterSpacing: 4, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 12),
-          Text('Entra como ${invite.role.label.toLowerCase()}. Válido até $expires.', textAlign: TextAlign.center),
-        ],
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // O QR leva o link (ou só o código): lê-se com a câmara do telemóvel ou dentro da app.
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.all(8),
+              child: QrImageView(data: link ?? invite.code, size: 180, backgroundColor: Colors.white),
+            ),
+            const SizedBox(height: 12),
+            SelectableText(
+              invite.code,
+              style: theme.textTheme.headlineMedium?.copyWith(letterSpacing: 4, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            Text('Entra como ${invite.role.label.toLowerCase()}. Válido até $expires.', textAlign: TextAlign.center),
+          ],
+        ),
       ),
       actions: [
+        if (link != null)
+          TextButton.icon(
+            icon: const Icon(Icons.link),
+            label: const Text('Copiar link'),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: link));
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copiado.')));
+            },
+          ),
         TextButton.icon(
           icon: const Icon(Icons.copy),
-          label: const Text('Copiar'),
+          label: const Text('Copiar código'),
           onPressed: () {
             Clipboard.setData(ClipboardData(text: invite.code));
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Código copiado.')));

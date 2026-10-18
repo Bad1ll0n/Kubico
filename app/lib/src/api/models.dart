@@ -270,6 +270,28 @@ class Invite {
   );
 }
 
+/// O que um convite diz antes de ser aceite: que casa é, com que papel, e se já lá estás.
+class InvitePreview {
+  const InvitePreview({
+    required this.householdId,
+    required this.householdName,
+    required this.role,
+    required this.alreadyMember,
+  });
+
+  final String householdId;
+  final String householdName;
+  final HouseholdRole role;
+  final bool alreadyMember;
+
+  factory InvitePreview.fromJson(Map<String, dynamic> json) => InvitePreview(
+    householdId: json['householdId'] as String,
+    householdName: json['householdName'] as String,
+    role: HouseholdRole.fromApi(json['role'] as String),
+    alreadyMember: json['alreadyMember'] as bool,
+  );
+}
+
 class ShoppingList {
   const ShoppingList({
     required this.id,

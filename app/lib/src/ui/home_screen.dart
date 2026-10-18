@@ -52,6 +52,38 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     // Quem sai (ou é tirado) de uma casa deixa de a ver: abre-se outra, ou o ecrã de boas-vindas.
     _membership = context.read<HouseholdRealtime>().events.listen(_onEvent);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _offerPendingInvite());
+  }
+
+  /// Chegou-se por um link de convite já com casas: pergunta se quer entrar na casa do convite.
+  Future<void> _offerPendingInvite() async {
+    final session = context.read<SessionController>();
+    final code = session.pendingInvite;
+    if (code == null) return;
+    session.pendingInvite = null;
+    try {
+      final invite = await session.api.previewInvite(code);
+      if (!mounted) return;
+      if (invite.alreadyMember) {
+        await session.selectHousehold(invite.householdId);
+        return;
+      }
+
+      final join = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Entrar em ${invite.householdName}?'),
+          content: Text('Recebeste um convite para esta casa, com o papel de ${invite.role.label}.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Agora não')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Entrar')),
+          ],
+        ),
+      );
+      if (join == true) await session.joinHousehold(code);
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
   }
 
   void _onEvent(HouseholdEvent event) {

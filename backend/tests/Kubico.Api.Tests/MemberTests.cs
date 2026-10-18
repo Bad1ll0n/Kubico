@@ -146,6 +146,23 @@ public class MemberTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFact
         Assert.Equal(partnerAuth.User.Id, await left.Task.WaitAsync(TimeSpan.FromSeconds(10)));
     }
 
+    [Fact]
+    public async Task An_invite_shows_the_house_and_the_role_before_joining()
+    {
+        var (admin, _) = await factory.CreateUserAsync("Mãe");
+        var (partner, _) = await factory.CreateUserAsync("Pai");
+        var household = await HouseholdTests.CreateHousehold(admin, "Casa dos Avós");
+        var invite = await HouseholdTests.CreateInvite(admin, household.Id, HouseholdRole.Adult);
+
+        var forPartner = await partner.GetFromJsonAsync<InvitePreviewDto>($"/api/invites/{invite.Code.ToLowerInvariant()}", TestJson.Options);
+        var forAdmin = await admin.GetFromJsonAsync<InvitePreviewDto>($"/api/invites/{invite.Code}", TestJson.Options);
+        var unknown = await partner.GetAsync("/api/invites/NAOEXISTE");
+
+        Assert.Equal(("Casa dos Avós", HouseholdRole.Adult, false), (forPartner!.HouseholdName, forPartner.Role, forPartner.AlreadyMember));
+        Assert.True(forAdmin!.AlreadyMember);
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+    }
+
     private static string RoleUrl(Guid householdId, Guid userId) => $"/api/households/{householdId}/members/{userId}/role";
 
     internal static async Task<IReadOnlyList<MemberDto>> Members(HttpClient client, Guid householdId) =>

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../households/invite_link.dart';
 import '../session/session_controller.dart';
+import 'scanner_screen.dart';
 import 'theme.dart';
 
 /// Criar uma casa nova ou entrar numa existente com um código de convite.
@@ -19,6 +21,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _householdName = TextEditingController();
   final _inviteCode = TextEditingController();
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Chegou-se aqui por um link de convite: o código já vem preenchido.
+    _inviteCode.text = context.read<SessionController>().pendingInvite ?? '';
+  }
+
+  Future<void> _scan() async {
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const ScannerScreen<String>(
+          title: 'Ler o convite',
+          hint: 'Aponta para o QR do convite, no telemóvel de quem já está na casa.',
+          accept: inviteCodeFrom,
+        ),
+      ),
+    );
+    if (code != null) _inviteCode.text = code;
+  }
 
   @override
   void dispose() {
@@ -68,7 +90,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       children: [
                         Text('Criar uma casa', style: theme.textTheme.titleMedium),
                         const SizedBox(height: 4),
-                        Text('Ficas como administrador e podes convidar a família.', style: theme.textTheme.bodySmall),
+                        Text(
+                          'Ficas a administrar a casa e podes convidar a família.',
+                          style: theme.textTheme.bodySmall,
+                        ),
                         const SizedBox(height: 16),
                         TextField(
                           controller: _householdName,
@@ -98,11 +123,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       children: [
                         Text('Entrar com um convite', style: theme.textTheme.titleMedium),
                         const SizedBox(height: 4),
-                        Text('Pede o código a quem já está na casa.', style: theme.textTheme.bodySmall),
+                        Text('Pede o código (ou o QR) a quem já está na casa.', style: theme.textTheme.bodySmall),
                         const SizedBox(height: 16),
                         TextField(
                           controller: _inviteCode,
-                          decoration: const InputDecoration(labelText: 'Código', hintText: 'Ex.: K7M2QX9P'),
+                          decoration: InputDecoration(
+                            labelText: 'Código',
+                            hintText: 'Ex.: K7M2QX9P',
+                            suffixIcon: scannerAvailable
+                                ? IconButton(
+                                    tooltip: 'Ler o QR do convite',
+                                    icon: const Icon(Icons.qr_code_scanner),
+                                    onPressed: _busy ? null : _scan,
+                                  )
+                                : null,
+                          ),
                           textCapitalization: TextCapitalization.characters,
                         ),
                         const SizedBox(height: 12),
