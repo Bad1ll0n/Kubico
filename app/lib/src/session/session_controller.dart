@@ -69,6 +69,22 @@ class SessionController extends ChangeNotifier {
     await householdLost(householdId);
   }
 
+  /// Alguém mudou numa casa. Se foi esta pessoa a sair (ou a ser tirada), abre-se outra casa; se mudou o seu papel,
+  /// voltam a ler-se as casas, para as permissões da app acompanharem.
+  Future<void> memberChanged(String householdId, {Member? member, String? removedUserId}) async {
+    final me = user?.id;
+    if (me == null) return;
+    if (removedUserId == me) {
+      await householdLost(householdId);
+      return;
+    }
+
+    final known = households.where((h) => h.id == householdId).firstOrNull;
+    if (member != null && member.userId == me && known != null && known.role != member.role) {
+      await refresh();
+    }
+  }
+
   /// Esta pessoa deixou de estar na casa (saiu ou foi tirada): volta a ler as casas. Um perfil de criança apagado
   /// já não tem sessão, e volta ao ecrã de entrada.
   Future<void> householdLost(String householdId) async {

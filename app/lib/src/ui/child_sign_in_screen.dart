@@ -52,7 +52,12 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
 
   Future<void> _signIn() => _run(() async {
     final navigator = Navigator.of(context);
-    await context.read<SessionController>().signInChild(_code.text, _chosen!.userId, _pin.text);
+    try {
+      await context.read<SessionController>().signInChild(_code.text, _chosen!.userId, _pin.text);
+    } catch (_) {
+      _pin.clear();
+      rethrow;
+    }
     // Com a sessão iniciada, o ecrã principal já está por baixo.
     navigator.popUntil((route) => route.isFirst);
   });

@@ -69,8 +69,8 @@ flutter run --dart-define=API_URL=https://api.exemplo.pt
 ## Testes
 
 ```bash
-cd backend && dotnet test        # 123 testes (integração e regras de negócio)
-cd app && flutter test           # 54 testes unitários e de widgets
+cd backend && dotnet test        # 124 testes (integração e regras de negócio)
+cd app && flutter test           # 56 testes unitários e de widgets
 ```
 
 Teste da app contra uma API real (tempo real incluído):

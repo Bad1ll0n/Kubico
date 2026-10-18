@@ -55,14 +55,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onEvent(HouseholdEvent event) {
     if (!mounted) return;
+    if (event is! MembersChanged) return;
     final session = context.read<SessionController>();
-    if (event is MembersChanged && event.removedUserId != null && event.removedUserId == session.user?.id) {
+    if (event.removedUserId != null && event.removedUserId == session.user?.id) {
       final name = session.households.where((h) => h.id == event.householdId).firstOrNull?.name;
       if (name != null) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Já não estás em $name.')));
       }
-      session.householdLost(event.householdId);
     }
+    session.memberChanged(event.householdId, member: event.member, removedUserId: event.removedUserId);
   }
 
   @override

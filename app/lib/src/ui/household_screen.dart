@@ -138,7 +138,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
   Future<void> _transferAdmin(Member member) async {
     final confirmed = await _confirm(
       'Passar a administração a ${member.displayName}?',
-      '${member.displayName} fica administrador da casa e tu passas a adulto. '
+      'A administração da casa passa para ${member.displayName} e tu ficas com o papel de Adulto. '
           'Deixas de poder convidar, mudar papéis e tirar pessoas da casa.',
       'Passar',
     );
@@ -226,8 +226,8 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
         builder: (context) => AlertDialog(
           title: const Text('Antes de saíres'),
           content: const Text(
-            'És o único administrador. Passa a administração a outra pessoa (no menu ao lado do nome dela) e '
-            'depois já podes sair.',
+            'Mais ninguém administra esta casa. Passa a administração a outra pessoa (no menu ao lado do nome '
+            'dela) e depois já podes sair.',
           ),
           actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Percebi'))],
         ),

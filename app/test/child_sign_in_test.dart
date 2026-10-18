@@ -75,6 +75,7 @@ void main() {
     await tester.tap(find.text('Entrar'));
     await tester.pumpAndSettle();
     expect(find.text('PIN errado.'), findsOneWidget);
+    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'PIN')).controller!.text, isEmpty);
 
     await tester.enterText(find.widgetWithText(TextField, 'PIN'), '1234');
     await tester.tap(find.text('Entrar'));

@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using Kubico.Api.Auth;
 using Kubico.Api.Common;
+using Kubico.Api.Realtime;
 using Kubico.Domain.Households;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -175,7 +176,12 @@ public static class HouseholdEndpoints
     }
 
     private static async Task<IResult> AcceptInvite(
-        string code, ClaimsPrincipal principal, KubicoDbContext db, TimeProvider clock, CancellationToken ct)
+        string code,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdNotifier notifier,
+        TimeProvider clock,
+        CancellationToken ct)
     {
         var userId = principal.GetUserId();
         if (await IsChildProfile(db, userId, ct))
@@ -205,15 +211,19 @@ public static class HouseholdEndpoints
         }
 
         var memberCount = await db.Memberships.CountAsync(m => m.HouseholdId == invite.HouseholdId, ct);
-        db.Memberships.Add(new Membership
+        var membership = new Membership
         {
             HouseholdId = invite.HouseholdId,
-            UserId = userId,
+            User = await db.Users.SingleAsync(u => u.Id == userId, ct),
             Role = invite.Role,
             Color = ColorFor(memberCount),
             JoinedAt = now,
-        });
+        };
+        db.Memberships.Add(membership);
         await db.SaveChangesAsync(ct);
+
+        // Quem já está na casa vê o novo membro aparecer.
+        await notifier.MemberUpserted(invite.HouseholdId, MemberEndpoints.ToDto(membership), ct);
 
         return Results.Ok(new HouseholdSummaryDto(invite.HouseholdId, invite.Household.Name, invite.Role));
     }

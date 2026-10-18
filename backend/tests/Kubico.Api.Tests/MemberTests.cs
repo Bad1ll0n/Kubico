@@ -4,9 +4,13 @@ using Kubico.Api.Auth;
 using Kubico.Api.Calendar;
 using Kubico.Api.Chores;
 using Kubico.Api.Households;
+using Kubico.Api.Realtime;
 using Kubico.Api.Rewards;
 using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
+using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Kubico.Api.Tests;
 
@@ -109,6 +113,37 @@ public class MemberTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFact
         Assert.Equal(partnerAuth.User.Id, Assert.Single(membersAfter).UserId);
         Assert.Equal(HttpStatusCode.NoContent, lastOneLeaves.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, gone.StatusCode);
+    }
+
+    [Fact]
+    public async Task Members_see_in_real_time_who_joins_and_who_leaves()
+    {
+        var (admin, adminAuth) = await factory.CreateUserAsync("Mãe");
+        var (partner, partnerAuth) = await factory.CreateUserAsync("Pai");
+        var household = await HouseholdTests.CreateHousehold(admin, "Casa");
+
+        await using var connection = new HubConnectionBuilder()
+            .WithUrl(new Uri(factory.Server.BaseAddress, HouseholdHub.Path), options =>
+            {
+                options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
+                options.Transports = HttpTransportType.LongPolling;
+                options.AccessTokenProvider = () => Task.FromResult<string?>(adminAuth.AccessToken);
+            })
+            .AddJsonProtocol(o => o.PayloadSerializerOptions = TestJson.Options)
+            .Build();
+        var joined = new TaskCompletionSource<MemberDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var left = new TaskCompletionSource<Guid>(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.On<Guid, MemberDto>(HouseholdEvents.MemberUpserted, (_, member) => joined.TrySetResult(member));
+        connection.On<Guid, Guid>(HouseholdEvents.MemberDeleted, (_, userId) => left.TrySetResult(userId));
+        await connection.StartAsync();
+        await connection.InvokeAsync("JoinHousehold", household.Id);
+
+        await NotificationTests.Join(admin, partner, household.Id, HouseholdRole.Adult);
+        var member = await joined.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        (await partner.PostAsync($"/api/households/{household.Id}/leave", null)).EnsureSuccessStatusCode();
+
+        Assert.Equal(("Pai", HouseholdRole.Adult), (member.DisplayName, member.Role));
+        Assert.Equal(partnerAuth.User.Id, await left.Task.WaitAsync(TimeSpan.FromSeconds(10)));
     }
 
     private static string RoleUrl(Guid householdId, Guid userId) => $"/api/households/{householdId}/members/{userId}/role";
