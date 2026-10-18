@@ -134,6 +134,36 @@ class Member {
   );
 }
 
+/// Alguém está fora entre dois dias (inclusive): sai das rotações das tarefas enquanto está fora.
+class MemberAbsence {
+  const MemberAbsence({
+    required this.id,
+    required this.userId,
+    required this.startDate,
+    required this.endDate,
+    this.reason,
+  });
+
+  final String id;
+  final String userId;
+  final DateTime startDate;
+  final DateTime endDate;
+  final String? reason;
+
+  bool covers(DateTime day) {
+    final d = DateTime(day.year, day.month, day.day);
+    return !d.isBefore(startDate) && !d.isAfter(endDate);
+  }
+
+  factory MemberAbsence.fromJson(Map<String, dynamic> json) => MemberAbsence(
+    id: json['id'] as String,
+    userId: json['userId'] as String,
+    startDate: _day(json['startDate'])!,
+    endDate: _day(json['endDate'])!,
+    reason: json['reason'] as String?,
+  );
+}
+
 /// Um perfil de criança para escolher no ecrã de entrada (depois do código da família).
 class ChildProfileOption {
   const ChildProfileOption({required this.userId, required this.displayName, required this.color});

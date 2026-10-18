@@ -8,14 +8,29 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
+import 'dates_pt.dart';
 import 'theme.dart';
 
 /// Membros da casa: convites e papéis (administradores), perfis de criança com PIN e o código da família (adultos),
 /// e sair da casa.
 class HouseholdScreen extends StatefulWidget {
-  const HouseholdScreen({super.key, required this.householdId});
+  const HouseholdScreen({super.key, required this.householdId, this.pickAbsenceDates = _pickDates});
 
   final String householdId;
+
+  /// Escolhe os dias de uma ausência (nos testes, devolve-os logo).
+  final Future<DateTimeRange?> Function(BuildContext context) pickAbsenceDates;
+
+  static Future<DateTimeRange?> _pickDates(BuildContext context) {
+    final today = DateUtils.dateOnly(DateTime.now());
+    return showDateRangePicker(
+      context: context,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 365)),
+      helpText: 'Fora entre que dias?',
+      saveText: 'Continuar',
+    );
+  }
 
   @override
   State<HouseholdScreen> createState() => _HouseholdScreenState();
@@ -23,6 +38,7 @@ class HouseholdScreen extends StatefulWidget {
 
 class _HouseholdScreenState extends State<HouseholdScreen> {
   HouseholdDetails? _details;
+  List<MemberAbsence> _absences = const [];
   Object? _error;
   String? _familyCode;
   StreamSubscription<HouseholdEvent>? _events;
@@ -35,7 +51,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
   void initState() {
     super.initState();
     _events = context.read<HouseholdRealtime>().events.listen((event) {
-      if (event is MembersChanged && event.householdId == widget.householdId) _load();
+      if ((event is MembersChanged && event.householdId == widget.householdId) || event is AbsencesChanged) _load();
     });
     _load();
   }
@@ -48,10 +64,14 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
 
   Future<void> _load() async {
     try {
-      final details = await _api.getHousehold(widget.householdId);
+      final (details, absences) = await (
+        _api.getHousehold(widget.householdId),
+        _api.getAbsences(widget.householdId),
+      ).wait;
       if (mounted) {
         setState(() {
           _details = details;
+          _absences = absences;
           _error = null;
         });
       }
@@ -171,6 +191,43 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
           : '${member.displayName} já não está na casa.',
     );
   }
+
+  /// A próxima ausência (ou a de agora) de um membro.
+  MemberAbsence? _absenceOf(Member member) => _absences.where((a) => a.userId == member.userId).firstOrNull;
+
+  Future<void> _markAbsence(Member member) async {
+    final range = await widget.pickAbsenceDates(context);
+    if (range == null || !mounted) return;
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (_) => _AbsenceReasonDialog(member: member, range: range),
+    );
+    if (reason == null) return;
+    await _run(
+      () => _api.createAbsence(
+        widget.householdId,
+        userId: member.userId,
+        start: range.start,
+        end: range.end,
+        reason: reason,
+      ),
+      done:
+          '${member.displayName} fica fora ${_period(range.start, range.end)}. As tarefas passam a quem vem a seguir.',
+    );
+  }
+
+  Future<void> _cancelAbsence(Member member) async {
+    final absence = _absenceOf(member);
+    if (absence == null) return;
+    await _run(
+      () => _api.deleteAbsence(widget.householdId, absence.id),
+      done: 'Ausência de ${member.displayName} cancelada.',
+    );
+  }
+
+  static String _period(DateTime start, DateTime end) => DateUtils.isSameDay(start, end)
+      ? 'a ${formatDayMonthShort(start)}'
+      : 'de ${formatDayMonthShort(start)} a ${formatDayMonthShort(end)}';
 
   Future<void> _changePin(Member member) async {
     final pin = await showDialog<String>(
@@ -301,7 +358,11 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
 
   Widget _memberTile(Member member, HouseholdDetails details, {required bool isMe}) {
     final canManage = details.myRole.canManageMembers;
+    final absence = _absenceOf(member);
+    final canMarkAbsence = isMe || details.myRole.canManageContent;
     final actions = <(String, String, Future<void> Function(Member))>[
+      if (canMarkAbsence && absence == null) ('away', 'Marcar ausência', _markAbsence),
+      if (canMarkAbsence && absence != null) ('back', 'Cancelar ausência', _cancelAbsence),
       if (!isMe && canManage && !member.isChildProfile) ('role', 'Mudar papel', _changeRole),
       if (!isMe && canManage && !member.isChildProfile && member.role != HouseholdRole.admin)
         ('admin', 'Passar a administração', _transferAdmin),
@@ -316,7 +377,16 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
           child: Text(member.displayName.isEmpty ? '?' : member.displayName[0].toUpperCase()),
         ),
         title: Text(isMe ? '${member.displayName} (tu)' : member.displayName),
-        subtitle: Text(member.isChildProfile ? '${member.role.label} · entra com PIN' : member.role.label),
+        subtitle: Text(
+          [
+            member.role.label,
+            if (member.isChildProfile) 'entra com PIN',
+            if (absence != null)
+              absence.covers(DateTime.now())
+                  ? 'fora até ${formatDayMonthShort(absence.endDate)}'
+                  : 'fora ${_period(absence.startDate, absence.endDate)}',
+          ].join(' · '),
+        ),
         trailing: actions.isEmpty
             ? null
             : PopupMenuButton<String>(
@@ -559,6 +629,59 @@ class _PinDialogState extends State<_PinDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
         FilledButton(onPressed: _submit, child: const Text('Mudar PIN')),
+      ],
+    );
+  }
+}
+
+/// O motivo (opcional) de uma ausência, depois de escolher os dias.
+class _AbsenceReasonDialog extends StatefulWidget {
+  const _AbsenceReasonDialog({required this.member, required this.range});
+
+  final Member member;
+  final DateTimeRange range;
+
+  @override
+  State<_AbsenceReasonDialog> createState() => _AbsenceReasonDialogState();
+}
+
+class _AbsenceReasonDialogState extends State<_AbsenceReasonDialog> {
+  final _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final range = widget.range;
+    return AlertDialog(
+      title: Text('${widget.member.displayName} vai estar fora'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_HouseholdScreenState._period(range.start, range.end)),
+            const SizedBox(height: 4),
+            Text(
+              'Enquanto estiver fora, sai das rotações e as tarefas passam a quem vem a seguir.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            TextField(
+              controller: _reason,
+              decoration: const InputDecoration(labelText: 'Motivo (opcional)', hintText: 'Férias, casa do pai…'),
+              maxLength: 200,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        FilledButton(onPressed: () => Navigator.pop(context, _reason.text), child: const Text('Marcar ausência')),
       ],
     );
   }

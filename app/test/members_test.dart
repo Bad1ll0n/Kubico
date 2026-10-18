@@ -33,6 +33,7 @@ class _Server {
   final List<Map<String, dynamic>> members;
   final requests = <String>[];
   final bodies = <Map<String, dynamic>>[];
+  final absences = <Map<String, dynamic>>[];
   var households = [
     {'id': 'h1', 'name': 'Casa'},
   ];
@@ -59,6 +60,26 @@ class _Server {
         'myRole': _role(me),
         'members': members,
       });
+    }
+    if (path == '/api/households/h1/absences') {
+      if (request.method == 'POST') {
+        final b = bodies.last;
+        final absence = {
+          'id': 'a${absences.length + 1}',
+          'householdId': 'h1',
+          'userId': b['userId'],
+          'startDate': b['startDate'],
+          'endDate': b['endDate'],
+          'reason': b['reason'],
+        };
+        absences.add(absence);
+        return _json(absence, 201);
+      }
+      return _json(absences);
+    }
+    if (path.startsWith('/api/households/h1/absences/') && request.method == 'DELETE') {
+      absences.removeWhere((a) => path.endsWith(a['id'] as String));
+      return http.Response('', 204);
     }
     if (path.endsWith('/role')) {
       final id = path.split('/')[5];
@@ -91,7 +112,7 @@ class _Server {
   });
 }
 
-Future<SessionController> _pump(WidgetTester tester, _Server server) async {
+Future<SessionController> _pump(WidgetTester tester, _Server server, {DateTimeRange? absenceDates}) async {
   tester.view.physicalSize = const Size(900, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -112,9 +133,11 @@ Future<SessionController> _pump(WidgetTester tester, _Server server) async {
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
-              onPressed: () =>
-                  Navigator.of(context)
-                      .push(MaterialPageRoute<void>(builder: (_) => const HouseholdScreen(householdId: 'h1'))),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => HouseholdScreen(householdId: 'h1', pickAbsenceDates: (_) async => absenceDates),
+                ),
+              ),
               child: const Text('Abrir membros'),
             ),
           ),
@@ -143,7 +166,6 @@ void main() {
     await _pump(tester, server);
 
     expect(find.text('Mãe (tu)'), findsOneWidget);
-    expect(find.byTooltip('Opções de Mãe'), findsNothing, reason: 'as opções sobre si próprio não aparecem');
 
     await _choose(tester, 'Zé', 'Mudar papel');
     await tester.tap(find.text('Adulto').last);
@@ -164,7 +186,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(server.bodies.last, {'userId': 'pai'});
     expect(find.text('Convidar'), findsNothing, reason: 'a Mãe deixou de ser administradora');
-    expect(find.byTooltip('Opções de Pai'), findsNothing);
+    // Já não gere membros: sobre o Pai, só pode marcar ausências.
+    await tester.tap(find.byTooltip('Opções de Pai'));
+    await tester.pumpAndSettle();
+    expect(find.text('Marcar ausência'), findsOneWidget);
+    expect(find.text('Tirar da casa'), findsNothing);
   });
 
   testWidgets('um adulto cria um perfil de criança com PIN e vê o código da família', (tester) async {
@@ -230,6 +256,32 @@ void main() {
     expect(find.text('Abrir membros'), findsOneWidget);
   });
 
+  testWidgets('cada um marca a sua ausência e pode cancelá-la', (tester) async {
+    final server = _Server(me: 'pai', members: [_member('mae', 'Mãe', 'Admin'), _member('pai', 'Pai', 'Adult')]);
+    final today = DateUtils.dateOnly(DateTime.now());
+    final end = today.add(const Duration(days: 3));
+    await _pump(
+      tester,
+      server,
+      absenceDates: DateTimeRange(start: today, end: end),
+    );
+
+    await _choose(tester, 'Pai', 'Marcar ausência');
+    expect(find.text('Pai vai estar fora'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'Motivo (opcional)'), 'Férias');
+    await tester.tap(find.widgetWithText(FilledButton, 'Marcar ausência'));
+    await tester.pumpAndSettle();
+
+    String day(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    expect(server.bodies.last, {'userId': 'pai', 'startDate': day(today), 'endDate': day(end), 'reason': 'Férias'});
+    final until = '${end.day.toString().padLeft(2, '0')}/${end.month.toString().padLeft(2, '0')}';
+    expect(find.text('Adulto · fora até $until'), findsOneWidget);
+
+    await _choose(tester, 'Pai', 'Cancelar ausência');
+    expect(server.requests, contains('DELETE /api/households/h1/absences/a1'));
+    expect(find.text('Adulto'), findsOneWidget);
+  });
+
   testWidgets('um convidado só vê a lista, sem opções nem perfis de criança', (tester) async {
     final server = _Server(
       me: 'ze',
@@ -241,7 +293,9 @@ void main() {
     );
     await _pump(tester, server);
 
-    expect(find.byType(PopupMenuButton<String>), findsNothing);
+    // Só as suas próprias opções (marcar ausência); nada sobre os outros.
+    expect(find.byType(PopupMenuButton<String>), findsOneWidget);
+    expect(find.byTooltip('Opções de Zé'), findsOneWidget);
     expect(find.text('Criar perfil de criança'), findsNothing);
     expect(find.text('Sair desta casa'), findsOneWidget);
   });

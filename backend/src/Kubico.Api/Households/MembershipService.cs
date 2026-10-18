@@ -37,6 +37,8 @@ public class MembershipService(KubicoDbContext db, HouseholdNotifier notifier, T
             await db.CalendarConnections.Where(c => c.HouseholdId == householdId && c.UserId == userId).ToListAsync(ct));
         db.Notifications.RemoveRange(
             await db.Notifications.Where(n => n.HouseholdId == householdId && n.UserId == userId).ToListAsync(ct));
+        db.MemberAbsences.RemoveRange(
+            await db.MemberAbsences.Where(a => a.HouseholdId == householdId && a.UserId == userId).ToListAsync(ct));
         db.Memberships.Remove(membership);
 
         var user = await db.Users.SingleAsync(u => u.Id == userId, ct);

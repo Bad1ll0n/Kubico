@@ -153,6 +153,7 @@ var api = app.MapGroup("/api");
 api.MapAuthEndpoints();
 api.MapHouseholdEndpoints();
 api.MapMemberEndpoints();
+api.MapAbsenceEndpoints();
 api.MapChildProfileEndpoints();
 api.MapChildSignInEndpoints();
 api.MapShoppingEndpoints();

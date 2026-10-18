@@ -40,4 +40,7 @@ String formatLongDate(DateTime d) => capitalize('${_days[d.weekday - 1]}, ${form
 /// "20/10/2026"
 String formatShortDate(DateTime d) => '${_twoDigits(d.day)}/${_twoDigits(d.month)}/${d.year}';
 
+/// "20/10"
+String formatDayMonthShort(DateTime d) => '${_twoDigits(d.day)}/${_twoDigits(d.month)}';
+
 String capitalize(String text) => text.isEmpty ? text : '${text[0].toUpperCase()}${text.substring(1)}';

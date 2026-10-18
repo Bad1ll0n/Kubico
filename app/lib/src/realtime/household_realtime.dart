@@ -71,6 +71,11 @@ class MembersChanged extends HouseholdEvent {
   final String? removedUserId;
 }
 
+/// Alguém marcou ou cancelou uma ausência (o ecrã dos membros volta a ler as ausências).
+class AbsencesChanged extends HouseholdEvent {
+  const AbsencesChanged();
+}
+
 /// Mudou uma ligação deste membro ao Google Calendar ou ao Outlook (ligada, sincronizada, desligada).
 /// Chega pelo canal pessoal; o ecrã das ligações volta a ler tudo.
 class CalendarConnectionsChanged extends HouseholdEvent {
@@ -148,6 +153,10 @@ class HouseholdRealtime {
       'MemberDeleted',
       (args) => _emit(args, (a) => MembersChanged(a[0] as String, removedUserId: a[1] as String)),
     );
+
+    for (final name in ['AbsenceUpserted', 'AbsenceDeleted']) {
+      connection.on(name, (args) => _emit(args, (_) => const AbsencesChanged()));
+    }
 
     for (final name in ['CalendarConnectionUpserted', 'CalendarConnectionDeleted']) {
       connection.on(name, (args) => _emit(args, (_) => const CalendarConnectionsChanged()));

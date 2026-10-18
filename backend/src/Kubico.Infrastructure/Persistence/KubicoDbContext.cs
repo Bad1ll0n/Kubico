@@ -28,6 +28,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
     public DbSet<PushDevice> PushDevices => Set<PushDevice>();
+    public DbSet<MemberAbsence> MemberAbsences => Set<MemberAbsence>();
     public DbSet<CalendarConnection> CalendarConnections => Set<CalendarConnection>();
     public DbSet<CalendarEventLink> CalendarEventLinks => Set<CalendarEventLink>();
 
@@ -186,6 +187,14 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasIndex(d => d.Token).IsUnique();
             e.HasIndex(d => d.UserId);
             e.HasOne<User>().WithMany().HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MemberAbsence>(e =>
+        {
+            e.Property(a => a.Reason).HasMaxLength(200);
+            e.HasIndex(a => new { a.HouseholdId, a.EndDate });
+            e.HasOne<Household>().WithMany().HasForeignKey(a => a.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<CalendarConnection>(e =>

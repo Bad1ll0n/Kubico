@@ -45,7 +45,8 @@ public class Chore
     /// Regista a conclusão: tarefas únicas ficam feitas; recorrentes avançam o prazo
     /// e, se houver rotação, passam ao membro seguinte.
     /// </summary>
-    public ChoreCompletion Complete(Guid userId, DateTimeOffset now, DateOnly today)
+    public ChoreCompletion Complete(
+        Guid userId, DateTimeOffset now, DateOnly today, Func<Guid, DateOnly, bool>? isAway = null)
     {
         var completion = new ChoreCompletion
         {
@@ -65,7 +66,13 @@ public class Chore
             DueDate = NextDueDate(DueDate ?? today, Recurrence, today);
             if (RotationUserIds.Count > 0)
             {
-                AssigneeUserId = NextInRotation(AssigneeUserId ?? userId);
+                // Quem está fora no próximo prazo é saltado. Se os outros estiverem todos fora, fica com quem a fez
+                // (ou, se também estiver fora, segue a ordem normal).
+                var current = AssigneeUserId ?? userId;
+                var due = DueDate.Value;
+                AssigneeUserId = isAway is null
+                    ? NextInRotation(current)
+                    : NextAvailable(current, due, isAway) ?? (isAway(current, due) ? NextInRotation(current) : current);
             }
         }
 
@@ -99,6 +106,45 @@ public class Chore
 
         UpdatedAt = now;
         return true;
+    }
+
+    /// <summary>
+    /// Se o responsável está fora no dia da tarefa, ela passa a quem vem a seguir na rotação e está cá. Sem rotação
+    /// (ou com toda a gente fora), fica como está. Devolve true se a tarefa mudou.
+    /// </summary>
+    public bool SkipAway(Func<Guid, DateOnly, bool> isAway, DateOnly today, DateTimeOffset now)
+    {
+        if (IsDone || AssigneeUserId is not { } assignee || RotationUserIds.Count < 2)
+        {
+            return false;
+        }
+
+        var day = DueDate ?? today;
+        if (!isAway(assignee, day) || NextAvailable(assignee, day, isAway) is not { } next)
+        {
+            return false;
+        }
+
+        AssigneeUserId = next;
+        UpdatedAt = now;
+        return true;
+    }
+
+    /// <summary>O próximo da rotação, a seguir a <paramref name="from"/>, que não está fora nesse dia.</summary>
+    private Guid? NextAvailable(Guid from, DateOnly day, Func<Guid, DateOnly, bool> isAway)
+    {
+        var index = RotationUserIds.IndexOf(from);
+        var count = RotationUserIds.Count;
+        for (var step = 1; step <= count; step++)
+        {
+            var candidate = RotationUserIds[((index + step) % count + count) % count];
+            if (candidate != from && !isAway(candidate, day))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Próximo prazo depois de hoje, saltando os períodos que já passaram.</summary>

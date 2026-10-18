@@ -88,6 +88,34 @@ class ApiClient {
 
   // --- Membros e perfis de criança ---
 
+  /// As ausências que ainda não acabaram.
+  Future<List<MemberAbsence>> getAbsences(String householdId) async => [
+    for (final a in await _send('GET', '/api/households/$householdId/absences') as List)
+      MemberAbsence.fromJson(a as Map<String, dynamic>),
+  ];
+
+  Future<MemberAbsence> createAbsence(
+    String householdId, {
+    required String userId,
+    required DateTime start,
+    required DateTime end,
+    String? reason,
+  }) async => MemberAbsence.fromJson(
+    await _send(
+      'POST',
+      '/api/households/$householdId/absences',
+      body: {
+        'userId': userId,
+        'startDate': apiDate(start),
+        'endDate': apiDate(end),
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    ) as Map<String, dynamic>,
+  );
+
+  Future<void> deleteAbsence(String householdId, String absenceId) =>
+      _send('DELETE', '/api/households/$householdId/absences/$absenceId');
+
   Future<Member> updateMemberRole(String householdId, String userId, HouseholdRole role) async => Member.fromJson(
     await _send('PUT', '/api/households/$householdId/members/$userId/role', body: {'role': role.apiValue})
         as Map<String, dynamic>,

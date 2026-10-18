@@ -24,6 +24,8 @@ public static class HouseholdEvents
     public const string RedemptionUpserted = "RedemptionUpserted";
     public const string RedemptionDeleted = "RedemptionDeleted";
     public const string MemberUpserted = "MemberUpserted";
+    public const string AbsenceUpserted = "AbsenceUpserted";
+    public const string AbsenceDeleted = "AbsenceDeleted";
 
     /// <summary>Alguém saiu ou foi tirado da casa. Vai também para o canal pessoal dessa pessoa.</summary>
     public const string MemberDeleted = "MemberDeleted";
@@ -71,6 +73,12 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub, CalendarSyncTrigge
         calendarSync.Request(householdId);
         return Group(householdId).SendAsync(HouseholdEvents.CalendarEventDeleted, eventId, ct);
     }
+
+    public Task AbsenceUpserted(Guid householdId, AbsenceDto absence, CancellationToken ct) =>
+        Group(householdId).SendAsync(HouseholdEvents.AbsenceUpserted, absence, ct);
+
+    public Task AbsenceDeleted(Guid householdId, Guid absenceId, CancellationToken ct) =>
+        Group(householdId).SendAsync(HouseholdEvents.AbsenceDeleted, absenceId, ct);
 
     public Task MemberUpserted(Guid householdId, MemberDto member, CancellationToken ct) =>
         Group(householdId).SendAsync(HouseholdEvents.MemberUpserted, householdId, member, ct);

@@ -245,8 +245,12 @@ public static class ChoreEndpoints
         }
 
         var now = clock.GetUtcNow();
+        var today = chore.Household.Today(now);
         var previousAssignee = chore.AssigneeUserId;
-        var completion = chore.Complete(userId, now, chore.Household.Today(now));
+        var absences = await db.MemberAbsences.AsNoTracking()
+            .Where(a => a.HouseholdId == householdId && a.EndDate >= today)
+            .ToListAsync(ct);
+        var completion = chore.Complete(userId, now, today, MemberAbsence.Checker(absences));
 
         // O Id já vem preenchido; sem Add explícito o EF trataria o registo como existente (UPDATE).
         db.ChoreCompletions.Add(completion);
@@ -306,7 +310,7 @@ public static class ChoreEndpoints
     }
 
     /// <summary>Avisa quem passou a ser responsável pela tarefa (atribuída, ou a sua vez na rotação).</summary>
-    private static Task NotifyAssignee(
+    internal static Task NotifyAssignee(
         NotificationService notifications, Chore chore, Guid? previousAssignee, Guid actorId, string title, CancellationToken ct)
     {
         if (chore.AssigneeUserId is not { } assignee || assignee == previousAssignee)
