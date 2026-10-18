@@ -10,6 +10,7 @@ using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
 using Kubico.Api.Rewards;
 using Kubico.Api.Shopping;
+using Kubico.Api.Support;
 using Kubico.Domain.Users;
 using Kubico.Infrastructure;
 using Kubico.Infrastructure.Persistence;
@@ -29,6 +30,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<HouseholdAccess>();
 builder.Services.AddScoped<HouseholdNotifier>();
 builder.Services.AddScoped<MembershipService>();
+builder.Services.AddOptions<SupportOptions>().Bind(builder.Configuration.GetSection(SupportOptions.SectionName));
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<NotificationService>();
@@ -163,6 +165,7 @@ api.MapCalendarFeedEndpoints();
 api.MapCalendarSyncEndpoints();
 api.MapRewardEndpoints();
 api.MapNotificationEndpoints();
+api.MapFeedbackEndpoints();
 
 app.MapHub<HouseholdHub>(HouseholdHub.Path);
 

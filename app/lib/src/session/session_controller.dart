@@ -23,6 +23,9 @@ class SessionController extends ChangeNotifier {
   SessionStatus status = SessionStatus.loading;
   User? user;
   List<HouseholdSummary> households = const [];
+
+  /// Esta conta mantém o Kubico (vê as mensagens enviadas da ajuda).
+  bool isSupport = false;
   String? _selectedHouseholdId;
   DateTime? _accessExpiresAt;
   Future<bool>? _renewing;
@@ -159,6 +162,7 @@ class SessionController extends ChangeNotifier {
     final me = await api.getMe();
     user = me.user;
     households = me.households;
+    isSupport = me.isSupport;
     status = SessionStatus.signedIn;
     notifyListeners();
   }

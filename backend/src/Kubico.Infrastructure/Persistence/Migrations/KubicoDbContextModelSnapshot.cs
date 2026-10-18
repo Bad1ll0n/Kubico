@@ -703,6 +703,46 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.ToTable("ShoppingLists");
                 });
 
+            modelBuilder.Entity("Kubico.Domain.Support.Feedback", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Device")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("HouseholdId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("HouseholdId");
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.ToTable("Feedback");
+                });
+
             modelBuilder.Entity("Kubico.Domain.Users.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -997,6 +1037,20 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Household");
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Support.Feedback", b =>
+                {
+                    b.HasOne("Kubico.Domain.Households.Household", null)
+                        .WithMany()
+                        .HasForeignKey("HouseholdId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Kubico.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Kubico.Domain.Users.RefreshToken", b =>

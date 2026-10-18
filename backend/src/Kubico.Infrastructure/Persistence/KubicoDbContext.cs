@@ -4,6 +4,7 @@ using Kubico.Domain.Households;
 using Kubico.Domain.Notifications;
 using Kubico.Domain.Rewards;
 using Kubico.Domain.Shopping;
+using Kubico.Domain.Support;
 using Kubico.Domain.Users;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
     public DbSet<PushDevice> PushDevices => Set<PushDevice>();
     public DbSet<MemberAbsence> MemberAbsences => Set<MemberAbsence>();
+    public DbSet<Feedback> Feedback => Set<Feedback>();
     public DbSet<CalendarConnection> CalendarConnections => Set<CalendarConnection>();
     public DbSet<CalendarEventLink> CalendarEventLinks => Set<CalendarEventLink>();
 
@@ -187,6 +189,17 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasIndex(d => d.Token).IsUnique();
             e.HasIndex(d => d.UserId);
             e.HasOne<User>().WithMany().HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Feedback>(e =>
+        {
+            e.Property(f => f.Kind).HasConversion<string>().HasMaxLength(20);
+            e.Property(f => f.Message).HasMaxLength(2000);
+            e.Property(f => f.Device).HasMaxLength(20);
+            e.HasIndex(f => f.CreatedAt);
+            e.HasIndex(f => new { f.UserId, f.CreatedAt });
+            e.HasOne<User>().WithMany().HasForeignKey(f => f.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Household>().WithMany().HasForeignKey(f => f.HouseholdId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<MemberAbsence>(e =>

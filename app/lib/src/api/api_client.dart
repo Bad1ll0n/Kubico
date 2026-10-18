@@ -86,6 +86,17 @@ class ApiClient {
   Future<HouseholdSummary> acceptInvite(String code) async =>
       HouseholdSummary.fromJson(await _send('POST', '/api/invites/${Uri.encodeComponent(code.trim())}/accept'));
 
+  // --- Ajuda ---
+
+  /// "Reportar um problema" ou "Sugerir uma ideia".
+  Future<void> sendFeedback(FeedbackKind kind, String message, {String? householdId}) =>
+      _send('POST', '/api/feedback', body: {'kind': kind.apiValue, 'message': message, 'householdId': ?householdId});
+
+  /// As mensagens recebidas (só para quem mantém o Kubico).
+  Future<List<FeedbackItem>> getFeedback() async => [
+    for (final f in await _send('GET', '/api/feedback') as List) FeedbackItem.fromJson(f as Map<String, dynamic>),
+  ];
+
   // --- Membros e perfis de criança ---
 
   /// As ausências que ainda não acabaram.

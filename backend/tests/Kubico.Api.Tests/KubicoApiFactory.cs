@@ -21,6 +21,8 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
     /// </summary>
     public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero));
 
+    public const string SupportEmail = "suporte@kubico.test";
+
     /// <summary>"Hoje" na casa (Europe/Lisbon) segundo o relógio dos testes.</summary>
     public DateOnly Today => DateOnly.FromDateTime(
         TimeZoneInfo.ConvertTime(Clock.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById("Europe/Lisbon")).DateTime);
@@ -44,14 +46,17 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
 
         // A sincronização com calendários externos também (CalendarSyncService, com serviços falsos).
         builder.UseSetting("CalendarSync:Enabled", "false");
+
+        // Quem lê as mensagens enviadas da ajuda (ver FeedbackTests).
+        builder.UseSetting("Support:AdminEmails:0", SupportEmail);
         builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(Clock));
     }
 
     /// <summary>Regista um utilizador novo e devolve um cliente já autenticado.</summary>
-    public async Task<(HttpClient Client, AuthResponse Auth)> CreateUserAsync(string? name = null)
+    public async Task<(HttpClient Client, AuthResponse Auth)> CreateUserAsync(string? name = null, string? email = null)
     {
         var client = CreateClient();
-        var email = $"{Guid.NewGuid():N}@kubico.test";
+        email ??= $"{Guid.NewGuid():N}@kubico.test";
         var response = await client.PostAsJsonAsync("/api/auth/register",
             new RegisterRequest(email, "palavra-passe-segura", name ?? "Teste"));
         response.EnsureSuccessStatusCode();

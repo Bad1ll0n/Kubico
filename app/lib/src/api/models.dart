@@ -94,14 +94,60 @@ class HouseholdSummary {
 }
 
 class Me {
-  const Me({required this.user, required this.households});
+  const Me({required this.user, required this.households, this.isSupport = false});
 
   final User user;
   final List<HouseholdSummary> households;
 
+  /// Esta conta mantém o Kubico e lê as mensagens enviadas da ajuda.
+  final bool isSupport;
+
   factory Me.fromJson(Map<String, dynamic> json) => Me(
     user: User.fromJson(json['user'] as Map<String, dynamic>),
     households: (json['households'] as List).map((h) => HouseholdSummary.fromJson(h as Map<String, dynamic>)).toList(),
+    isSupport: json['isSupport'] as bool? ?? false,
+  );
+}
+
+enum FeedbackKind {
+  problem('Problem'),
+  idea('Idea');
+
+  const FeedbackKind(this.apiValue);
+
+  final String apiValue;
+
+  static FeedbackKind fromApi(String value) => values.firstWhere((k) => k.apiValue == value, orElse: () => problem);
+}
+
+/// Uma mensagem enviada da ajuda (só a vê quem mantém o Kubico).
+class FeedbackItem {
+  const FeedbackItem({
+    required this.id,
+    required this.kind,
+    required this.message,
+    required this.createdAt,
+    this.device,
+    this.userName,
+    this.userEmail,
+  });
+
+  final String id;
+  final FeedbackKind kind;
+  final String message;
+  final DateTime createdAt;
+  final String? device;
+  final String? userName;
+  final String? userEmail;
+
+  factory FeedbackItem.fromJson(Map<String, dynamic> json) => FeedbackItem(
+    id: json['id'] as String,
+    kind: FeedbackKind.fromApi(json['kind'] as String),
+    message: json['message'] as String,
+    createdAt: _instant(json['createdAt'])!,
+    device: json['device'] as String?,
+    userName: json['userName'] as String?,
+    userEmail: json['userEmail'] as String?,
   );
 }
 

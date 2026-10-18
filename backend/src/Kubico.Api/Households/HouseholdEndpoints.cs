@@ -4,9 +4,11 @@ using System.Security.Cryptography;
 using Kubico.Api.Auth;
 using Kubico.Api.Common;
 using Kubico.Api.Realtime;
+using Kubico.Api.Support;
 using Kubico.Domain.Households;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Kubico.Api.Households;
 
@@ -26,7 +28,8 @@ public record HouseholdDto(Guid Id, string Name, string TimeZoneId, HouseholdRol
 
 public record InviteDto(string Code, HouseholdRole Role, DateTimeOffset ExpiresAt);
 
-public record MeDto(UserDto User, IReadOnlyList<HouseholdSummaryDto> Households);
+/// <summary><c>IsSupport</c>: esta conta mantém o Kubico e lê as mensagens enviadas da ajuda.</summary>
+public record MeDto(UserDto User, IReadOnlyList<HouseholdSummaryDto> Households, bool IsSupport = false);
 
 public static class HouseholdEndpoints
 {
@@ -52,7 +55,8 @@ public static class HouseholdEndpoints
         return api;
     }
 
-    private static async Task<IResult> GetMe(ClaimsPrincipal principal, KubicoDbContext db, CancellationToken ct)
+    private static async Task<IResult> GetMe(
+        ClaimsPrincipal principal, KubicoDbContext db, IOptions<SupportOptions> support, CancellationToken ct)
     {
         var userId = principal.GetUserId();
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, ct);
@@ -67,7 +71,7 @@ public static class HouseholdEndpoints
             .Select(m => new HouseholdSummaryDto(m.HouseholdId, m.Household.Name, m.Role))
             .ToListAsync(ct);
 
-        return Results.Ok(new MeDto(user.ToDto(), households));
+        return Results.Ok(new MeDto(user.ToDto(), households, support.Value.IsAdmin(user.Email)));
     }
 
     private static async Task<IResult> CreateHousehold(
