@@ -19,7 +19,8 @@ public record LoginRequest(
 
 public record RefreshRequest([property: Required] string RefreshToken);
 
-public record UserDto(Guid Id, string Email, string DisplayName);
+/// <summary>Quem está a usar a app. Os perfis de criança não têm email.</summary>
+public record UserDto(Guid Id, string? Email, string DisplayName, bool IsChildProfile);
 
 /// <summary>
 /// Sessão iniciada: o token de acesso (curto) e o refresh token, para pedir um par novo em <c>/auth/refresh</c>.
@@ -129,7 +130,7 @@ public static class AuthEndpoints
     private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 
     /// <summary>Que dispositivo é: a app diz (cabeçalho X-Kubico-Device); senão, adivinha-se pelo User-Agent.</summary>
-    private static string? Device(HttpRequest http)
+    internal static string? Device(HttpRequest http)
     {
         var declared = http.Headers["X-Kubico-Device"].ToString();
         if (KnownDevices.Contains(declared))
@@ -152,5 +153,5 @@ public static class AuthEndpoints
 
     private static readonly HashSet<string> KnownDevices = ["android", "ios", "windows", "macos", "linux", "web"];
 
-    public static UserDto ToDto(this User user) => new(user.Id, user.Email, user.DisplayName);
+    public static UserDto ToDto(this User user) => new(user.Id, user.Email, user.DisplayName, user.IsChildProfile);
 }

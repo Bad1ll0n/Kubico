@@ -49,7 +49,11 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         {
             e.Property(u => u.Email).HasMaxLength(256);
             e.Property(u => u.DisplayName).HasMaxLength(100);
+            e.Property(u => u.PinHash).HasMaxLength(200);
             e.HasIndex(u => u.Email).IsUnique();
+
+            // Os perfis de criança são da casa: apagar a casa apaga-os.
+            e.HasOne<Household>().WithMany().HasForeignKey(u => u.ManagedByHouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<RefreshToken>(e =>
@@ -66,6 +70,8 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         {
             e.Property(h => h.Name).HasMaxLength(100);
             e.Property(h => h.TimeZoneId).HasMaxLength(64).HasDefaultValue(Household.DefaultTimeZoneId);
+            e.Property(h => h.ChildSignInCode).HasMaxLength(16);
+            e.HasIndex(h => h.ChildSignInCode).IsUnique();
         });
 
         modelBuilder.Entity<Membership>(e =>

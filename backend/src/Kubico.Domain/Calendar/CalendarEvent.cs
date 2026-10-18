@@ -73,6 +73,21 @@ public class CalendarEvent
         EndsAt = null;
     }
 
+    /// <summary>Alguém saiu da casa: deixa de participar e de levar ou ir buscar. Devolve true se o evento mudou.</summary>
+    public bool RemoveMember(Guid userId, DateTimeOffset now)
+    {
+        if (!ParticipantUserIds.Contains(userId) && DropOffUserId != userId && PickUpUserId != userId)
+        {
+            return false;
+        }
+
+        ParticipantUserIds = [.. ParticipantUserIds.Where(id => id != userId)];
+        DropOffUserId = DropOffUserId == userId ? null : DropOffUserId;
+        PickUpUserId = PickUpUserId == userId ? null : PickUpUserId;
+        UpdatedAt = now;
+        return true;
+    }
+
     /// <summary>
     /// Ocorrências que se cruzam com [<paramref name="from"/>, <paramref name="to"/>). As repetições mantêm a hora
     /// local da casa: um evento às 18:00 continua às 18:00 depois da mudança de hora.

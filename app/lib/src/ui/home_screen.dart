@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -42,6 +44,32 @@ class _HomeScreenState extends State<HomeScreen> {
   var _pushRegistered = false;
   ShoppingList? _selectedList;
   int _section = 0;
+  StreamSubscription<HouseholdEvent>? _membership;
+
+  @override
+  void initState() {
+    super.initState();
+    // Quem sai (ou é tirado) de uma casa deixa de a ver: abre-se outra, ou o ecrã de boas-vindas.
+    _membership = context.read<HouseholdRealtime>().events.listen(_onEvent);
+  }
+
+  void _onEvent(HouseholdEvent event) {
+    if (!mounted) return;
+    final session = context.read<SessionController>();
+    if (event is MembersChanged && event.removedUserId != null && event.removedUserId == session.user?.id) {
+      final name = session.households.where((h) => h.id == event.householdId).firstOrNull?.name;
+      if (name != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Já não estás em $name.')));
+      }
+      session.householdLost(event.householdId);
+    }
+  }
+
+  @override
+  void dispose() {
+    _membership?.cancel();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -170,7 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DevicesScreen()))
                     : _signOut(session, everywhere: value == 'logout-all'),
                 itemBuilder: (_) => [
-                  PopupMenuItem(enabled: false, child: Text(session.user?.email ?? '')),
+                  PopupMenuItem(enabled: false, child: Text(session.user?.email ?? session.user?.displayName ?? '')),
                   const PopupMenuItem(value: 'devices', child: Text('Dispositivos com sessão iniciada')),
                   const PopupMenuItem(value: 'logout', child: Text('Terminar sessão')),
                   const PopupMenuItem(value: 'logout-all', child: Text('Terminar sessão em todos os dispositivos')),
@@ -235,8 +263,11 @@ class _HouseholdSwitcher extends StatelessWidget {
       itemBuilder: (_) => [
         for (final h in session.households)
           CheckedPopupMenuItem(value: h.id, checked: h.id == current.id, child: Text(h.name)),
-        const PopupMenuDivider(),
-        const PopupMenuItem(value: '_add', child: Text('Adicionar casa…')),
+        // Os perfis de criança só existem na sua casa.
+        if (session.user?.isChildProfile != true) ...[
+          const PopupMenuDivider(),
+          const PopupMenuItem(value: '_add', child: Text('Adicionar casa…')),
+        ],
       ],
       child: Row(
         mainAxisSize: MainAxisSize.min,

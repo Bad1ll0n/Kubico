@@ -18,15 +18,21 @@ enum HouseholdRole {
   static HouseholdRole fromApi(String value) => values.firstWhere((r) => r.apiValue == value, orElse: () => guest);
 }
 
+/// Quem está a usar a app. Um perfil de criança não tem email: entra com o código da família e um PIN.
 class User {
-  const User({required this.id, required this.email, required this.displayName});
+  const User({required this.id, required this.email, required this.displayName, this.isChildProfile = false});
 
   final String id;
-  final String email;
+  final String? email;
   final String displayName;
+  final bool isChildProfile;
 
-  factory User.fromJson(Map<String, dynamic> json) =>
-      User(id: json['id'] as String, email: json['email'] as String, displayName: json['displayName'] as String);
+  factory User.fromJson(Map<String, dynamic> json) => User(
+    id: json['id'] as String,
+    email: json['email'] as String?,
+    displayName: json['displayName'] as String,
+    isChildProfile: json['isChildProfile'] as bool? ?? false,
+  );
 }
 
 /// Sessão iniciada: o token de acesso (dura pouco) e o refresh token, para pedir um par novo.
@@ -100,17 +106,45 @@ class Me {
 }
 
 class Member {
-  const Member({required this.userId, required this.displayName, required this.role, required this.color});
+  const Member({
+    required this.userId,
+    required this.displayName,
+    required this.role,
+    required this.color,
+    this.isChildProfile = false,
+    this.birthDate,
+  });
 
   final String userId;
   final String displayName;
   final HouseholdRole role;
   final String color;
 
+  /// Perfil de criança: sem conta própria, entra com o código da família e um PIN.
+  final bool isChildProfile;
+  final DateTime? birthDate;
+
   factory Member.fromJson(Map<String, dynamic> json) => Member(
     userId: json['userId'] as String,
     displayName: json['displayName'] as String,
     role: HouseholdRole.fromApi(json['role'] as String),
+    color: json['color'] as String,
+    isChildProfile: json['isChildProfile'] as bool? ?? false,
+    birthDate: _day(json['birthDate']),
+  );
+}
+
+/// Um perfil de criança para escolher no ecrã de entrada (depois do código da família).
+class ChildProfileOption {
+  const ChildProfileOption({required this.userId, required this.displayName, required this.color});
+
+  final String userId;
+  final String displayName;
+  final String color;
+
+  factory ChildProfileOption.fromJson(Map<String, dynamic> json) => ChildProfileOption(
+    userId: json['userId'] as String,
+    displayName: json['displayName'] as String,
     color: json['color'] as String,
   );
 }

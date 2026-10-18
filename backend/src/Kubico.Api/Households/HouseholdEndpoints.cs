@@ -17,7 +17,9 @@ public record CreateInviteRequest(HouseholdRole Role = HouseholdRole.Adult, int 
 
 public record HouseholdSummaryDto(Guid Id, string Name, HouseholdRole Role);
 
-public record MemberDto(Guid UserId, string DisplayName, HouseholdRole Role, string Color);
+/// <summary>Um membro da casa. <c>IsChildProfile</c>: perfil de criança, sem conta própria (entra com PIN).</summary>
+public record MemberDto(
+    Guid UserId, string DisplayName, HouseholdRole Role, string Color, bool IsChildProfile = false, DateOnly? BirthDate = null);
 
 public record HouseholdDto(Guid Id, string Name, string TimeZoneId, HouseholdRole MyRole, IReadOnlyList<MemberDto> Members);
 
@@ -80,6 +82,11 @@ public static class HouseholdEndpoints
         }
 
         var userId = principal.GetUserId();
+        if (await IsChildProfile(db, userId, ct))
+        {
+            return ChildProfileForbidden();
+        }
+
         var now = clock.GetUtcNow();
 
         var household = new Household { Name = request.Name.Trim(), TimeZoneId = timeZoneId, CreatedAt = now };
@@ -117,7 +124,8 @@ public static class HouseholdEndpoints
                 h.TimeZoneId,
                 Members = h.Members
                     .OrderBy(m => m.User.DisplayName)
-                    .Select(m => new MemberDto(m.UserId, m.User.DisplayName, m.Role, m.Color))
+                    .Select(m => new MemberDto(
+                        m.UserId, m.User.DisplayName, m.Role, m.Color, m.User.ManagedByHouseholdId != null, m.User.BirthDate))
                     .ToList(),
             })
             .SingleAsync(ct);
@@ -153,7 +161,7 @@ public static class HouseholdEndpoints
         var invite = new Invite
         {
             HouseholdId = householdId,
-            Code = GenerateInviteCode(),
+            Code = GenerateCode(),
             Role = request.Role,
             CreatedByUserId = userId,
             CreatedAt = now,
@@ -170,6 +178,11 @@ public static class HouseholdEndpoints
         string code, ClaimsPrincipal principal, KubicoDbContext db, TimeProvider clock, CancellationToken ct)
     {
         var userId = principal.GetUserId();
+        if (await IsChildProfile(db, userId, ct))
+        {
+            return ChildProfileForbidden();
+        }
+
         var now = clock.GetUtcNow();
         var normalized = code.Trim().ToUpperInvariant();
 
@@ -197,7 +210,7 @@ public static class HouseholdEndpoints
             HouseholdId = invite.HouseholdId,
             UserId = userId,
             Role = invite.Role,
-            Color = MemberColors[memberCount % MemberColors.Length],
+            Color = ColorFor(memberCount),
             JoinedAt = now,
         });
         await db.SaveChangesAsync(ct);
@@ -205,6 +218,18 @@ public static class HouseholdEndpoints
         return Results.Ok(new HouseholdSummaryDto(invite.HouseholdId, invite.Household.Name, invite.Role));
     }
 
-    private static string GenerateInviteCode() =>
+    /// <summary>Um código de convite ou da família: 8 letras e algarismos fáceis de ditar.</summary>
+    internal static string GenerateCode() =>
         RandomNumberGenerator.GetString(InviteAlphabet, InviteCodeLength);
+
+    /// <summary>A cor de quem entra, pela ordem de entrada.</summary>
+    internal static string ColorFor(int memberCount) => MemberColors[memberCount % MemberColors.Length];
+
+    /// <summary>Os perfis de criança só existem na sua casa: não criam outras nem aceitam convites.</summary>
+    private static Task<bool> IsChildProfile(KubicoDbContext db, Guid userId, CancellationToken ct) =>
+        db.Users.AnyAsync(u => u.Id == userId && u.ManagedByHouseholdId != null, ct);
+
+    private static IResult ChildProfileForbidden() => Results.Problem(
+        title: "Os perfis de criança não podem criar nem juntar-se a outras casas.",
+        statusCode: StatusCodes.Status403Forbidden);
 }

@@ -287,6 +287,10 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ChildSignInCode")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -303,6 +307,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasDefaultValue("Europe/Lisbon");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ChildSignInCode")
+                        .IsUnique();
 
                     b.ToTable("Households");
                 });
@@ -707,6 +714,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateOnly?>("BirthDate")
+                        .HasColumnType("date");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -716,18 +726,32 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.Property<string>("Email")
-                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<int>("FailedPinAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ManagedByHouseholdId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PinHash")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("PinLockedUntil")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
                         .IsUnique();
+
+                    b.HasIndex("ManagedByHouseholdId");
 
                     b.ToTable("Users");
                 });
@@ -932,6 +956,14 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Users.User", b =>
+                {
+                    b.HasOne("Kubico.Domain.Households.Household", null)
+                        .WithMany()
+                        .HasForeignKey("ManagedByHouseholdId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("Kubico.Domain.Chores.Chore", b =>

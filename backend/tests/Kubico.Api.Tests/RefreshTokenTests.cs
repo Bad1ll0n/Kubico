@@ -35,7 +35,7 @@ public class RefreshTokenTests(KubicoApiFactory factory) : IClassFixture<KubicoA
         var (phone, phoneAuth) = await factory.CreateUserAsync();
         var anonymous = factory.CreateClient();
         var login = await anonymous.PostAsJsonAsync(
-            "/api/auth/login", new LoginRequest(phoneAuth.User.Email, "palavra-passe-segura"));
+            "/api/auth/login", new LoginRequest(phoneAuth.User.Email!, "palavra-passe-segura"));
         var laptopAuth = (await login.Content.ReadFromJsonAsync<AuthResponse>(TestJson.Options))!;
 
         var logout = await anonymous.PostAsJsonAsync("/api/auth/logout", new RefreshRequest(phoneAuth.RefreshToken));

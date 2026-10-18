@@ -62,6 +62,14 @@ class RewardsChanged extends HouseholdEvent {
   const RewardsChanged();
 }
 
+/// Mudou quem está numa casa: alguém entrou, mudou de papel ou saiu. [removedUserId] diz quem saiu (ou foi tirado);
+/// também chega pelo canal pessoal de quem saiu.
+class MembersChanged extends HouseholdEvent {
+  const MembersChanged(this.householdId, {this.removedUserId});
+  final String householdId;
+  final String? removedUserId;
+}
+
 /// Mudou uma ligação deste membro ao Google Calendar ou ao Outlook (ligada, sincronizada, desligada).
 /// Chega pelo canal pessoal; o ecrã das ligações volta a ler tudo.
 class CalendarConnectionsChanged extends HouseholdEvent {
@@ -130,6 +138,12 @@ class HouseholdRealtime {
     for (final name in ['RewardUpserted', 'RewardDeleted', 'RedemptionUpserted', 'RedemptionDeleted']) {
       connection.on(name, (args) => _emit(args, (_) => const RewardsChanged()));
     }
+
+    connection.on('MemberUpserted', (args) => _emit(args, (a) => MembersChanged(a[0] as String)));
+    connection.on(
+      'MemberDeleted',
+      (args) => _emit(args, (a) => MembersChanged(a[0] as String, removedUserId: a[1] as String)),
+    );
 
     for (final name in ['CalendarConnectionUpserted', 'CalendarConnectionDeleted']) {
       connection.on(name, (args) => _emit(args, (_) => const CalendarConnectionsChanged()));

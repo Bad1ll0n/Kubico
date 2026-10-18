@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../session/session_controller.dart';
+import 'child_sign_in_screen.dart';
 import 'theme.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -112,6 +113,16 @@ class _AuthScreenState extends State<AuthScreen> {
                       onPressed: _busy ? null : () => setState(() => _isRegister = !_isRegister),
                       child: Text(_isRegister ? 'Já tenho conta' : 'Criar uma conta nova'),
                     ),
+                    if (!_isRegister)
+                      TextButton.icon(
+                        onPressed: _busy
+                            ? null
+                            : () =>
+                                  Navigator.of(context)
+                                      .push(MaterialPageRoute<void>(builder: (_) => const ChildSignInScreen())),
+                        icon: const Icon(Icons.child_care),
+                        label: const Text('Entrar com perfil de criança'),
+                      ),
                   ],
                 ),
               ),
