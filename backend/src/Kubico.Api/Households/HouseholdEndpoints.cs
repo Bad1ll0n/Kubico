@@ -18,13 +18,21 @@ public record CreateHouseholdRequest(
 
 public record CreateInviteRequest(HouseholdRole Role = HouseholdRole.Adult, int ValidForDays = 7);
 
-public record HouseholdSummaryDto(Guid Id, string Name, HouseholdRole Role);
+/// <summary><c>Access</c>: o que o meu papel me deixa fazer em cada área da casa.</summary>
+public record HouseholdSummaryDto(
+    Guid Id, string Name, HouseholdRole Role, IReadOnlyDictionary<HouseholdModule, ModuleAccess> Access);
 
 /// <summary>Um membro da casa. <c>IsChildProfile</c>: perfil de criança, sem conta própria (entra com PIN).</summary>
 public record MemberDto(
     Guid UserId, string DisplayName, HouseholdRole Role, string Color, bool IsChildProfile = false, DateOnly? BirthDate = null);
 
-public record HouseholdDto(Guid Id, string Name, string TimeZoneId, HouseholdRole MyRole, IReadOnlyList<MemberDto> Members);
+public record HouseholdDto(
+    Guid Id,
+    string Name,
+    string TimeZoneId,
+    HouseholdRole MyRole,
+    IReadOnlyList<MemberDto> Members,
+    IReadOnlyDictionary<HouseholdModule, ModuleAccess> MyAccess);
 
 public record InviteDto(string Code, HouseholdRole Role, DateTimeOffset ExpiresAt);
 
@@ -69,11 +77,17 @@ public static class HouseholdEndpoints
             return Results.Unauthorized();
         }
 
-        var households = await db.Memberships.AsNoTracking()
+        var memberships = await db.Memberships.AsNoTracking()
             .Where(m => m.UserId == userId)
             .OrderBy(m => m.Household.Name)
-            .Select(m => new HouseholdSummaryDto(m.HouseholdId, m.Household.Name, m.Role))
+            .Select(m => new { m.HouseholdId, m.Household.Name, m.Role })
             .ToListAsync(ct);
+        var ids = memberships.Select(m => m.HouseholdId).ToList();
+        var chosen = await db.HouseholdPermissions.AsNoTracking().Where(p => ids.Contains(p.HouseholdId)).ToListAsync(ct);
+        var households = memberships
+            .Select(m => new HouseholdSummaryDto(
+                m.HouseholdId, m.Name, m.Role, ModulePermissions.ResolveAll(m.Role, chosen.Where(p => p.HouseholdId == m.HouseholdId))))
+            .ToList();
 
         return Results.Ok(new MeDto(user.ToDto(), households, support.Value.IsAdmin(user.Email)));
     }
@@ -112,7 +126,7 @@ public static class HouseholdEndpoints
 
         return Results.Created(
             $"/api/households/{household.Id}",
-            new HouseholdSummaryDto(household.Id, household.Name, HouseholdRole.Admin));
+            new HouseholdSummaryDto(household.Id, household.Name, HouseholdRole.Admin, ModulePermissions.ResolveAll(HouseholdRole.Admin, [])));
     }
 
     private static async Task<IResult> GetHousehold(
@@ -139,7 +153,9 @@ public static class HouseholdEndpoints
             })
             .SingleAsync(ct);
 
-        return Results.Ok(new HouseholdDto(household.Id, household.Name, household.TimeZoneId, role!.Value, household.Members));
+        var myAccess = await access.GetAllAccessAsync(householdId, role!.Value, ct);
+        return Results.Ok(new HouseholdDto(
+            household.Id, household.Name, household.TimeZoneId, role.Value, household.Members, myAccess));
     }
 
     private static async Task<IResult> CreateInvite(
@@ -205,6 +221,7 @@ public static class HouseholdEndpoints
         string code,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
         CancellationToken ct)
@@ -233,7 +250,9 @@ public static class HouseholdEndpoints
             .SingleOrDefaultAsync(m => m.HouseholdId == invite.HouseholdId && m.UserId == userId, ct);
         if (existing is not null)
         {
-            return Results.Ok(new HouseholdSummaryDto(invite.HouseholdId, invite.Household.Name, existing.Role));
+            return Results.Ok(new HouseholdSummaryDto(
+                invite.HouseholdId, invite.Household.Name, existing.Role,
+                await access.GetAllAccessAsync(invite.HouseholdId, existing.Role, ct)));
         }
 
         var memberCount = await db.Memberships.CountAsync(m => m.HouseholdId == invite.HouseholdId, ct);
@@ -251,7 +270,9 @@ public static class HouseholdEndpoints
         // Quem já está na casa vê o novo membro aparecer.
         await notifier.MemberUpserted(invite.HouseholdId, MemberEndpoints.ToDto(membership), ct);
 
-        return Results.Ok(new HouseholdSummaryDto(invite.HouseholdId, invite.Household.Name, invite.Role));
+        return Results.Ok(new HouseholdSummaryDto(
+            invite.HouseholdId, invite.Household.Name, invite.Role,
+            await access.GetAllAccessAsync(invite.HouseholdId, invite.Role, ct)));
     }
 
     /// <summary>Um código de convite ou da família: 8 letras e algarismos fáceis de ditar.</summary>

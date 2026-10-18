@@ -104,6 +104,20 @@ class ApiClient {
   // --- Membros e perfis de criança ---
 
   /// As ausências que ainda não acabaram.
+  Future<HouseholdPermissions> getPermissions(String householdId) async =>
+      HouseholdPermissions.fromJson(await _send('GET', '/api/households/$householdId/permissions'));
+
+  Future<HouseholdPermissions> savePermissions(String householdId, List<RolePermissions> roles) async =>
+      HouseholdPermissions.fromJson(
+        await _send(
+          'PUT',
+          '/api/households/$householdId/permissions',
+          body: {
+            'roles': [for (final r in roles) r.toJson()],
+          },
+        ),
+      );
+
   Future<List<MemberAbsence>> getAbsences(String householdId) async => [
     for (final a in await _send('GET', '/api/households/$householdId/absences') as List)
       MemberAbsence.fromJson(a as Map<String, dynamic>),

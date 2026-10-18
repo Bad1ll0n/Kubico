@@ -103,7 +103,8 @@ public static class CalendarEndpoints
         HouseholdAccess access,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Calendar, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;
@@ -167,7 +168,8 @@ public static class CalendarEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Calendar, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -209,8 +211,8 @@ public static class CalendarEndpoints
         TimeProvider clock,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(
-            principal.GetUserId(), householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Calendar, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -255,8 +257,8 @@ public static class CalendarEndpoints
         HouseholdNotifier notifier,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(
-            principal.GetUserId(), householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Calendar, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -294,7 +296,8 @@ public static class CalendarEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Calendar, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -393,8 +396,8 @@ public static class CalendarEndpoints
         TimeProvider clock,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(
-            principal.GetUserId(), householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Calendar, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;

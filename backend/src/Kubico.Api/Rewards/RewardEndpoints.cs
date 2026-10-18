@@ -80,7 +80,8 @@ public static class RewardEndpoints
         HouseholdAccess access,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Rewards, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;
@@ -114,7 +115,8 @@ public static class RewardEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Rewards, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -149,8 +151,8 @@ public static class RewardEndpoints
         TimeProvider clock,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(
-            principal.GetUserId(), householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Rewards, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -180,8 +182,8 @@ public static class RewardEndpoints
         HouseholdNotifier notifier,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(
-            principal.GetUserId(), householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Rewards, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -215,7 +217,8 @@ public static class RewardEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (role, error) = await access.RequireMemberAsync(userId, householdId, ct);
+        var (_, level, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Rewards, ModuleAccess.Participate, ct);
         if (error is not null)
         {
             return error;
@@ -248,7 +251,7 @@ public static class RewardEndpoints
             RequestedAt = now,
             UpdatedAt = now,
         };
-        if (role!.Value.CanManageContent())
+        if (level >= ModuleAccess.Manage)
         {
             redemption.Decide(approve: true, userId, now);
         }
@@ -317,7 +320,8 @@ public static class RewardEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Rewards, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -363,7 +367,8 @@ public static class RewardEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (role, error) = await access.RequireMemberAsync(userId, householdId, ct);
+        var (_, level, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Rewards, ModuleAccess.Participate, ct);
         if (error is not null)
         {
             return error;
@@ -376,7 +381,7 @@ public static class RewardEndpoints
             return Results.NotFound();
         }
 
-        if (redemption.UserId != userId && !role!.Value.CanManageContent())
+        if (redemption.UserId != userId && level < ModuleAccess.Manage)
         {
             return Results.Problem(
                 title: "Só quem fez o pedido, ou um adulto, o pode cancelar.",

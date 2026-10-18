@@ -18,6 +18,66 @@ enum HouseholdRole {
   static HouseholdRole fromApi(String value) => values.firstWhere((r) => r.apiValue == value, orElse: () => guest);
 }
 
+/// As áreas da app cujo acesso o administrador escolhe por papel.
+enum HouseholdModule {
+  shopping('Shopping', 'Compras', 'adiciona e marca artigos'),
+  chores('Chores', 'Tarefas', 'conclui as suas tarefas'),
+  calendar('Calendar', 'Calendário', null),
+  rewards('Rewards', 'Recompensas', 'pede recompensas');
+
+  const HouseholdModule(this.apiValue, this.label, this.participateMeans);
+
+  final String apiValue;
+  final String label;
+
+  /// O que "usa" quer dizer nesta área. No calendário não há meio-termo: ou só se vê, ou gere-se.
+  final String? participateMeans;
+
+  List<ModuleAccess> get levels => [
+    for (final a in ModuleAccess.values)
+      if (participateMeans != null || a != ModuleAccess.participate) a,
+  ];
+
+  static HouseholdModule? fromApi(String value) => values.where((m) => m.apiValue == value).firstOrNull;
+}
+
+/// O que um papel pode fazer numa área, do menos para o mais.
+enum ModuleAccess {
+  none('None', 'Não aparece'),
+  view('View', 'Só vê'),
+  participate('Participate', 'Usa'),
+  manage('Manage', 'Gere tudo');
+
+  const ModuleAccess(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
+
+  bool get canView => index >= view.index;
+  bool get canParticipate => index >= participate.index;
+  bool get canManage => this == manage;
+
+  static ModuleAccess fromApi(String value) => values.firstWhere((a) => a.apiValue == value, orElse: () => none);
+
+  /// O habitual (igual ao do servidor): adultos gerem tudo; crianças e convidados usam, e no calendário só veem.
+  static ModuleAccess defaultFor(HouseholdRole role, HouseholdModule module) => role.canManageContent
+      ? manage
+      : module == HouseholdModule.calendar
+      ? view
+      : participate;
+
+  static Map<HouseholdModule, ModuleAccess> parse(Object? json, HouseholdRole role) => {
+    for (final module in HouseholdModule.values)
+      module: json is Map && json[module.apiValue] is String
+          ? fromApi(json[module.apiValue] as String)
+          : defaultFor(role, module),
+  };
+
+  static Map<String, String> toJson(Map<HouseholdModule, ModuleAccess> access) => {
+    for (final e in access.entries) e.key.apiValue: e.value.apiValue,
+  };
+}
+
 /// Quem está a usar a app. Um perfil de criança não tem email: entra com o código da família e um PIN.
 class User {
   const User({required this.id, required this.email, required this.displayName, this.isChildProfile = false});
@@ -80,16 +140,53 @@ class DeviceSession {
 }
 
 class HouseholdSummary {
-  const HouseholdSummary({required this.id, required this.name, required this.role});
+  const HouseholdSummary({required this.id, required this.name, required this.role, this.access = const {}});
 
   final String id;
   final String name;
   final HouseholdRole role;
 
-  factory HouseholdSummary.fromJson(Map<String, dynamic> json) => HouseholdSummary(
-    id: json['id'] as String,
-    name: json['name'] as String,
-    role: HouseholdRole.fromApi(json['role'] as String),
+  /// O que posso fazer em cada área desta casa (o que faltar é o habitual do meu papel).
+  final Map<HouseholdModule, ModuleAccess> access;
+
+  ModuleAccess accessTo(HouseholdModule module) => access[module] ?? ModuleAccess.defaultFor(role, module);
+
+  factory HouseholdSummary.fromJson(Map<String, dynamic> json) {
+    final role = HouseholdRole.fromApi(json['role'] as String);
+    return HouseholdSummary(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      role: role,
+      access: ModuleAccess.parse(json['access'], role),
+    );
+  }
+}
+
+/// O acesso de um papel a cada área.
+class RolePermissions {
+  const RolePermissions({required this.role, required this.access});
+
+  final HouseholdRole role;
+  final Map<HouseholdModule, ModuleAccess> access;
+
+  factory RolePermissions.fromJson(Map<String, dynamic> json) {
+    final role = HouseholdRole.fromApi(json['role'] as String);
+    return RolePermissions(role: role, access: ModuleAccess.parse(json['access'], role));
+  }
+
+  Map<String, dynamic> toJson() => {'role': role.apiValue, 'access': ModuleAccess.toJson(access)};
+}
+
+/// O que cada papel (adulto, criança, convidado) pode fazer nesta casa, e o habitual. O administrador tem tudo.
+class HouseholdPermissions {
+  const HouseholdPermissions({required this.roles, required this.defaults});
+
+  final List<RolePermissions> roles;
+  final List<RolePermissions> defaults;
+
+  factory HouseholdPermissions.fromJson(Map<String, dynamic> json) => HouseholdPermissions(
+    roles: [for (final r in json['roles'] as List) RolePermissions.fromJson(r as Map<String, dynamic>)],
+    defaults: [for (final r in json['defaults'] as List) RolePermissions.fromJson(r as Map<String, dynamic>)],
   );
 }
 

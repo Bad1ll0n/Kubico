@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Kubico.Api.Common;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Calendar;
 using Kubico.Domain.Households;
@@ -15,6 +16,7 @@ namespace Kubico.Api.Calendar.Sync;
 /// </summary>
 public class CalendarSyncService(
     KubicoDbContext db,
+    HouseholdAccess access,
     IEnumerable<ICalendarProvider> providers,
     CalendarSecrets secrets,
     CalendarSyncLocks locks,
@@ -69,10 +71,7 @@ public class CalendarSyncService(
             return null;
         }
 
-        var role = await db.Memberships
-            .Where(m => m.HouseholdId == connection.HouseholdId && m.UserId == connection.UserId)
-            .Select(m => (HouseholdRole?)m.Role)
-            .SingleOrDefaultAsync(ct);
+        var role = await access.GetRoleAsync(connection.UserId, connection.HouseholdId, ct);
         if (role is null)
         {
             // Saiu da casa: a ligação deixa de fazer sentido (a cópia fica na conta dele, sem novidades).
@@ -83,10 +82,15 @@ public class CalendarSyncService(
 
         var provider = Provider(connection.Provider);
         var household = await db.Households.AsNoTracking().SingleAsync(h => h.Id == connection.HouseholdId, ct);
-        var run = new SyncRun(connection, household, role.Value.CanManageContent());
+        var level = await access.GetAccessAsync(connection.HouseholdId, role.Value, HouseholdModule.Calendar, ct);
+        var run = new SyncRun(connection, household, level >= ModuleAccess.Manage);
         if (provider is not { IsConfigured: true })
         {
             connection.LastError = "Este serviço deixou de estar disponível no servidor do Kubico.";
+        }
+        else if (level < ModuleAccess.View)
+        {
+            connection.LastError = "Já não tens acesso ao calendário desta casa.";
         }
         else
         {

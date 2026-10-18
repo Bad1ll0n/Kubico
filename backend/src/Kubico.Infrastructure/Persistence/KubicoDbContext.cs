@@ -30,6 +30,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
     public DbSet<PushDevice> PushDevices => Set<PushDevice>();
     public DbSet<MemberAbsence> MemberAbsences => Set<MemberAbsence>();
+    public DbSet<HouseholdPermission> HouseholdPermissions => Set<HouseholdPermission>();
     public DbSet<Feedback> Feedback => Set<Feedback>();
     public DbSet<CalendarConnection> CalendarConnections => Set<CalendarConnection>();
     public DbSet<CalendarEventLink> CalendarEventLinks => Set<CalendarEventLink>();
@@ -200,6 +201,15 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasIndex(f => new { f.UserId, f.CreatedAt });
             e.HasOne<User>().WithMany().HasForeignKey(f => f.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Household>().WithMany().HasForeignKey(f => f.HouseholdId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<HouseholdPermission>(e =>
+        {
+            e.HasKey(p => new { p.HouseholdId, p.Role, p.Module });
+            e.Property(p => p.Role).HasConversion<string>().HasMaxLength(20);
+            e.Property(p => p.Module).HasConversion<string>().HasMaxLength(20);
+            e.Property(p => p.Access).HasConversion<string>().HasMaxLength(20);
+            e.HasOne<Household>().WithMany().HasForeignKey(p => p.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<MemberAbsence>(e =>

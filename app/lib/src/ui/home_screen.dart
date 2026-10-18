@@ -35,16 +35,16 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   static const _sections = [
-    (icon: Icons.shopping_cart_outlined, selectedIcon: Icons.shopping_cart, label: 'Compras'),
-    (icon: Icons.task_alt_outlined, selectedIcon: Icons.task_alt, label: 'Tarefas'),
-    (icon: Icons.calendar_month_outlined, selectedIcon: Icons.calendar_month, label: 'Calendário'),
-    (icon: Icons.card_giftcard_outlined, selectedIcon: Icons.card_giftcard, label: 'Recompensas'),
+    (module: HouseholdModule.shopping, icon: Icons.shopping_cart_outlined, selectedIcon: Icons.shopping_cart),
+    (module: HouseholdModule.chores, icon: Icons.task_alt_outlined, selectedIcon: Icons.task_alt),
+    (module: HouseholdModule.calendar, icon: Icons.calendar_month_outlined, selectedIcon: Icons.calendar_month),
+    (module: HouseholdModule.rewards, icon: Icons.card_giftcard_outlined, selectedIcon: Icons.card_giftcard),
   ];
 
   String? _connectedHouseholdId;
   var _pushRegistered = false;
   ShoppingList? _selectedList;
-  int _section = 0;
+  HouseholdModule _section = HouseholdModule.shopping;
   StreamSubscription<HouseholdEvent>? _membership;
 
   @override
@@ -88,8 +88,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onEvent(HouseholdEvent event) {
     if (!mounted) return;
-    if (event is! MembersChanged) return;
     final session = context.read<SessionController>();
+    if (event is PermissionsChanged) {
+      // As áreas que deixei de ver desaparecem; as novas aparecem.
+      session.refresh().ignore();
+      return;
+    }
+    if (event is! MembersChanged) return;
     if (event.removedUserId != null && event.removedUserId == session.user?.id) {
       final name = session.households.where((h) => h.id == event.householdId).firstOrNull?.name;
       if (name != null) {
@@ -162,11 +167,12 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _selectedList = list);
       return;
     }
+    final access = context.read<SessionController>().currentHousehold?.accessTo(HouseholdModule.shopping);
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => Scaffold(
           appBar: AppBar(title: Text(list.name)),
-          body: ShoppingItemsView(householdId: list.householdId, list: list),
+          body: ShoppingItemsView(householdId: list.householdId, list: list, canEdit: access?.canParticipate ?? true),
         ),
       ),
     );
@@ -203,17 +209,31 @@ class _HomeScreenState extends State<HomeScreen> {
                             householdId: household.id,
                             list: _selectedList!,
                             showTitle: true,
+                            canEdit: household.accessTo(HouseholdModule.shopping).canParticipate,
                           ),
                   ),
                 ],
               )
             : lists;
-        final content = switch (_section) {
-          0 => shopping,
-          1 => ChoresView(key: ValueKey('chores-${household.id}'), household: household),
-          2 => CalendarView(key: ValueKey('calendar-${household.id}'), household: household),
-          _ => RewardsView(key: ValueKey('rewards-${household.id}'), household: household),
+        // Só aparecem as áreas a que o meu papel dá acesso nesta casa.
+        final sections = [
+          for (final s in _sections)
+            if (household.accessTo(s.module).canView) s,
+        ];
+        final section = sections.where((s) => s.module == _section).firstOrNull ?? sections.firstOrNull;
+        // Se a área aberta deixou de se ver, fica-se na que a substituiu (mesmo que a outra volte).
+        if (section != null) _section = section.module;
+        final index = section == null ? 0 : sections.indexOf(section);
+        void select(int i) => setState(() => _section = sections[i].module);
+        final Widget content = switch (section?.module) {
+          null => const _NoAreas(),
+          HouseholdModule.shopping => shopping,
+          HouseholdModule.chores => ChoresView(key: ValueKey('chores-${household.id}'), household: household),
+          HouseholdModule.calendar => CalendarView(key: ValueKey('calendar-${household.id}'), household: household),
+          HouseholdModule.rewards => RewardsView(key: ValueKey('rewards-${household.id}'), household: household),
         };
+        // As barras de navegação precisam de pelo menos duas áreas.
+        final navigation = sections.length >= 2;
 
         return Scaffold(
           appBar: AppBar(
@@ -247,19 +267,19 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          body: wide
+          body: wide && navigation
               ? Row(
                   children: [
                     NavigationRail(
-                      selectedIndex: _section,
-                      onDestinationSelected: (i) => setState(() => _section = i),
+                      selectedIndex: index,
+                      onDestinationSelected: select,
                       labelType: NavigationRailLabelType.all,
                       destinations: [
-                        for (final s in _sections)
+                        for (final s in sections)
                           NavigationRailDestination(
                             icon: Icon(s.icon),
                             selectedIcon: Icon(s.selectedIcon),
-                            label: Text(s.label),
+                            label: Text(s.module.label),
                           ),
                       ],
                     ),
@@ -268,14 +288,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 )
               : content,
-          bottomNavigationBar: wide
+          bottomNavigationBar: wide || !navigation
               ? null
               : NavigationBar(
-                  selectedIndex: _section,
-                  onDestinationSelected: (i) => setState(() => _section = i),
+                  selectedIndex: index,
+                  onDestinationSelected: select,
                   destinations: [
-                    for (final s in _sections)
-                      NavigationDestination(icon: Icon(s.icon), selectedIcon: Icon(s.selectedIcon), label: s.label),
+                    for (final s in sections)
+                      NavigationDestination(
+                        icon: Icon(s.icon),
+                        selectedIcon: Icon(s.selectedIcon),
+                        label: s.module.label,
+                      ),
                   ],
                 ),
         );
@@ -318,6 +342,35 @@ class _HouseholdSwitcher extends StatelessWidget {
           Flexible(child: Text(current.name, overflow: TextOverflow.ellipsis)),
           const Icon(Icons.arrow_drop_down),
         ],
+      ),
+    );
+  }
+}
+
+/// O administrador tirou o acesso a todas as áreas a este papel.
+class _NoAreas extends StatelessWidget {
+  const _NoAreas();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock_outline, size: 48, color: theme.colorScheme.outline),
+            const SizedBox(height: 12),
+            Text(
+              'Ainda não tens nada para ver nesta casa',
+              style: theme.textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            const Text('Pede ao administrador da casa para te dar acesso.', textAlign: TextAlign.center),
+          ],
+        ),
       ),
     );
   }

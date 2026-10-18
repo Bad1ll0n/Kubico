@@ -314,6 +314,29 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.ToTable("Households");
                 });
 
+            modelBuilder.Entity("Kubico.Domain.Households.HouseholdPermission", b =>
+                {
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Module")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Access")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("HouseholdId", "Role", "Module");
+
+                    b.ToTable("HouseholdPermissions");
+                });
+
             modelBuilder.Entity("Kubico.Domain.Households.Invite", b =>
                 {
                     b.Property<Guid>("Id")
@@ -912,6 +935,15 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Chore");
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Households.HouseholdPermission", b =>
+                {
+                    b.HasOne("Kubico.Domain.Households.Household", null)
+                        .WithMany()
+                        .HasForeignKey("HouseholdId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Kubico.Domain.Households.Invite", b =>

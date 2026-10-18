@@ -30,7 +30,8 @@ class _RewardsViewState extends State<RewardsView> {
   ApiClient get _api => context.read<ApiClient>();
   String get _householdId => widget.household.id;
   String? get _myUserId => context.read<SessionController>().user?.id;
-  bool get _canManage => widget.household.role.canManageContent;
+  ModuleAccess get _access => widget.household.accessTo(HouseholdModule.rewards);
+  bool get _canManage => _access.canManage;
 
   @override
   void initState() {
@@ -203,7 +204,7 @@ class _RewardsViewState extends State<RewardsView> {
               _RewardTile(
                 reward: reward,
                 available: available,
-                onRedeem: () => _redeem(reward),
+                onRedeem: _access.canParticipate ? () => _redeem(reward) : null,
                 onTap: _canManage ? () => _edit(reward) : null,
               ),
             if (history.isNotEmpty) ...[
@@ -280,7 +281,7 @@ class _RewardTile extends StatelessWidget {
 
   final Reward reward;
   final int available;
-  final VoidCallback onRedeem;
+  final VoidCallback? onRedeem;
   final VoidCallback? onTap;
 
   @override

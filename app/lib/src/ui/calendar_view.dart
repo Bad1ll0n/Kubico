@@ -284,7 +284,7 @@ class _CalendarViewState extends State<CalendarView> {
   @override
   Widget build(BuildContext context) {
     final calendar = _calendar;
-    final canManage = widget.household.role.canManageContent;
+    final canManage = widget.household.accessTo(HouseholdModule.calendar).canManage;
 
     return Scaffold(
       floatingActionButton: canManage
@@ -412,7 +412,7 @@ class _CalendarViewState extends State<CalendarView> {
       color: _colorFor(event),
       details: _details,
       conflicts: occurrence.conflictUserIds.isEmpty ? null : _unavailable(occurrence.conflictUserIds),
-      onTap: widget.household.role.canManageContent ? () => _edit(event, occurrence) : null,
+      onTap: widget.household.accessTo(HouseholdModule.calendar).canManage ? () => _edit(event, occurrence) : null,
     );
   }
 }

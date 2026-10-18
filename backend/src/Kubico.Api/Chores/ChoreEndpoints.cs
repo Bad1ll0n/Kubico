@@ -68,7 +68,8 @@ public static class ChoreEndpoints
         HouseholdAccess access,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Chores, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;
@@ -106,7 +107,8 @@ public static class ChoreEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Chores, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -148,8 +150,8 @@ public static class ChoreEndpoints
         TimeProvider clock,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(
-            principal.GetUserId(), householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Chores, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -186,8 +188,8 @@ public static class ChoreEndpoints
         HouseholdNotifier notifier,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(
-            principal.GetUserId(), householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Chores, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -217,7 +219,8 @@ public static class ChoreEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (role, error) = await access.RequireMemberAsync(userId, householdId, ct);
+        var (_, level, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Chores, ModuleAccess.Participate, ct);
         if (error is not null)
         {
             return error;
@@ -237,7 +240,7 @@ public static class ChoreEndpoints
         }
 
         // Crianças e convidados só concluem as suas tarefas ou as que são de qualquer pessoa.
-        if (!role!.Value.CanManageContent() && chore.AssigneeUserId is { } assignee && assignee != userId)
+        if (level < ModuleAccess.Manage && chore.AssigneeUserId is { } assignee && assignee != userId)
         {
             return Results.Problem(
                 title: "Esta tarefa está atribuída a outra pessoa.",
@@ -271,7 +274,8 @@ public static class ChoreEndpoints
         TimeProvider clock,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Chores, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;

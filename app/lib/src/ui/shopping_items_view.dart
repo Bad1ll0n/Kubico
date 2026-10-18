@@ -10,11 +10,20 @@ import '../shopping/shopping_repository.dart';
 /// Artigos de uma lista, sincronizados em tempo real com os outros membros. Funciona sem rede: as alterações
 /// aparecem logo e são enviadas quando a ligação voltar (ver [ShoppingRepository]).
 class ShoppingItemsView extends StatefulWidget {
-  const ShoppingItemsView({super.key, required this.householdId, required this.list, this.showTitle = false});
+  const ShoppingItemsView({
+    super.key,
+    required this.householdId,
+    required this.list,
+    this.showTitle = false,
+    this.canEdit = true,
+  });
 
   final String householdId;
   final ShoppingList list;
   final bool showTitle;
+
+  /// Falso para quem só vê as compras: sem adicionar, marcar nem apagar artigos.
+  final bool canEdit;
 
   @override
   State<ShoppingItemsView> createState() => _ShoppingItemsViewState();
@@ -156,20 +165,21 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
               child: Text(widget.list.name, style: theme.textTheme.titleLarge),
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: TextField(
-            controller: _input,
-            focusNode: _inputFocus,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: InputDecoration(
-              hintText: 'Adicionar artigo (ex.: 2 leite)',
-              prefixIcon: const Icon(Icons.add),
-              suffixIcon: IconButton(icon: const Icon(Icons.send), tooltip: 'Adicionar', onPressed: _add),
+        if (widget.canEdit)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: TextField(
+              controller: _input,
+              focusNode: _inputFocus,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                hintText: 'Adicionar artigo (ex.: 2 leite)',
+                prefixIcon: const Icon(Icons.add),
+                suffixIcon: IconButton(icon: const Icon(Icons.send), tooltip: 'Adicionar', onPressed: _add),
+              ),
+              onSubmitted: (_) => _add(),
             ),
-            onSubmitted: (_) => _add(),
           ),
-        ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _load,
@@ -188,11 +198,12 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
                     child: Row(
                       children: [
                         Expanded(child: Text('No carrinho (${done.length})', style: theme.textTheme.titleSmall)),
-                        TextButton.icon(
-                          onPressed: _clearChecked,
-                          icon: const Icon(Icons.cleaning_services_outlined, size: 18),
-                          label: const Text('Limpar'),
-                        ),
+                        if (widget.canEdit)
+                          TextButton.icon(
+                            onPressed: _clearChecked,
+                            icon: const Icon(Icons.cleaning_services_outlined, size: 18),
+                            label: const Text('Limpar'),
+                          ),
                       ],
                     ),
                   ),
@@ -211,7 +222,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     final subtitle = [item.quantity, item.category].whereType<String>().join(' · ');
     return Dismissible(
       key: ValueKey(item.id),
-      direction: DismissDirection.endToStart,
+      direction: widget.canEdit ? DismissDirection.endToStart : DismissDirection.none,
       background: Container(
         color: theme.colorScheme.errorContainer,
         alignment: Alignment.centerRight,
@@ -221,7 +232,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
       onDismissed: (_) => _delete(item),
       child: CheckboxListTile(
         value: item.isChecked,
-        onChanged: (_) => _toggle(item),
+        onChanged: widget.canEdit ? (_) => _toggle(item) : null,
         controlAffinity: ListTileControlAffinity.leading,
         title: Text(
           item.name,

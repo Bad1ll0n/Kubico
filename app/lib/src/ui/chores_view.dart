@@ -125,8 +125,12 @@ class _ChoresViewState extends State<ChoresView> {
     });
   }
 
+  ModuleAccess get _access => widget.household.accessTo(HouseholdModule.chores);
+
+  /// Quem gere conclui qualquer tarefa; quem usa, as suas e as de ninguém; quem só vê, nenhuma.
   bool _canComplete(Chore chore) =>
-      widget.household.role.canManageContent || chore.assigneeUserId == null || chore.assigneeUserId == _myUserId;
+      _access.canManage ||
+      (_access.canParticipate && (chore.assigneeUserId == null || chore.assigneeUserId == _myUserId));
 
   Future<void> _complete(Chore chore) async {
     try {
@@ -175,7 +179,7 @@ class _ChoresViewState extends State<ChoresView> {
   @override
   Widget build(BuildContext context) {
     final chores = _chores;
-    final canManage = widget.household.role.canManageContent;
+    final canManage = _access.canManage;
 
     if (chores == null) {
       return Center(
@@ -239,6 +243,7 @@ class _ChoresViewState extends State<ChoresView> {
                     chore: chore,
                     assignee: _details?.member(chore.assigneeUserId),
                     canComplete: _canComplete(chore),
+                    viewOnly: !_access.canParticipate,
                     onComplete: () => _complete(chore),
                     onTap: canManage ? () => _edit(chore) : null,
                   ),
@@ -257,6 +262,7 @@ class _ChoreTile extends StatelessWidget {
     required this.canComplete,
     required this.onComplete,
     this.onTap,
+    this.viewOnly = false,
   });
 
   final Chore chore;
@@ -264,6 +270,9 @@ class _ChoreTile extends StatelessWidget {
   final bool canComplete;
   final VoidCallback onComplete;
   final VoidCallback? onTap;
+
+  /// Quem só vê as tarefas não as conclui.
+  final bool viewOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -279,7 +288,11 @@ class _ChoreTile extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         leading: IconButton(
-          tooltip: canComplete ? 'Marcar como feita' : 'Atribuída a outra pessoa',
+          tooltip: canComplete
+              ? 'Marcar como feita'
+              : viewOnly
+              ? 'Só podes ver as tarefas'
+              : 'Atribuída a outra pessoa',
           onPressed: canComplete ? onComplete : null,
           icon: const Icon(Icons.radio_button_unchecked),
           selectedIcon: const Icon(Icons.check_circle),

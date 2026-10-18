@@ -11,6 +11,7 @@ import '../households/invite_link.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import 'dates_pt.dart';
+import 'permissions_screen.dart';
 import 'theme.dart';
 
 /// Membros da casa: convites e papéis (administradores), perfis de criança com PIN e o código da família (adultos),
@@ -341,6 +342,19 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                 children: [
                   for (final member in details.members) _memberTile(member, details, isMe: member.userId == me),
                   if (details.myRole.canManageContent) ...[const SizedBox(height: 12), _childrenCard()],
+                  if (details.myRole.canManageMembers) ...[
+                    const SizedBox(height: 12),
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.tune),
+                        title: const Text('Permissões'),
+                        subtitle: const Text('O que adultos, crianças e convidados podem fazer em cada área'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(context)
+                            .push(MaterialPageRoute<void>(builder: (_) => PermissionsScreen(householdId: details.id))),
+                      ),
+                    ),
+                  ],
                   if (meMember != null && !meMember.isChildProfile) ...[
                     const SizedBox(height: 24),
                     Center(

@@ -67,7 +67,8 @@ public static class ShoppingEndpoints
     private static async Task<IResult> GetLists(
         Guid householdId, ClaimsPrincipal principal, KubicoDbContext db, HouseholdAccess access, CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;
@@ -93,8 +94,8 @@ public static class ShoppingEndpoints
         TimeProvider clock,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(
-            principal.GetUserId(), householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -124,8 +125,8 @@ public static class ShoppingEndpoints
         HouseholdNotifier notifier,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(
-            principal.GetUserId(), householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -147,7 +148,8 @@ public static class ShoppingEndpoints
     private static async Task<IResult> GetItems(
         Guid householdId, Guid listId, ClaimsPrincipal principal, KubicoDbContext db, HouseholdAccess access, CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;
@@ -185,7 +187,8 @@ public static class ShoppingEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Shopping, ModuleAccess.Participate, ct);
         if (error is not null)
         {
             return error;
@@ -238,7 +241,8 @@ public static class ShoppingEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Shopping, ModuleAccess.Participate, ct);
         if (error is not null)
         {
             return error;
@@ -290,7 +294,8 @@ public static class ShoppingEndpoints
         HouseholdNotifier notifier,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.Participate, ct);
         if (error is not null)
         {
             return error;
@@ -318,7 +323,8 @@ public static class ShoppingEndpoints
         HouseholdNotifier notifier,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.Participate, ct);
         if (error is not null)
         {
             return error;

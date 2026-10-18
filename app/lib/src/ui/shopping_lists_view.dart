@@ -120,7 +120,7 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
 
   @override
   Widget build(BuildContext context) {
-    final canManage = widget.household.role.canManageContent;
+    final canManage = widget.household.accessTo(HouseholdModule.shopping).canManage;
     final lists = _lists;
 
     Widget body;

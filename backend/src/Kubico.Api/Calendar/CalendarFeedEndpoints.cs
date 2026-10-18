@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Kubico.Api.Common;
+using Kubico.Domain.Households;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -42,7 +43,8 @@ public static class CalendarFeedEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Calendar, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;
@@ -68,7 +70,8 @@ public static class CalendarFeedEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Calendar, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;

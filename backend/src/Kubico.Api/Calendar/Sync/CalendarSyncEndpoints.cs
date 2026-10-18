@@ -23,7 +23,7 @@ public record CalendarConnectionDto(
 /// <summary>Um serviço de calendário e se este servidor tem credenciais para ele.</summary>
 public record CalendarSyncProviderDto(CalendarProvider Provider, bool Available);
 
-/// <summary><c>CanConnect</c>: só adultos e administradores ligam contas (o que mudarem lá muda no Kubico).</summary>
+/// <summary><c>CanConnect</c>: só quem gere o calendário da casa liga contas (o que mudar lá muda no Kubico).</summary>
 public record CalendarSyncDto(
     bool CanConnect, IReadOnlyList<CalendarSyncProviderDto> Providers, IReadOnlyList<CalendarConnectionDto> Connections);
 
@@ -68,7 +68,8 @@ public static class CalendarSyncEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (role, error) = await access.RequireMemberAsync(userId, householdId, ct);
+        var (_, level, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Calendar, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;
@@ -79,7 +80,7 @@ public static class CalendarSyncEndpoints
             .ToListAsync(ct);
 
         return Results.Ok(new CalendarSyncDto(
-            role!.Value.CanManageContent(),
+            level >= ModuleAccess.Manage,
             [.. Enum.GetValues<CalendarProvider>().Select(p => new CalendarSyncProviderDto(p, sync.Provider(p)?.IsConfigured == true))],
             [.. connections.OrderBy(c => c.Provider).Select(ToDto)]));
     }
@@ -98,7 +99,8 @@ public static class CalendarSyncEndpoints
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Calendar, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -135,6 +137,7 @@ public static class CalendarSyncEndpoints
         HttpRequest http,
         IConfiguration configuration,
         KubicoDbContext db,
+        HouseholdAccess access,
         CalendarSyncService sync,
         CalendarSecrets secrets,
         CalendarSyncTrigger trigger,
@@ -160,12 +163,10 @@ public static class CalendarSyncEndpoints
             return Page("O pedido expirou", "Passou demasiado tempo. Volta à app do Kubico e tenta outra vez.", 400);
         }
 
-        var role = await db.Memberships
-            .Where(m => m.HouseholdId == request.HouseholdId && m.UserId == request.UserId)
-            .Select(m => (HouseholdRole?)m.Role)
-            .SingleOrDefaultAsync(ct);
+        var role = await access.GetRoleAsync(request.UserId, request.HouseholdId, ct);
         var household = await db.Households.AsNoTracking().SingleOrDefaultAsync(h => h.Id == request.HouseholdId, ct);
-        if (role?.CanManageContent() != true || household is null)
+        if (role is null || household is null
+            || await access.GetAccessAsync(request.HouseholdId, role.Value, HouseholdModule.Calendar, ct) < ModuleAccess.Manage)
         {
             return Page("Sem permissão", "Já não podes ligar calendários nesta casa.", 403);
         }
