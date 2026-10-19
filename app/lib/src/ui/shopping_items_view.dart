@@ -3,9 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../api/api_client.dart';
 import '../api/models.dart';
 import '../realtime/household_realtime.dart';
 import '../shopping/shopping_repository.dart';
+import '../shopping/voice_input.dart';
+import 'scanner_screen.dart';
+import 'shopping_add_dialogs.dart';
 
 /// Artigos de uma lista, sincronizados em tempo real com os outros membros. Funciona sem rede: as alterações
 /// aparecem logo e são enviadas quando a ligação voltar (ver [ShoppingRepository]).
@@ -16,6 +20,8 @@ class ShoppingItemsView extends StatefulWidget {
     required this.list,
     this.showTitle = false,
     this.canEdit = true,
+    this.voice,
+    this.scanBarcode,
   });
 
   final String householdId;
@@ -24,6 +30,12 @@ class ShoppingItemsView extends StatefulWidget {
 
   /// Falso para quem só vê as compras: sem adicionar, marcar nem apagar artigos.
   final bool canEdit;
+
+  /// O ditado (por omissão, o do sistema).
+  final VoiceInput? voice;
+
+  /// Lê um código de barras (por omissão, com a câmara; só onde houver câmara).
+  final Future<String?> Function(BuildContext context)? scanBarcode;
 
   @override
   State<ShoppingItemsView> createState() => _ShoppingItemsViewState();
@@ -116,6 +128,69 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     _upsert(_shopping.addItem(_householdId, _listId, name: name, quantity: quantity));
   }
 
+  static Future<String?> _scanWithCamera(BuildContext context) => Navigator.of(context).push<String>(
+    MaterialPageRoute(
+      builder: (_) => ScannerScreen<String>(
+        title: 'Ler código de barras',
+        hint: 'Aponta para o código de barras do produto',
+        accept: (raw) => isValidBarcode(raw.trim()) ? raw.trim() : null,
+      ),
+    ),
+  );
+
+  void _tell(String message) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(message)));
+
+  /// Lê o código, procura o produto e confirma o nome antes de o pôr na lista (a casa fica com esse nome).
+  Future<void> _scan() async {
+    final barcode = await (widget.scanBarcode ?? _scanWithCamera)(context);
+    if (barcode == null || !mounted) return;
+    final already = _items?.values.where((i) => i.barcode == barcode && !i.isChecked).firstOrNull;
+    if (already != null) {
+      _tell('«${already.name}» já está na lista.');
+      return;
+    }
+
+    Product? product;
+    String? problem;
+    try {
+      product = await _shopping.api.lookupProduct(_householdId, barcode);
+      if (product == null) problem = 'Não conhecemos este produto. Escreve o nome: fica guardado para a próxima vez.';
+    } on ApiException catch (e) {
+      problem = e.message;
+    } catch (_) {
+      problem = 'Sem ligação: escreve o nome do produto.';
+    }
+    if (!mounted) return;
+
+    final item = await showDialog<ScannedItem>(
+      context: context,
+      builder: (_) => ScannedProductDialog(barcode: barcode, product: product, problem: problem),
+    );
+    if (item == null) return;
+    _upsert(_shopping.addItem(_householdId, _listId, name: item.name, category: item.category, barcode: barcode));
+  }
+
+  /// Ouve os artigos ditos e põe-nos todos na lista.
+  Future<void> _dictate() async {
+    final text = await showDialog<String>(
+      context: context,
+      builder: (_) => DictationDialog(voice: widget.voice ?? SpeechVoiceInput.shared),
+    );
+    if (text == null || !mounted) return;
+    final added = <String>[];
+    for (final entry in parseSpokenItems(text)) {
+      final (name, quantity) = parseItemInput(entry);
+      if (name.isEmpty) continue;
+      _upsert(_shopping.addItem(_householdId, _listId, name: name, quantity: quantity));
+      added.add(name);
+    }
+    if (added.isNotEmpty) {
+      _tell(added.length == 1 ? 'Adicionado: ${added.single}.' : 'Adicionados ${added.length} artigos.');
+    }
+  }
+
   void _toggle(ShoppingItem item) {
     setState(() => _items![item.id] = item.copyWith(isChecked: !item.isChecked));
     _shopping.setChecked(_householdId, _listId, item.id, !item.isChecked);
@@ -175,7 +250,19 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
               decoration: InputDecoration(
                 hintText: 'Adicionar artigo (ex.: 2 leite)',
                 prefixIcon: const Icon(Icons.add),
-                suffixIcon: IconButton(icon: const Icon(Icons.send), tooltip: 'Adicionar', onPressed: _add),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.scanBarcode != null || scannerAvailable)
+                      IconButton(
+                        icon: const Icon(Icons.qr_code_scanner),
+                        tooltip: 'Ler código de barras',
+                        onPressed: _scan,
+                      ),
+                    IconButton(icon: const Icon(Icons.mic_none), tooltip: 'Ditar artigos', onPressed: _dictate),
+                    IconButton(icon: const Icon(Icons.send), tooltip: 'Adicionar', onPressed: _add),
+                  ],
+                ),
               ),
               onSubmitted: (_) => _add(),
             ),

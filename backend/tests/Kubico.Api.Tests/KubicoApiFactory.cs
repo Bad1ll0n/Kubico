@@ -49,8 +49,15 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
 
         // Quem lê as mensagens enviadas da ajuda (ver FeedbackTests).
         builder.UseSetting("Support:AdminEmails:0", SupportEmail);
-        builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(Clock));
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<TimeProvider>(Clock);
+            services.AddSingleton<Kubico.Api.Shopping.IProductCatalog>(Products);
+        });
     }
+
+    /// <summary>A base pública de produtos dos testes (não vai à internet).</summary>
+    public FakeProductCatalog Products { get; } = new();
 
     /// <summary>Regista um utilizador novo e devolve um cliente já autenticado.</summary>
     public async Task<(HttpClient Client, AuthResponse Auth)> CreateUserAsync(string? name = null, string? email = null)

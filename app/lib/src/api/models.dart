@@ -434,6 +434,7 @@ class ShoppingItem {
     required this.addedByUserId,
     required this.createdAt,
     required this.updatedAt,
+    this.barcode,
   });
 
   final String id;
@@ -446,6 +447,9 @@ class ShoppingItem {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// O código de barras, quando o artigo foi lido com a câmara.
+  final String? barcode;
+
   ShoppingItem copyWith({bool? isChecked}) => ShoppingItem(
     id: id,
     listId: listId,
@@ -456,6 +460,7 @@ class ShoppingItem {
     addedByUserId: addedByUserId,
     createdAt: createdAt,
     updatedAt: updatedAt,
+    barcode: barcode,
   );
 
   Map<String, dynamic> toJson() => {
@@ -468,6 +473,7 @@ class ShoppingItem {
     'addedByUserId': addedByUserId,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
+    'barcode': ?barcode,
   };
 
   factory ShoppingItem.fromJson(Map<String, dynamic> json) => ShoppingItem(
@@ -480,7 +486,46 @@ class ShoppingItem {
     addedByUserId: json['addedByUserId'] as String,
     createdAt: DateTime.parse(json['createdAt'] as String),
     updatedAt: DateTime.parse(json['updatedAt'] as String),
+    barcode: json['barcode'] as String?,
   );
+}
+
+/// Um produto lido pelo código de barras. [fromHousehold]: é o nome que esta casa lhe deu da última vez.
+class Product {
+  const Product({
+    required this.barcode,
+    required this.name,
+    this.category,
+    this.brand,
+    this.size,
+    this.fromHousehold = false,
+  });
+
+  final String barcode;
+  final String name;
+  final String? category;
+  final String? brand;
+  final String? size;
+  final bool fromHousehold;
+
+  factory Product.fromJson(Map<String, dynamic> json) => Product(
+    barcode: json['barcode'] as String,
+    name: json['name'] as String,
+    category: json['category'] as String?,
+    brand: json['brand'] as String?,
+    size: json['size'] as String?,
+    fromHousehold: json['fromHousehold'] as bool? ?? false,
+  );
+}
+
+/// EAN-8, UPC-A, EAN-13 e ITF-14 com o dígito de controlo certo (igual ao servidor): um código mal lido não serve.
+bool isValidBarcode(String code) {
+  if (!const [8, 12, 13, 14].contains(code.length) || !RegExp(r'^\d+$').hasMatch(code)) return false;
+  var sum = 0;
+  for (var i = code.length - 2; i >= 0; i--) {
+    sum += int.parse(code[i]) * ((code.length - 2 - i).isEven ? 3 : 1);
+  }
+  return (10 - sum % 10) % 10 == int.parse(code[code.length - 1]);
 }
 
 enum ChoreRecurrence {

@@ -4,6 +4,10 @@
 <dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Para ler o QR de um convite e o código de barras dos produtos.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Para ditares os artigos da lista de compras.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Para transformar em texto os artigos que ditas para a lista de compras.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

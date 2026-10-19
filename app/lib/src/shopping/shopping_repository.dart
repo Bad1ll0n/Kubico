@@ -19,6 +19,8 @@ class ShoppingChange {
     this.itemId,
     this.name,
     this.quantity,
+    this.category,
+    this.barcode,
     this.isChecked,
     required this.at,
   });
@@ -29,6 +31,8 @@ class ShoppingChange {
   final String? itemId;
   final String? name;
   final String? quantity;
+  final String? category;
+  final String? barcode;
   final bool? isChecked;
   final DateTime at;
 
@@ -38,11 +42,12 @@ class ShoppingChange {
     listId: listId,
     name: name!,
     quantity: quantity,
-    category: null,
+    category: category,
     isChecked: false,
     addedByUserId: '',
     createdAt: at,
     updatedAt: at,
+    barcode: barcode,
   );
 
   Map<String, dynamic> toJson() => {
@@ -52,6 +57,8 @@ class ShoppingChange {
     if (itemId != null) 'itemId': itemId,
     if (name != null) 'name': name,
     if (quantity != null) 'quantity': quantity,
+    if (category != null) 'category': category,
+    if (barcode != null) 'barcode': barcode,
     if (isChecked != null) 'isChecked': isChecked,
     'at': at.toIso8601String(),
   };
@@ -63,6 +70,8 @@ class ShoppingChange {
     itemId: json['itemId'] as String?,
     name: json['name'] as String?,
     quantity: json['quantity'] as String?,
+    category: json['category'] as String?,
+    barcode: json['barcode'] as String?,
     isChecked: json['isChecked'] as bool?,
     at: DateTime.parse(json['at'] as String),
   );
@@ -144,7 +153,14 @@ class ShoppingRepository extends ChangeNotifier {
     }
   }
 
-  ShoppingItem addItem(String householdId, String listId, {required String name, String? quantity}) {
+  ShoppingItem addItem(
+    String householdId,
+    String listId, {
+    required String name,
+    String? quantity,
+    String? category,
+    String? barcode,
+  }) {
     final change = ShoppingChange(
       type: ShoppingChangeType.add,
       householdId: householdId,
@@ -152,6 +168,8 @@ class ShoppingRepository extends ChangeNotifier {
       itemId: newItemId(),
       name: name,
       quantity: quantity,
+      category: category,
+      barcode: barcode,
       at: DateTime.now().toUtc(),
     );
     _enqueue(change);
@@ -245,6 +263,8 @@ class ShoppingRepository extends ChangeNotifier {
           id: change.itemId,
           name: change.name!,
           quantity: change.quantity,
+          category: change.category,
+          barcode: change.barcode,
         );
         await _updateCachedItems(listId, (items) => items..[item.id] = item);
       case ShoppingChangeType.check:

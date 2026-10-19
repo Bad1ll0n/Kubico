@@ -60,6 +60,11 @@ if (builder.Configuration.GetValue("Notifications:DispatchEnabled", true))
 // chaves que ficam na base de dados (têm de sobreviver a reinícios).
 builder.Services.AddDataProtection().SetApplicationName("Kubico").PersistKeysToDbContext<KubicoDbContext>();
 builder.Services.AddOptions<CalendarSyncOptions>().Bind(builder.Configuration.GetSection(CalendarSyncOptions.SectionName));
+builder.Services.AddHttpClient<IProductCatalog, OpenFoodFactsCatalog>(http =>
+{
+    http.DefaultRequestHeaders.UserAgent.ParseAdd(OpenFoodFactsCatalog.UserAgent);
+    http.Timeout = TimeSpan.FromSeconds(8);
+});
 builder.Services.AddHttpClient<GoogleCalendarProvider>();
 builder.Services.AddHttpClient<MicrosoftCalendarProvider>();
 builder.Services.AddTransient<ICalendarProvider>(sp => sp.GetRequiredService<GoogleCalendarProvider>());
@@ -162,6 +167,7 @@ api.MapAbsenceEndpoints();
 api.MapChildProfileEndpoints();
 api.MapChildSignInEndpoints();
 api.MapShoppingEndpoints();
+api.MapProductEndpoints();
 api.MapChoreEndpoints();
 api.MapCalendarEndpoints();
 api.MapCalendarFeedEndpoints();

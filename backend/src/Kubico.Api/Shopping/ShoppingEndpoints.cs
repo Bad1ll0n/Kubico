@@ -14,13 +14,15 @@ public record CreateShoppingListRequest(
 
 /// <summary>
 /// Novo artigo. A app pode mandar o <c>Id</c> (gerado no telemóvel): assim, reenviar o mesmo pedido depois de
-/// estar sem rede não duplica o artigo.
+/// estar sem rede não duplica o artigo. Com <c>Barcode</c> (lido com a câmara), a casa fica a saber que nome dá
+/// a esse produto.
 /// </summary>
 public record AddShoppingItemRequest(
     [property: Required, StringLength(200, MinimumLength = 1)] string Name,
     [property: StringLength(50)] string? Quantity = null,
     [property: StringLength(50)] string? Category = null,
-    Guid? Id = null);
+    Guid? Id = null,
+    [property: StringLength(14)] string? Barcode = null);
 
 /// <summary>Atualização parcial: só os campos enviados (não nulos) são alterados.</summary>
 public record UpdateShoppingItemRequest(
@@ -41,7 +43,8 @@ public record ShoppingItemDto(
     Guid AddedByUserId,
     Guid? CheckedByUserId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? Barcode = null);
 
 public static class ShoppingEndpoints
 {
@@ -199,6 +202,12 @@ public static class ShoppingEndpoints
             return Results.NotFound();
         }
 
+        var barcode = Clean(request.Barcode);
+        if (barcode is not null && !Barcodes.IsValid(barcode))
+        {
+            return Results.Problem(title: "Este código de barras não é válido.", statusCode: StatusCodes.Status400BadRequest);
+        }
+
         if (request.Id is { } id && await db.ShoppingItems.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id, ct) is { } existing)
         {
             // Pedido repetido (a app voltou a enviá-lo): devolve o artigo que já existe.
@@ -215,11 +224,17 @@ public static class ShoppingEndpoints
             Name = request.Name.Trim(),
             Quantity = Clean(request.Quantity),
             Category = Clean(request.Category),
+            Barcode = barcode,
             AddedByUserId = userId,
             CreatedAt = now,
             UpdatedAt = now,
         };
         db.ShoppingItems.Add(item);
+        if (barcode is not null)
+        {
+            await ProductEndpoints.RememberAsync(db, householdId, barcode, item.Name, item.Category, now, ct);
+        }
+
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(item);
@@ -276,6 +291,12 @@ public static class ShoppingEndpoints
         }
 
         item.UpdatedAt = clock.GetUtcNow();
+        if (item.Barcode is not null && (request.Name is not null || request.Category is not null))
+        {
+            // Mudou o nome a um artigo lido com a câmara: da próxima vez já aparece assim.
+            await ProductEndpoints.RememberAsync(db, householdId, item.Barcode, item.Name, item.Category, item.UpdatedAt, ct);
+        }
+
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(item);
@@ -360,5 +381,5 @@ public static class ShoppingEndpoints
 
     private static ShoppingItemDto ToDto(ShoppingItem i) => new(
         i.Id, i.ListId, i.Name, i.Quantity, i.Category, i.IsChecked,
-        i.AddedByUserId, i.CheckedByUserId, i.CreatedAt, i.UpdatedAt);
+        i.AddedByUserId, i.CheckedByUserId, i.CreatedAt, i.UpdatedAt, i.Barcode);
 }

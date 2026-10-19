@@ -658,6 +658,65 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.ToTable("RewardRedemptions");
                 });
 
+            modelBuilder.Entity("Kubico.Domain.Shopping.HouseholdProduct", b =>
+                {
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Barcode")
+                        .HasMaxLength(14)
+                        .HasColumnType("character varying(14)");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("HouseholdId", "Barcode");
+
+                    b.ToTable("HouseholdProducts");
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Shopping.ProductInfo", b =>
+                {
+                    b.Property<string>("Barcode")
+                        .HasMaxLength(14)
+                        .HasColumnType("character varying(14)");
+
+                    b.Property<string>("Brand")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("FetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Found")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Size")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Barcode");
+
+                    b.ToTable("ProductInfos");
+                });
+
             modelBuilder.Entity("Kubico.Domain.Shopping.ShoppingItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -666,6 +725,10 @@ namespace Kubico.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("AddedByUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Barcode")
+                        .HasMaxLength(14)
+                        .HasColumnType("character varying(14)");
 
                     b.Property<string>("Category")
                         .HasMaxLength(50)
@@ -1047,6 +1110,15 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("RewardId")
                         .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Shopping.HouseholdProduct", b =>
+                {
+                    b.HasOne("Kubico.Domain.Households.Household", null)
+                        .WithMany()
+                        .HasForeignKey("HouseholdId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Kubico.Domain.Shopping.ShoppingItem", b =>

@@ -21,6 +21,8 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<Invite> Invites => Set<Invite>();
     public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
     public DbSet<ShoppingItem> ShoppingItems => Set<ShoppingItem>();
+    public DbSet<ProductInfo> ProductInfos => Set<ProductInfo>();
+    public DbSet<HouseholdProduct> HouseholdProducts => Set<HouseholdProduct>();
     public DbSet<Chore> Chores => Set<Chore>();
     public DbSet<ChoreCompletion> ChoreCompletions => Set<ChoreCompletion>();
     public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
@@ -109,8 +111,28 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(i => i.Name).HasMaxLength(200);
             e.Property(i => i.Quantity).HasMaxLength(50);
             e.Property(i => i.Category).HasMaxLength(50);
+            e.Property(i => i.Barcode).HasMaxLength(14);
             e.HasIndex(i => i.ListId);
             e.HasOne(i => i.List).WithMany(l => l.Items).HasForeignKey(i => i.ListId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProductInfo>(e =>
+        {
+            e.HasKey(p => p.Barcode);
+            e.Property(p => p.Barcode).HasMaxLength(14);
+            e.Property(p => p.Name).HasMaxLength(200);
+            e.Property(p => p.Brand).HasMaxLength(100);
+            e.Property(p => p.Size).HasMaxLength(50);
+            e.Property(p => p.Category).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<HouseholdProduct>(e =>
+        {
+            e.HasKey(p => new { p.HouseholdId, p.Barcode });
+            e.Property(p => p.Barcode).HasMaxLength(14);
+            e.Property(p => p.Name).HasMaxLength(200);
+            e.Property(p => p.Category).HasMaxLength(50);
+            e.HasOne<Household>().WithMany().HasForeignKey(p => p.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Chore>(e =>

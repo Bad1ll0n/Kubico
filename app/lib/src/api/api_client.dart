@@ -215,6 +215,7 @@ class ApiClient {
     required String name,
     String? quantity,
     String? category,
+    String? barcode,
   }) async => ShoppingItem.fromJson(
     await _send(
       'POST',
@@ -224,9 +225,20 @@ class ApiClient {
         'name': name,
         if (quantity != null && quantity.isNotEmpty) 'quantity': quantity,
         if (category != null && category.isNotEmpty) 'category': category,
+        'barcode': ?barcode,
       },
     ),
   );
+
+  /// O produto deste código de barras, ou null quando não o conhecemos.
+  Future<Product?> lookupProduct(String householdId, String barcode) async {
+    try {
+      return Product.fromJson(await _send('GET', '/api/households/$householdId/products/$barcode'));
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) return null;
+      rethrow;
+    }
+  }
 
   Future<ShoppingItem> setItemChecked(String householdId, String listId, String itemId, bool isChecked) async =>
       ShoppingItem.fromJson(
