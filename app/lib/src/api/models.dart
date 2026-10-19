@@ -560,6 +560,9 @@ class Chore {
     required this.rotationUserIds,
     required this.isDone,
     required this.updatedAt,
+    this.timeOfDay = ChoreTimeOfDay.any,
+    this.steps = const [],
+    this.doneSteps = const [],
   });
 
   final String id;
@@ -574,7 +577,34 @@ class Chore {
   final bool isDone;
   final DateTime updatedAt;
 
+  /// Manhã ou noite (as rotinas); "qualquer altura" nas outras tarefas.
+  final ChoreTimeOfDay timeOfDay;
+
+  /// Os passos de uma rotina; vazia numa tarefa simples.
+  final List<String> steps;
+
+  /// Os passos já feitos desta vez (posições em [steps]).
+  final List<int> doneSteps;
+
   bool get rotates => rotationUserIds.isNotEmpty;
+  bool get isRoutine => steps.isNotEmpty;
+
+  Chore copyWith({List<int>? doneSteps}) => Chore(
+    id: id,
+    householdId: householdId,
+    title: title,
+    notes: notes,
+    points: points,
+    dueDate: dueDate,
+    recurrence: recurrence,
+    assigneeUserId: assigneeUserId,
+    rotationUserIds: rotationUserIds,
+    isDone: isDone,
+    updatedAt: updatedAt,
+    timeOfDay: timeOfDay,
+    steps: steps,
+    doneSteps: doneSteps ?? this.doneSteps,
+  );
 
   factory Chore.fromJson(Map<String, dynamic> json) => Chore(
     id: json['id'] as String,
@@ -588,7 +618,24 @@ class Chore {
     rotationUserIds: (json['rotationUserIds'] as List).cast<String>(),
     isDone: json['isDone'] as bool,
     updatedAt: DateTime.parse(json['updatedAt'] as String),
+    timeOfDay: ChoreTimeOfDay.fromApi(json['timeOfDay'] as String?),
+    steps: (json['steps'] as List?)?.cast<String>() ?? const [],
+    doneSteps: (json['doneSteps'] as List?)?.cast<int>() ?? const [],
   );
+}
+
+/// Em que altura do dia se faz uma tarefa.
+enum ChoreTimeOfDay {
+  morning('Morning', 'Manhã'),
+  any('Any', 'Qualquer altura'),
+  evening('Evening', 'Noite');
+
+  const ChoreTimeOfDay(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
+
+  static ChoreTimeOfDay fromApi(String? value) => values.firstWhere((t) => t.apiValue == value, orElse: () => any);
 }
 
 /// Dados para criar ou editar uma tarefa.
@@ -601,6 +648,8 @@ class ChoreDraft {
     this.recurrence = ChoreRecurrence.none,
     this.assigneeUserId,
     this.rotationUserIds = const [],
+    this.timeOfDay = ChoreTimeOfDay.any,
+    this.steps = const [],
   });
 
   final String title;
@@ -610,6 +659,8 @@ class ChoreDraft {
   final ChoreRecurrence recurrence;
   final String? assigneeUserId;
   final List<String> rotationUserIds;
+  final ChoreTimeOfDay timeOfDay;
+  final List<String> steps;
 
   factory ChoreDraft.from(Chore chore) => ChoreDraft(
     title: chore.title,
@@ -619,6 +670,8 @@ class ChoreDraft {
     recurrence: chore.recurrence,
     assigneeUserId: chore.assigneeUserId,
     rotationUserIds: chore.rotationUserIds,
+    timeOfDay: chore.timeOfDay,
+    steps: chore.steps,
   );
 
   Map<String, dynamic> toJson() => {
@@ -629,6 +682,8 @@ class ChoreDraft {
     'recurrence': recurrence.apiValue,
     if (assigneeUserId != null) 'assigneeUserId': assigneeUserId,
     'rotationUserIds': rotationUserIds,
+    'timeOfDay': timeOfDay.apiValue,
+    'steps': steps,
   };
 }
 

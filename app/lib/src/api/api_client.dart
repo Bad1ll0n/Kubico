@@ -273,6 +273,25 @@ class ApiClient {
     return (Chore.fromJson(json['chore'] as Map<String, dynamic>), json['pointsEarned'] as int);
   }
 
+  /// Marca ou desmarca um passo de uma rotina. Se era o último, a rotina fica concluída ([completed]) e dá pontos.
+  Future<({Chore chore, bool completed, int points})> setChoreStep(
+    String householdId,
+    String choreId,
+    int index, {
+    required bool done,
+  }) async {
+    final json = await _send(
+      'POST',
+      '/api/households/$householdId/chores/$choreId/steps/$index',
+      body: {'done': done},
+    ) as Map<String, dynamic>;
+    return (
+      chore: Chore.fromJson(json['chore'] as Map<String, dynamic>),
+      completed: json['completed'] as bool,
+      points: json['pointsEarned'] as int,
+    );
+  }
+
   Future<List<MemberChoreStats>> getChoreStats(String householdId, {int days = 30}) async {
     final json = await _send('GET', '/api/households/$householdId/chores/stats?days=$days') as Map<String, dynamic>;
     return (json['members'] as List).map((m) => MemberChoreStats.fromJson(m as Map<String, dynamic>)).toList();

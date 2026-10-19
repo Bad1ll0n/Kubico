@@ -113,9 +113,9 @@ class _ChoresViewState extends State<ChoresView> {
     }
   }
 
-  void _upsert(Chore chore) {
+  void _upsert(Chore chore, {bool force = false}) {
     final current = _chores?[chore.id];
-    if (current != null && current.updatedAt.isAfter(chore.updatedAt)) return;
+    if (!force && current != null && current.updatedAt.isAfter(chore.updatedAt)) return;
     setState(() {
       if (chore.isDone) {
         _chores?.remove(chore.id);
@@ -152,6 +152,35 @@ class _ChoresViewState extends State<ChoresView> {
           ),
         );
     } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  /// Marca um passo da rotina; o último conclui-a.
+  Future<void> _step(Chore chore, int index, bool done) async {
+    // Aparece logo marcado; se o servidor recusar, volta atrás.
+    setState(() {
+      _chores?[chore.id] = chore.copyWith(
+        doneSteps: done
+            ? ({...chore.doneSteps, index}.toList()..sort())
+            : [...chore.doneSteps.where((i) => i != index)],
+      );
+    });
+    try {
+      final result = await _api.setChoreStep(_householdId, chore.id, index, done: done);
+      _upsert(result.chore, force: true);
+      if (!result.completed) return;
+      _loadStats();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(result.points > 0 ? '${chore.title}: +${result.points} pontos!' : '${chore.title}: feito!'),
+          ),
+        );
+    } catch (e) {
+      setState(() => _chores?[chore.id] = chore);
       if (mounted) showError(context, e);
     }
   }
@@ -200,7 +229,10 @@ class _ChoresViewState extends State<ChoresView> {
     final sorted = chores.values.toList()
       ..sort((a, b) {
         final byDate = (a.dueDate ?? DateTime(9999)).compareTo(b.dueDate ?? DateTime(9999));
-        return byDate != 0 ? byDate : a.title.toLowerCase().compareTo(b.title.toLowerCase());
+        if (byDate != 0) return byDate;
+        // No mesmo dia: primeiro a manhã, depois o resto, por fim a noite.
+        final byTime = a.timeOfDay.index.compareTo(b.timeOfDay.index);
+        return byTime != 0 ? byTime : a.title.toLowerCase().compareTo(b.title.toLowerCase());
       });
     for (final chore in sorted) {
       grouped.putIfAbsent(choreGroupFor(chore, today), () => []).add(chore);
@@ -245,6 +277,7 @@ class _ChoresViewState extends State<ChoresView> {
                     canComplete: _canComplete(chore),
                     viewOnly: !_access.canParticipate,
                     onComplete: () => _complete(chore),
+                    onStep: (index, done) => _step(chore, index, done),
                     onTap: canManage ? () => _edit(chore) : null,
                   ),
               ],
@@ -261,6 +294,7 @@ class _ChoreTile extends StatelessWidget {
     required this.assignee,
     required this.canComplete,
     required this.onComplete,
+    required this.onStep,
     this.onTap,
     this.viewOnly = false,
   });
@@ -269,6 +303,7 @@ class _ChoreTile extends StatelessWidget {
   final Member? assignee;
   final bool canComplete;
   final VoidCallback onComplete;
+  final void Function(int index, bool done) onStep;
   final VoidCallback? onTap;
 
   /// Quem só vê as tarefas não as conclui.
@@ -279,55 +314,83 @@ class _ChoreTile extends StatelessWidget {
     final theme = Theme.of(context);
     final localizations = MaterialLocalizations.of(context);
     final details = [
+      if (chore.timeOfDay != ChoreTimeOfDay.any) chore.timeOfDay.label,
       if (chore.dueDate != null) localizations.formatShortMonthDay(chore.dueDate!),
       if (chore.recurrence != ChoreRecurrence.none) chore.recurrence.label.toLowerCase(),
       if (chore.rotates) 'em rotação',
+      if (chore.isRoutine) '${chore.doneSteps.length}/${chore.steps.length} passos',
     ].join(' · ');
 
-    return Card(
-      child: ListTile(
-        onTap: onTap,
-        leading: IconButton(
-          tooltip: canComplete
-              ? 'Marcar como feita'
-              : viewOnly
-              ? 'Só podes ver as tarefas'
-              : 'Atribuída a outra pessoa',
-          onPressed: canComplete ? onComplete : null,
-          icon: const Icon(Icons.radio_button_unchecked),
-          selectedIcon: const Icon(Icons.check_circle),
-        ),
-        title: Text(chore.title),
-        subtitle: details.isEmpty ? null : Text(details),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (chore.points > 0)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Text(
-                  '${chore.points} pts',
-                  style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.primary),
-                ),
-              ),
-            Tooltip(
-              message: assignee?.displayName ?? 'Qualquer pessoa',
-              child: CircleAvatar(
-                radius: 14,
-                backgroundColor: assignee == null
-                    ? theme.colorScheme.surfaceContainerHighest
-                    : colorFromHex(assignee!.color),
-                foregroundColor: Colors.white,
-                child: assignee == null
-                    ? Icon(Icons.groups_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant)
-                    : Text(
-                        assignee!.displayName.isEmpty ? '?' : assignee!.displayName[0].toUpperCase(),
-                        style: const TextStyle(fontSize: 12),
-                      ),
+    final tile = ListTile(
+      onTap: onTap,
+      leading: IconButton(
+        tooltip: canComplete
+            ? 'Marcar como feita'
+            : viewOnly
+            ? 'Só podes ver as tarefas'
+            : 'Atribuída a outra pessoa',
+        onPressed: canComplete ? onComplete : null,
+        icon: Icon(switch (chore.timeOfDay) {
+          ChoreTimeOfDay.morning when chore.isRoutine => Icons.wb_sunny_outlined,
+          ChoreTimeOfDay.evening when chore.isRoutine => Icons.bedtime_outlined,
+          _ => Icons.radio_button_unchecked,
+        }),
+        selectedIcon: const Icon(Icons.check_circle),
+      ),
+      title: Text(chore.title),
+      subtitle: details.isEmpty ? null : Text(details),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (chore.points > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Text(
+                '${chore.points} pts',
+                style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.primary),
               ),
             ),
-          ],
-        ),
+          Tooltip(
+            message: assignee?.displayName ?? 'Qualquer pessoa',
+            child: CircleAvatar(
+              radius: 14,
+              backgroundColor: assignee == null
+                  ? theme.colorScheme.surfaceContainerHighest
+                  : colorFromHex(assignee!.color),
+              foregroundColor: Colors.white,
+              child: assignee == null
+                  ? Icon(Icons.groups_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant)
+                  : Text(
+                      assignee!.displayName.isEmpty ? '?' : assignee!.displayName[0].toUpperCase(),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (!chore.isRoutine) return Card(child: tile);
+    return Card(
+      child: Column(
+        children: [
+          tile,
+          for (final (i, step) in chore.steps.indexed)
+            CheckboxListTile(
+              dense: true,
+              contentPadding: const EdgeInsets.only(left: 72, right: 16),
+              controlAffinity: ListTileControlAffinity.leading,
+              value: chore.doneSteps.contains(i),
+              onChanged: canComplete ? (done) => onStep(i, done ?? false) : null,
+              title: Text(
+                step,
+                style: chore.doneSteps.contains(i)
+                    ? TextStyle(decoration: TextDecoration.lineThrough, color: theme.colorScheme.outline)
+                    : null,
+              ),
+            ),
+          const SizedBox(height: 4),
+        ],
       ),
     );
   }

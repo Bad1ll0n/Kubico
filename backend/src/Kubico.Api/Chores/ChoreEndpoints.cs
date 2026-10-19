@@ -12,7 +12,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Kubico.Api.Chores;
 
-/// <summary>Criar ou substituir uma tarefa (PUT envia o estado completo).</summary>
+/// <summary>
+/// Criar ou substituir uma tarefa (PUT envia o estado completo). Com <c>Steps</c> é uma rotina: uma lista de passos
+/// que se vão marcando; <c>TimeOfDay</c> diz se é da manhã ou da noite.
+/// </summary>
 public record SaveChoreRequest(
     [property: Required, StringLength(200, MinimumLength = 1)] string Title,
     [property: StringLength(1000)] string? Notes = null,
@@ -20,7 +23,11 @@ public record SaveChoreRequest(
     DateOnly? DueDate = null,
     ChoreRecurrence Recurrence = ChoreRecurrence.None,
     Guid? AssigneeUserId = null,
-    IReadOnlyList<Guid>? RotationUserIds = null);
+    IReadOnlyList<Guid>? RotationUserIds = null,
+    ChoreTimeOfDay TimeOfDay = ChoreTimeOfDay.Any,
+    IReadOnlyList<string>? Steps = null);
+
+public record SetChoreStepRequest(bool Done);
 
 public record ChoreDto(
     Guid Id,
@@ -34,9 +41,15 @@ public record ChoreDto(
     IReadOnlyList<Guid> RotationUserIds,
     bool IsDone,
     DateTimeOffset? CompletedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    ChoreTimeOfDay TimeOfDay = ChoreTimeOfDay.Any,
+    IReadOnlyList<string>? Steps = null,
+    IReadOnlyList<int>? DoneSteps = null);
 
 public record ChoreCompletedDto(ChoreDto Chore, int PointsEarned);
+
+/// <summary>Um passo marcado. <c>Completed</c>: era o último e a rotina ficou concluída (com os pontos).</summary>
+public record ChoreStepResultDto(ChoreDto Chore, bool Completed, int PointsEarned);
 
 public record MemberChoreStatsDto(Guid UserId, string DisplayName, string Color, int Completed, int Points);
 
@@ -55,6 +68,7 @@ public static class ChoreEndpoints
         chores.MapPut("/{choreId:guid}", UpdateChore);
         chores.MapDelete("/{choreId:guid}", DeleteChore);
         chores.MapPost("/{choreId:guid}/complete", CompleteChore);
+        chores.MapPost("/{choreId:guid}/steps/{index:int}", SetStep);
         chores.MapGet("/stats", GetStats);
 
         return api;
@@ -234,6 +248,71 @@ public static class ChoreEndpoints
             return Results.NotFound();
         }
 
+        if (CannotAct(chore, userId, level) is { } refused)
+        {
+            return refused;
+        }
+
+        var completion = await CompleteAsync(db, notifier, notifications, chore, userId, clock.GetUtcNow(), ct);
+        return Results.Ok(new ChoreCompletedDto(ToDto(chore), completion.Points));
+    }
+
+    /// <summary>Marca ou desmarca um passo de uma rotina; o último passo conclui-a.</summary>
+    private static async Task<IResult> SetStep(
+        Guid householdId,
+        Guid choreId,
+        int index,
+        SetChoreStepRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        HouseholdNotifier notifier,
+        NotificationService notifications,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, level, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Chores, ModuleAccess.Participate, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var chore = await db.Chores
+            .Include(c => c.Household)
+            .SingleOrDefaultAsync(c => c.Id == choreId && c.HouseholdId == householdId, ct);
+        if (chore is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (CannotAct(chore, userId, level) is { } refused)
+        {
+            return refused;
+        }
+
+        var now = clock.GetUtcNow();
+        if (!chore.SetStep(index, request.Done, now))
+        {
+            return Results.NotFound();
+        }
+
+        if (chore.AllStepsDone)
+        {
+            var completion = await CompleteAsync(db, notifier, notifications, chore, userId, now, ct);
+            return Results.Ok(new ChoreStepResultDto(ToDto(chore), true, completion.Points));
+        }
+
+        await db.SaveChangesAsync(ct);
+        var dto = ToDto(chore);
+        await notifier.ChoreUpserted(householdId, dto, ct);
+        return Results.Ok(new ChoreStepResultDto(dto, false, 0));
+    }
+
+    /// <summary>Já concluída, ou (para quem não gere as tarefas) de outra pessoa.</summary>
+    private static IResult? CannotAct(Chore chore, Guid userId, ModuleAccess level)
+    {
         if (chore.IsDone)
         {
             return Results.Problem(title: "Esta tarefa já está concluída.", statusCode: StatusCodes.Status409Conflict);
@@ -247,11 +326,23 @@ public static class ChoreEndpoints
                 statusCode: StatusCodes.Status403Forbidden);
         }
 
-        var now = clock.GetUtcNow();
+        return null;
+    }
+
+    /// <summary>Conclui a tarefa (a rotação salta quem está fora), grava e avisa a casa e o próximo responsável.</summary>
+    private static async Task<ChoreCompletion> CompleteAsync(
+        KubicoDbContext db,
+        HouseholdNotifier notifier,
+        NotificationService notifications,
+        Chore chore,
+        Guid userId,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
         var today = chore.Household.Today(now);
         var previousAssignee = chore.AssigneeUserId;
         var absences = await db.MemberAbsences.AsNoTracking()
-            .Where(a => a.HouseholdId == householdId && a.EndDate >= today)
+            .Where(a => a.HouseholdId == chore.HouseholdId && a.EndDate >= today)
             .ToListAsync(ct);
         var completion = chore.Complete(userId, now, today, MemberAbsence.Checker(absences));
 
@@ -259,10 +350,9 @@ public static class ChoreEndpoints
         db.ChoreCompletions.Add(completion);
         await db.SaveChangesAsync(ct);
 
-        var dto = ToDto(chore);
-        await notifier.ChoreUpserted(householdId, dto, ct);
+        await notifier.ChoreUpserted(chore.HouseholdId, ToDto(chore), ct);
         await NotifyAssignee(notifications, chore, previousAssignee, userId, $"É a tua vez: {chore.Title}", ct);
-        return Results.Ok(new ChoreCompletedDto(dto, completion.Points));
+        return completion;
     }
 
     private static async Task<IResult> GetStats(
@@ -333,15 +423,12 @@ public static class ChoreEndpoints
     {
         var rotation = request.RotationUserIds ?? [];
         var referenced = rotation.Select(id => (Guid?)id).Append(request.AssigneeUserId).OfType<Guid>().Distinct().ToList();
-        if (referenced.Count == 0)
-        {
-            return null;
-        }
-
-        var memberIds = await db.Memberships
-            .Where(m => m.HouseholdId == householdId && referenced.Contains(m.UserId))
-            .Select(m => m.UserId)
-            .ToListAsync(ct);
+        var memberIds = referenced.Count == 0
+            ? []
+            : await db.Memberships
+                .Where(m => m.HouseholdId == householdId && referenced.Contains(m.UserId))
+                .Select(m => m.UserId)
+                .ToListAsync(ct);
 
         var errors = new Dictionary<string, string[]>();
         if (referenced.Except(memberIds).Any())
@@ -359,6 +446,16 @@ public static class ChoreEndpoints
             errors["RotationUserIds"] = ["A rotação só faz sentido em tarefas que se repetem."];
         }
 
+        var steps = CleanSteps(request.Steps);
+        if (steps.Count > MaxSteps)
+        {
+            errors["Steps"] = [$"Uma rotina tem no máximo {MaxSteps} passos."];
+        }
+        else if (steps.Any(s => s.Length > 100))
+        {
+            errors["Steps"] = ["Cada passo tem no máximo 100 letras."];
+        }
+
         return errors.Count == 0 ? null : Results.ValidationProblem(errors);
     }
 
@@ -370,6 +467,8 @@ public static class ChoreEndpoints
         chore.DueDate = request.DueDate;
         chore.Recurrence = request.Recurrence;
         chore.RotationUserIds = [.. request.RotationUserIds ?? []];
+        chore.TimeOfDay = request.TimeOfDay;
+        chore.SetSteps(CleanSteps(request.Steps));
 
         // Com rotação e sem responsável indicado, começa pelo primeiro da lista.
         chore.AssigneeUserId = request.AssigneeUserId
@@ -378,7 +477,12 @@ public static class ChoreEndpoints
         chore.UpdatedAt = now;
     }
 
+    private const int MaxSteps = 20;
+
+    private static List<string> CleanSteps(IReadOnlyList<string>? steps) =>
+        [.. (steps ?? []).Select(s => s.Trim()).Where(s => s.Length > 0)];
+
     internal static ChoreDto ToDto(Chore c) => new(
         c.Id, c.HouseholdId, c.Title, c.Notes, c.Points, c.DueDate, c.Recurrence,
-        c.AssigneeUserId, c.RotationUserIds, c.IsDone, c.CompletedAt, c.UpdatedAt);
+        c.AssigneeUserId, c.RotationUserIds, c.IsDone, c.CompletedAt, c.UpdatedAt, c.TimeOfDay, c.Steps, c.DoneSteps);
 }

@@ -30,6 +30,18 @@ public class Chore
     /// </summary>
     public List<Guid> RotationUserIds { get; set; } = [];
 
+    /// <summary>Em que altura do dia se faz: as rotinas da manhã e da noite aparecem nessa ordem no dia.</summary>
+    public ChoreTimeOfDay TimeOfDay { get; set; }
+
+    /// <summary>Os passos de uma rotina ("Lavar os dentes", "Fazer a cama"). Vazia = tarefa simples.</summary>
+    public List<string> Steps { get; set; } = [];
+
+    /// <summary>Os passos já feitos desta vez (posições em <see cref="Steps"/>). Recomeça quando a tarefa é concluída.</summary>
+    public List<int> DoneSteps { get; set; } = [];
+
+    /// <summary>Uma rotina com todos os passos feitos.</summary>
+    public bool AllStepsDone => Steps.Count > 0 && Enumerable.Range(0, Steps.Count).All(DoneSteps.Contains);
+
     /// <summary>Preenchido quando uma tarefa não recorrente é concluída.</summary>
     public DateTimeOffset? CompletedAt { get; set; }
 
@@ -40,6 +52,32 @@ public class Chore
     public List<ChoreCompletion> Completions { get; set; } = [];
 
     public bool IsDone => CompletedAt is not null;
+
+    /// <summary>Marca ou desmarca um passo da rotina. Devolve false se o passo não existe.</summary>
+    public bool SetStep(int index, bool done, DateTimeOffset now)
+    {
+        if (index < 0 || index >= Steps.Count)
+        {
+            return false;
+        }
+
+        DoneSteps = done
+            ? [.. DoneSteps.Append(index).Distinct().Order()]
+            : [.. DoneSteps.Where(i => i != index)];
+        UpdatedAt = now;
+        return true;
+    }
+
+    /// <summary>Muda os passos; se mudaram, os que estavam feitos deixam de contar.</summary>
+    public void SetSteps(IEnumerable<string> steps)
+    {
+        var list = steps.ToList();
+        if (!list.SequenceEqual(Steps))
+        {
+            Steps = list;
+            DoneSteps = [];
+        }
+    }
 
     /// <summary>
     /// Regista a conclusão: tarefas únicas ficam feitas; recorrentes avançam o prazo
@@ -56,6 +94,9 @@ public class Chore
             CompletedAt = now,
         };
         Completions.Add(completion);
+
+        // Da próxima vez, a rotina começa outra vez do primeiro passo.
+        DoneSteps = [];
 
         if (Recurrence == ChoreRecurrence.None)
         {
@@ -172,6 +213,13 @@ public class Chore
         var index = RotationUserIds.IndexOf(current);
         return RotationUserIds[(index + 1) % RotationUserIds.Count];
     }
+}
+
+public enum ChoreTimeOfDay
+{
+    Any = 0,
+    Morning = 1,
+    Evening = 2,
 }
 
 public enum ChoreRecurrence

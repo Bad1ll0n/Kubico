@@ -140,6 +140,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(c => c.Title).HasMaxLength(200);
             e.Property(c => c.Notes).HasMaxLength(1000);
             e.Property(c => c.Recurrence).HasConversion<string>().HasMaxLength(20);
+            e.Property(c => c.TimeOfDay).HasConversion<string>().HasMaxLength(20);
             e.HasIndex(c => new { c.HouseholdId, c.DueDate });
             e.HasOne(c => c.Household).WithMany().HasForeignKey(c => c.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });

@@ -217,6 +217,10 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("CreatedByUserId")
                         .HasColumnType("uuid");
 
+                    b.PrimitiveCollection<List<int>>("DoneSteps")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
 
@@ -238,6 +242,15 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.PrimitiveCollection<List<Guid>>("RotationUserIds")
                         .IsRequired()
                         .HasColumnType("uuid[]");
+
+                    b.PrimitiveCollection<List<string>>("Steps")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("TimeOfDay")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<string>("Title")
                         .IsRequired()

@@ -55,6 +55,10 @@ class _ChoreEditorState extends State<_ChoreEditor> {
   late String? _assignee;
   late List<String> _rotation;
   late bool _rotates;
+  late ChoreTimeOfDay _timeOfDay;
+
+  /// Os passos da rotina (cada um com a sua caixa de texto).
+  final _steps = <TextEditingController>[];
 
   bool get _isNew => widget.chore == null;
 
@@ -70,14 +74,29 @@ class _ChoreEditorState extends State<_ChoreEditor> {
     _assignee = chore?.assigneeUserId;
     _rotation = [...?chore?.rotationUserIds];
     _rotates = _rotation.isNotEmpty;
+    _timeOfDay = chore?.timeOfDay ?? ChoreTimeOfDay.any;
+    for (final step in chore?.steps ?? const <String>[]) {
+      _steps.add(TextEditingController(text: step));
+    }
   }
 
   @override
   void dispose() {
     _title.dispose();
     _notes.dispose();
+    for (final s in _steps) {
+      s.dispose();
+    }
     super.dispose();
   }
+
+  void _addStep() => setState(() {
+    // Uma rotina é quase sempre de todos os dias.
+    if (_steps.isEmpty && _recurrence == ChoreRecurrence.none) _recurrence = ChoreRecurrence.daily;
+    _steps.add(TextEditingController());
+  });
+
+  void _removeStep(int index) => setState(() => _steps.removeAt(index).dispose());
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
@@ -106,6 +125,11 @@ class _ChoreEditorState extends State<_ChoreEditor> {
           // Com rotação, o servidor começa pelo primeiro da lista.
           assigneeUserId: rotation.isNotEmpty ? (rotation.contains(_assignee) ? _assignee : null) : _assignee,
           rotationUserIds: rotation,
+          timeOfDay: _timeOfDay,
+          steps: [
+            for (final s in _steps)
+              if (s.text.trim().isNotEmpty) s.text.trim(),
+          ],
         ),
       ),
     );
@@ -160,6 +184,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<ChoreRecurrence>(
+              key: ValueKey(_recurrence),
               initialValue: _recurrence,
               decoration: const InputDecoration(labelText: 'Repetição'),
               items: [for (final r in ChoreRecurrence.values) DropdownMenuItem(value: r, child: Text(r.label))],
@@ -205,6 +230,52 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                 onChanged: (value) => setState(() => _assignee = value),
               ),
             const SizedBox(height: 16),
+            Text('Altura do dia', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            SegmentedButton<ChoreTimeOfDay>(
+              segments: const [
+                ButtonSegment(value: ChoreTimeOfDay.morning, icon: Icon(Icons.wb_sunny_outlined), label: Text('Manhã')),
+                ButtonSegment(value: ChoreTimeOfDay.any, label: Text('Qualquer')),
+                ButtonSegment(value: ChoreTimeOfDay.evening, icon: Icon(Icons.bedtime_outlined), label: Text('Noite')),
+              ],
+              selected: {_timeOfDay},
+              onSelectionChanged: (s) => setState(() => _timeOfDay = s.single),
+            ),
+            const SizedBox(height: 16),
+            Text('Passos (para uma rotina)', style: theme.textTheme.titleSmall),
+            Text(
+              'Ex.: lavar os dentes, vestir, fazer a cama. Ao marcar o último passo, a tarefa fica feita.',
+              style: theme.textTheme.bodySmall,
+            ),
+            for (final (i, step) in _steps.indexed)
+              Row(
+                children: [
+                  SizedBox(width: 24, child: Text('${i + 1}.')),
+                  Expanded(
+                    child: TextField(
+                      key: ValueKey(step),
+                      controller: step,
+                      autofocus: step.text.isEmpty,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(hintText: 'Passo'),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Tirar este passo',
+                    onPressed: () => _removeStep(i),
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+                ],
+              ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _steps.length >= 20 ? null : _addStep,
+                icon: const Icon(Icons.add),
+                label: const Text('Adicionar passo'),
+              ),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Text('Pontos', style: theme.textTheme.titleSmall),
