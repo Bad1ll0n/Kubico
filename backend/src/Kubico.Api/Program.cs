@@ -70,6 +70,7 @@ builder.Services.AddHttpClient<MicrosoftCalendarProvider>();
 builder.Services.AddTransient<ICalendarProvider>(sp => sp.GetRequiredService<GoogleCalendarProvider>());
 builder.Services.AddTransient<ICalendarProvider>(sp => sp.GetRequiredService<MicrosoftCalendarProvider>());
 builder.Services.AddSingleton<CalendarSecrets>();
+builder.Services.AddSingleton<TwoFactorService>();
 builder.Services.AddSingleton<CalendarSyncLocks>();
 builder.Services.AddSingleton<CalendarSyncTrigger>();
 builder.Services.AddScoped<CalendarSyncService>();

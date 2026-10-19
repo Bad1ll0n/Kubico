@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../api/api_client.dart';
 import '../session/session_controller.dart';
 import 'child_sign_in_screen.dart';
 import 'theme.dart';
@@ -20,13 +21,42 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _isRegister = false;
   bool _busy = false;
 
+  /// Depois da palavra-passe certa, numa conta com verificação em dois passos: falta o código.
+  String? _challenge;
+  final _code = TextEditingController();
+  var _recovery = false;
+
   @override
   void dispose() {
     _name.dispose();
     _email.dispose();
     _password.dispose();
+    _code.dispose();
     super.dispose();
   }
+
+  Future<void> _submitCode() async {
+    if (_code.text.trim().isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      await context.read<SessionController>().signInWithCode(_challenge!, _code.text);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      // O bilhete expirou: volta-se à palavra-passe.
+      if (e.statusCode == 401 && e.message.startsWith('Passou demasiado tempo')) _backToPassword();
+      showError(context, e);
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _backToPassword() => setState(() {
+    _challenge = null;
+    _recovery = false;
+    _code.clear();
+  });
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -38,12 +68,58 @@ class _AuthScreenState extends State<AuthScreen> {
       } else {
         await session.signIn(_email.text, _password.text);
       }
+    } on TwoFactorRequired catch (e) {
+      if (mounted) setState(() => _challenge = e.challengeToken);
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// O segundo passo: o código da app de autenticação, ou um de recuperação para quem perdeu o telemóvel.
+  List<Widget> _codeStep(ThemeData theme) => [
+    Text('Verificação em dois passos', textAlign: TextAlign.center, style: theme.textTheme.titleMedium),
+    const SizedBox(height: 8),
+    Text(
+      _recovery
+          ? 'Escreve um dos teus códigos de recuperação (ex.: ABCD-EFGH).'
+          : 'Escreve o código de 6 algarismos da tua app de autenticação.',
+      textAlign: TextAlign.center,
+    ),
+    const SizedBox(height: 16),
+    TextField(
+      key: ValueKey(_recovery),
+      controller: _code,
+      autofocus: true,
+      keyboardType: _recovery ? TextInputType.text : TextInputType.number,
+      textCapitalization: TextCapitalization.characters,
+      autofillHints: const [AutofillHints.oneTimeCode],
+      decoration: InputDecoration(labelText: _recovery ? 'Código de recuperação' : 'Código'),
+      onSubmitted: (_) => _submitCode(),
+    ),
+    const SizedBox(height: 24),
+    FilledButton(
+      onPressed: _busy ? null : _submitCode,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: _busy
+            ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Text('Entrar'),
+      ),
+    ),
+    const SizedBox(height: 8),
+    TextButton(
+      onPressed: _busy
+          ? null
+          : () => setState(() {
+              _recovery = !_recovery;
+              _code.clear();
+            }),
+      child: Text(_recovery ? 'Usar o código da app' : 'Perdi o telemóvel: usar um código de recuperação'),
+    ),
+    TextButton(onPressed: _busy ? null : _backToPassword, child: const Text('Voltar')),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -70,59 +146,63 @@ class _AuthScreenState extends State<AuthScreen> {
                       style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 32),
-                    if (_isRegister) ...[
+                    if (_challenge != null)
+                      ..._codeStep(theme)
+                    else ...[
+                      if (_isRegister) ...[
+                        TextFormField(
+                          controller: _name,
+                          decoration: const InputDecoration(labelText: 'Nome'),
+                          textCapitalization: TextCapitalization.words,
+                          autofillHints: const [AutofillHints.name],
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Indica o teu nome.' : null,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       TextFormField(
-                        controller: _name,
-                        decoration: const InputDecoration(labelText: 'Nome'),
-                        textCapitalization: TextCapitalization.words,
-                        autofillHints: const [AutofillHints.name],
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Indica o teu nome.' : null,
+                        controller: _email,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                        keyboardType: TextInputType.emailAddress,
+                        autofillHints: const [AutofillHints.email],
+                        validator: (v) => (v == null || !v.contains('@')) ? 'Indica um email válido.' : null,
                       ),
                       const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _password,
+                        decoration: const InputDecoration(labelText: 'Palavra-passe'),
+                        obscureText: true,
+                        autofillHints: [_isRegister ? AutofillHints.newPassword : AutofillHints.password],
+                        onFieldSubmitted: (_) => _submit(),
+                        validator: (v) => (_isRegister && (v == null || v.length < 8))
+                            ? 'Usa pelo menos 8 caracteres.'
+                            : (v == null || v.isEmpty ? 'Indica a palavra-passe.' : null),
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton(
+                        onPressed: _busy ? null : _submit,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: _busy
+                              ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                              : Text(_isRegister ? 'Criar conta' : 'Entrar'),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: _busy ? null : () => setState(() => _isRegister = !_isRegister),
+                        child: Text(_isRegister ? 'Já tenho conta' : 'Criar uma conta nova'),
+                      ),
+                      if (!_isRegister)
+                        TextButton.icon(
+                          onPressed: _busy
+                              ? null
+                              : () =>
+                                    Navigator.of(context)
+                                        .push(MaterialPageRoute<void>(builder: (_) => const ChildSignInScreen())),
+                          icon: const Icon(Icons.child_care),
+                          label: const Text('Entrar com perfil de criança'),
+                        ),
                     ],
-                    TextFormField(
-                      controller: _email,
-                      decoration: const InputDecoration(labelText: 'Email'),
-                      keyboardType: TextInputType.emailAddress,
-                      autofillHints: const [AutofillHints.email],
-                      validator: (v) => (v == null || !v.contains('@')) ? 'Indica um email válido.' : null,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _password,
-                      decoration: const InputDecoration(labelText: 'Palavra-passe'),
-                      obscureText: true,
-                      autofillHints: [_isRegister ? AutofillHints.newPassword : AutofillHints.password],
-                      onFieldSubmitted: (_) => _submit(),
-                      validator: (v) => (_isRegister && (v == null || v.length < 8))
-                          ? 'Usa pelo menos 8 caracteres.'
-                          : (v == null || v.isEmpty ? 'Indica a palavra-passe.' : null),
-                    ),
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: _busy ? null : _submit,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: _busy
-                            ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                            : Text(_isRegister ? 'Criar conta' : 'Entrar'),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: _busy ? null : () => setState(() => _isRegister = !_isRegister),
-                      child: Text(_isRegister ? 'Já tenho conta' : 'Criar uma conta nova'),
-                    ),
-                    if (!_isRegister)
-                      TextButton.icon(
-                        onPressed: _busy
-                            ? null
-                            : () =>
-                                  Navigator.of(context)
-                                      .push(MaterialPageRoute<void>(builder: (_) => const ChildSignInScreen())),
-                        icon: const Icon(Icons.child_care),
-                        label: const Text('Entrar com perfil de criança'),
-                      ),
                   ],
                 ),
               ),

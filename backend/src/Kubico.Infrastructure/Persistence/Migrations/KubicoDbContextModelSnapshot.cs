@@ -1021,6 +1021,12 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<int>("FailedPinAttempts")
                         .HasColumnType("integer");
 
+                    b.Property<int>("FailedTwoFactorAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("LastTotpStep")
+                        .HasColumnType("bigint");
+
                     b.Property<Guid?>("ManagedByHouseholdId")
                         .HasColumnType("uuid");
 
@@ -1028,11 +1034,24 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PendingTotpSecret")
+                        .HasColumnType("text");
+
                     b.Property<string>("PinHash")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
                     b.Property<DateTimeOffset?>("PinLockedUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.PrimitiveCollection<List<string>>("RecoveryCodeHashes")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("TotpSecret")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("TwoFactorLockedUntil")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");

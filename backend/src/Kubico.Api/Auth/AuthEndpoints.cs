@@ -19,6 +19,14 @@ public record LoginRequest(
 
 public record RefreshRequest([property: Required] string RefreshToken);
 
+/// <summary>
+/// A palavra-passe está certa mas a conta tem verificação em dois passos: falta o código, que se envia com o
+/// <c>ChallengeToken</c> para <c>/auth/login/2fa</c> (vale 5 minutos).
+/// </summary>
+public record TwoFactorChallengeDto(bool TwoFactorRequired, string ChallengeToken);
+
+public record TwoFactorLoginRequest([property: Required] string ChallengeToken, [property: Required] string Code);
+
 /// <summary>Quem está a usar a app. Os perfis de criança não têm email.</summary>
 public record UserDto(Guid Id, string? Email, string DisplayName, bool IsChildProfile);
 
@@ -75,6 +83,7 @@ public static class AuthEndpoints
             KubicoDbContext db,
             IPasswordHasher<User> hasher,
             SessionService sessions,
+            TwoFactorService twoFactor,
             CancellationToken ct) =>
         {
             var email = NormalizeEmail(request.Email);
@@ -88,7 +97,54 @@ public static class AuthEndpoints
                     statusCode: StatusCodes.Status401Unauthorized);
             }
 
+            if (user.TwoFactorEnabled)
+            {
+                return Results.Ok(new TwoFactorChallengeDto(true, twoFactor.IssueChallenge(user.Id, Device(http))));
+            }
+
             return Results.Ok(await sessions.StartAsync(user, Device(http), ct));
+        });
+
+        // O segundo passo: o código da app de autenticação (ou um de recuperação).
+        group.MapPost("/login/2fa", async (
+            TwoFactorLoginRequest request,
+            KubicoDbContext db,
+            SessionService sessions,
+            TwoFactorService twoFactor,
+            TimeProvider clock,
+            CancellationToken ct) =>
+        {
+            var expired = Results.Problem(
+                title: "Passou demasiado tempo. Entra outra vez.", statusCode: StatusCodes.Status401Unauthorized);
+            if (twoFactor.ReadChallenge(request.ChallengeToken) is not var (userId, device))
+            {
+                return expired;
+            }
+
+            var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
+            if (user is not { TwoFactorEnabled: true })
+            {
+                return expired;
+            }
+
+            var now = clock.GetUtcNow();
+            if (user.IsTwoFactorLocked(now))
+            {
+                return Results.Problem(
+                    title: "Demasiados códigos errados. Tenta outra vez daqui a 15 minutos.",
+                    statusCode: StatusCodes.Status429TooManyRequests);
+            }
+
+            if (!twoFactor.Verify(user, request.Code, now))
+            {
+                user.RegisterWrongTwoFactor(now);
+                await db.SaveChangesAsync(ct);
+                return Results.Problem(title: "O código não está certo.", statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            user.RegisterRightTwoFactor();
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(await sessions.StartAsync(user, device, ct));
         });
 
         // Troca o refresh token por um par novo (o antigo deixa de servir).

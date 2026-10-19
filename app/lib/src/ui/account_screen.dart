@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../session/session_controller.dart';
 import 'theme.dart';
+import 'two_factor_section.dart';
 
 /// Guarda o ficheiro com os dados: na web descarrega-o; nos telemóveis e computadores pergunta onde guardar.
 /// Devolve null se a pessoa desistir.
@@ -95,6 +96,7 @@ class _AccountScreenState extends State<AccountScreen> {
               subtitle: Text(user?.email ?? 'Perfil de criança (entra com o código da família e o PIN)'),
             ),
           ),
+          if (!child) ...[const SizedBox(height: 12), const TwoFactorSection()],
           const SizedBox(height: 12),
           Card(
             child: Padding(

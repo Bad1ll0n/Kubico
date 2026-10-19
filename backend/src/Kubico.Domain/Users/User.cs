@@ -28,7 +28,45 @@ public class User
 
     public DateTimeOffset? PinLockedUntil { get; set; }
 
+    /// <summary>Verificação em dois passos: o segredo das apps de autenticação (cifrado). Null quando está desligada.</summary>
+    public string? TotpSecret { get; set; }
+
+    /// <summary>O segredo mostrado ao ligar a verificação, enquanto a pessoa não a confirma com um código.</summary>
+    public string? PendingTotpSecret { get; set; }
+
+    /// <summary>O último intervalo de 30 segundos usado: o mesmo código não serve duas vezes.</summary>
+    public long? LastTotpStep { get; set; }
+
+    /// <summary>Os códigos de recuperação ainda por usar (SHA-256), para quem perder o telemóvel.</summary>
+    public List<string> RecoveryCodeHashes { get; set; } = [];
+
+    /// <summary>Códigos errados seguidos na verificação em dois passos (bloqueia como os PINs).</summary>
+    public int FailedTwoFactorAttempts { get; set; }
+
+    public DateTimeOffset? TwoFactorLockedUntil { get; set; }
+
     public List<Households.Membership> Memberships { get; set; } = [];
+
+    public bool TwoFactorEnabled => TotpSecret is not null;
+
+    public bool IsTwoFactorLocked(DateTimeOffset now) => TwoFactorLockedUntil is { } until && now < until;
+
+    /// <summary>Conta um código errado; ao chegar ao limite, bloqueia a entrada uns minutos.</summary>
+    public void RegisterWrongTwoFactor(DateTimeOffset now)
+    {
+        FailedTwoFactorAttempts++;
+        if (FailedTwoFactorAttempts >= MaxPinAttempts)
+        {
+            TwoFactorLockedUntil = now + PinLockout;
+            FailedTwoFactorAttempts = 0;
+        }
+    }
+
+    public void RegisterRightTwoFactor()
+    {
+        FailedTwoFactorAttempts = 0;
+        TwoFactorLockedUntil = null;
+    }
 
     public const int MaxPinAttempts = 5;
 

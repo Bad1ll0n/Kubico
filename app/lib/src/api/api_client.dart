@@ -8,6 +8,17 @@ import 'models.dart';
 /// Um ficheiro a enviar num pedido multipart.
 typedef _Upload = ({String field, List<int> bytes, String filename});
 
+/// A palavra-passe está certa mas a conta tem verificação em dois passos: falta o código, que se envia com
+/// [challengeToken] (vale 5 minutos) em [ApiClient.loginWithCode].
+class TwoFactorRequired implements Exception {
+  const TwoFactorRequired(this.challengeToken);
+
+  final String challengeToken;
+
+  @override
+  String toString() => 'Falta o código da verificação em dois passos.';
+}
+
 /// Erro devolvido pela API, já com uma mensagem pronta a mostrar ao utilizador.
 class ApiException implements Exception {
   const ApiException(this.statusCode, this.message);
@@ -39,6 +50,7 @@ class ApiClient {
 
   /// Pedidos de autenticação: um 401 aqui não se resolve renovando a sessão.
   static const _authPaths = {
+    '/api/auth/login/2fa',
     '/api/auth/login',
     '/api/auth/register',
     '/api/auth/refresh',
@@ -53,8 +65,38 @@ class ApiClient {
     await _send('POST', '/api/auth/register', body: {'email': email, 'password': password, 'displayName': displayName}),
   );
 
-  Future<AuthResult> login(String email, String password) async =>
-      AuthResult.fromJson(await _send('POST', '/api/auth/login', body: {'email': email, 'password': password}));
+  /// Entra com email e palavra-passe. Com verificação em dois passos, lança [TwoFactorRequired].
+  Future<AuthResult> login(String email, String password) async {
+    final json =
+        await _send('POST', '/api/auth/login', body: {'email': email, 'password': password}) as Map<String, dynamic>;
+    if (json['twoFactorRequired'] == true) throw TwoFactorRequired(json['challengeToken'] as String);
+    return AuthResult.fromJson(json);
+  }
+
+  /// O segundo passo da entrada: o código da app de autenticação (ou um de recuperação).
+  Future<AuthResult> loginWithCode(String challengeToken, String code) async => AuthResult.fromJson(
+    await _send('POST', '/api/auth/login/2fa', body: {'challengeToken': challengeToken, 'code': code}),
+  );
+
+  Future<({bool enabled, int recoveryCodesLeft})> getTwoFactor() async {
+    final json = await _send('GET', '/api/account/2fa') as Map<String, dynamic>;
+    return (enabled: json['enabled'] as bool, recoveryCodesLeft: json['recoveryCodesLeft'] as int);
+  }
+
+  /// Começa a ligar: o segredo (para escrever à mão) e o endereço para o código QR.
+  Future<(String, String)> setUpTwoFactor() async {
+    final json = await _send('POST', '/api/account/2fa/setup') as Map<String, dynamic>;
+    return (json['secret'] as String, json['uri'] as String);
+  }
+
+  /// Confirma com um código da app; devolve os códigos de recuperação (só se mostram desta vez).
+  Future<List<String>> enableTwoFactor(String code) async {
+    final json = await _send('POST', '/api/account/2fa/enable', body: {'code': code}) as Map<String, dynamic>;
+    return (json['recoveryCodes'] as List).cast<String>();
+  }
+
+  Future<void> disableTwoFactor(String password, String code) =>
+      _send('POST', '/api/account/2fa/disable', body: {'password': password, 'code': code});
 
   /// Troca o refresh token por um par novo (o antigo deixa de servir).
   Future<AuthResult> refreshSession(String refreshToken) async =>

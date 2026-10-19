@@ -17,6 +17,18 @@ namespace Kubico.Api.Auth;
 
 public record DeleteAccountRequest([property: Required] string Password);
 
+public record TwoFactorStatusDto(bool Enabled, int RecoveryCodesLeft);
+
+/// <summary>Para ligar: o segredo (para escrever à mão) e o endereço que vai no código QR.</summary>
+public record TwoFactorSetupDto(string Secret, string Uri);
+
+public record TwoFactorCodeRequest([property: Required] string Code);
+
+/// <summary>Ficou ligada. Os códigos de recuperação só se mostram desta vez.</summary>
+public record TwoFactorEnabledDto(IReadOnlyList<string> RecoveryCodes);
+
+public record DisableTwoFactorRequest([property: Required] string Password, [property: Required] string Code);
+
 /// <summary>
 /// A minha conta (RGPD): descarregar tudo o que o Kubico guarda sobre mim, e apagar a conta. Ao apagar, sai de todas
 /// as casas como se saísse de cada uma (a administração passa a outra pessoa se for preciso, e as casas onde mais
@@ -35,6 +47,10 @@ public static class AccountEndpoints
         var account = api.MapGroup("/account").WithTags("Auth").RequireAuthorization();
         account.MapGet("/export", Export);
         account.MapDelete("/", DeleteAccount);
+        account.MapGet("/2fa", GetTwoFactor);
+        account.MapPost("/2fa/setup", SetUpTwoFactor);
+        account.MapPost("/2fa/enable", EnableTwoFactor);
+        account.MapPost("/2fa/disable", DisableTwoFactor);
         return api;
     }
 
@@ -71,7 +87,11 @@ public static class AccountEndpoints
         var export = new
         {
             ExportadoEm = clock.GetUtcNow(),
-            Conta = new { user.Id, Nome = user.DisplayName, user.Email, CriadaEm = user.CreatedAt, DataDeNascimento = user.BirthDate },
+            Conta = new
+            {
+                user.Id, Nome = user.DisplayName, user.Email, CriadaEm = user.CreatedAt, DataDeNascimento = user.BirthDate,
+                VerificacaoEmDoisPassos = user.TwoFactorEnabled,
+            },
             Casas = households.Select(h => new { Casa = h.Name, Papel = h.Role.ToString(), Cor = h.Color, EntrouEm = h.JoinedAt }),
             Sessoes = await db.RefreshTokens.AsNoTracking()
                 .Where(t => t.UserId == userId)
@@ -126,6 +146,103 @@ public static class AccountEndpoints
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(export, ExportJson));
         var day = clock.GetUtcNow().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         return Results.File(bytes, "application/json", $"kubico-dados-{day}.json");
+    }
+
+    private static async Task<IResult> GetTwoFactor(ClaimsPrincipal principal, KubicoDbContext db, CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, ct);
+        return user is null
+            ? Results.Unauthorized()
+            : Results.Ok(new TwoFactorStatusDto(user.TwoFactorEnabled, user.RecoveryCodeHashes.Count));
+    }
+
+    /// <summary>Começa a ligar a verificação em dois passos: um segredo novo para a app de autenticação.</summary>
+    private static async Task<IResult> SetUpTwoFactor(
+        ClaimsPrincipal principal, KubicoDbContext db, TwoFactorService twoFactor, CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (user.IsChildProfile)
+        {
+            return Results.Problem(
+                title: "Os perfis de criança entram com o PIN e não têm verificação em dois passos.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        if (user.TwoFactorEnabled)
+        {
+            return Results.Problem(
+                title: "A verificação em dois passos já está ligada.", statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var secret = twoFactor.BeginSetup(user);
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new TwoFactorSetupDto(secret, Totp.SetupUri(secret, user.Email!)));
+    }
+
+    /// <summary>Confirma com um código da app: fica ligada e recebe os códigos de recuperação.</summary>
+    private static async Task<IResult> EnableTwoFactor(
+        TwoFactorCodeRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        TwoFactorService twoFactor,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (twoFactor.Enable(user, request.Code, clock.GetUtcNow()) is not { } codes)
+        {
+            return Results.Problem(
+                title: "O código não está certo. Confirma que o telemóvel está com a hora certa e tenta outra vez.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new TwoFactorEnabledDto(codes));
+    }
+
+    /// <summary>Desliga (pede a palavra-passe e um código da app ou de recuperação).</summary>
+    private static async Task<IResult> DisableTwoFactor(
+        DisableTwoFactorRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        IPasswordHasher<User> hasher,
+        TwoFactorService twoFactor,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (hasher.VerifyHashedPassword(user, user.PasswordHash, request.Password) == PasswordVerificationResult.Failed)
+        {
+            return Results.Problem(title: "A palavra-passe não está certa.", statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        if (!twoFactor.Verify(user, request.Code, clock.GetUtcNow()))
+        {
+            return Results.Problem(title: "O código não está certo.", statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        TwoFactorService.Disable(user);
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
     }
 
     /// <summary>Apaga a conta (pede a palavra-passe outra vez). Um perfil de criança é apagado por um adulto da casa.</summary>

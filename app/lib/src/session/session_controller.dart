@@ -60,7 +60,11 @@ class SessionController extends ChangeNotifier {
     }
   }
 
+  /// Com verificação em dois passos, lança [TwoFactorRequired]; depois entra-se com [signInWithCode].
   Future<void> signIn(String email, String password) async => _startSession(await api.login(email.trim(), password));
+
+  Future<void> signInWithCode(String challengeToken, String code) async =>
+      _startSession(await api.loginWithCode(challengeToken, code.trim()));
 
   Future<void> register(String email, String password, String displayName) async =>
       _startSession(await api.register(email.trim(), password, displayName.trim()));
