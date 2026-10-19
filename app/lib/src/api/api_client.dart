@@ -76,6 +76,17 @@ class ApiClient {
 
   Future<Me> getMe() async => Me.fromJson(await _send('GET', '/api/me'));
 
+  /// Tudo o que o Kubico guarda sobre esta conta, num ficheiro JSON (nome sugerido e conteúdo).
+  Future<(String, Uint8List)> exportAccount() async {
+    final response = await _execute('GET', '/api/account/export');
+    final disposition = response.headers['content-disposition'] ?? '';
+    final name = RegExp(r'filename="?([^";]+)"?').firstMatch(disposition)?.group(1) ?? 'kubico-dados.json';
+    return (name, response.bodyBytes);
+  }
+
+  /// Apaga a conta (confirma com a palavra-passe).
+  Future<void> deleteAccount(String password) => _send('DELETE', '/api/account', body: {'password': password});
+
   // --- Agregados ---
 
   Future<HouseholdSummary> createHousehold(String name) async =>
@@ -549,6 +560,16 @@ class ApiClient {
     }
   }
 
+  static const _genericTitles = {
+    'One or more validation errors occurred.',
+    'Bad Request',
+    'Unauthorized',
+    'Forbidden',
+    'Not Found',
+    'Conflict',
+    'An error occurred while processing your request.',
+  };
+
   static String _errorMessage(int status, dynamic body) {
     if (body is Map<String, dynamic>) {
       // Erros de validação: mostra a primeira mensagem.
@@ -557,8 +578,9 @@ class ApiClient {
         final first = errors.values.first;
         if (first is List && first.isNotEmpty) return first.first.toString();
       }
+      // O título é a mensagem do servidor, em português; os títulos genéricos do ASP.NET (em inglês) não servem.
       final title = body['title'];
-      if (title is String && title.isNotEmpty && status != 400) return title;
+      if (title is String && title.isNotEmpty && !_genericTitles.contains(title)) return title;
     }
     return switch (status) {
       400 => 'Verifica os dados introduzidos.',

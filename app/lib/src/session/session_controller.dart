@@ -118,6 +118,9 @@ class SessionController extends ChangeNotifier {
     await _forgetSession();
   }
 
+  /// A conta foi apagada: esquece a sessão neste dispositivo (no servidor já não existe).
+  Future<void> forgetDeletedAccount() => _forgetSession();
+
   /// Termina a sessão em todos os dispositivos (por exemplo, depois de perder o telemóvel).
   Future<void> signOutEverywhere() async {
     await api.logoutEverywhere();

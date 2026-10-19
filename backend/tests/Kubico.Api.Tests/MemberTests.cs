@@ -284,13 +284,13 @@ public class ChildProfileTests(KubicoApiFactory factory) : IClassFixture<KubicoA
         Assert.Equal(HttpStatusCode.NotFound, removedProfile.StatusCode);
     }
 
-    private static async Task<MemberDto> CreateChild(HttpClient adult, Guid householdId, string name, string pin)
+    internal static async Task<MemberDto> CreateChild(HttpClient adult, Guid householdId, string name, string pin)
     {
         var response = await adult.PostAsJsonAsync($"/api/households/{householdId}/children", new CreateChildProfileRequest(name, pin), TestJson.Options);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<MemberDto>(TestJson.Options))!;
     }
 
-    private static async Task<string> FamilyCode(HttpClient adult, Guid householdId) =>
+    internal static async Task<string> FamilyCode(HttpClient adult, Guid householdId) =>
         (await NotificationTests.Post<FamilyCodeDto>(adult, $"/api/households/{householdId}/family-code", null)).Code;
 }

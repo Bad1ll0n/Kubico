@@ -160,6 +160,7 @@ app.MapHealthChecks("/health");
 
 var api = app.MapGroup("/api");
 api.MapAuthEndpoints();
+api.MapAccountEndpoints();
 api.MapHouseholdEndpoints();
 api.MapMemberEndpoints();
 api.MapPermissionEndpoints();
