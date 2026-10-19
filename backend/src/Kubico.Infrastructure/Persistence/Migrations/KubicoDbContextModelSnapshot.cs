@@ -239,6 +239,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<bool>("RequiresPhoto")
+                        .HasColumnType("boolean");
+
                     b.PrimitiveCollection<List<Guid>>("RotationUserIds")
                         .IsRequired()
                         .HasColumnType("uuid[]");
@@ -279,19 +282,61 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("PhotoId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Points")
                         .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("RejectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RejectedByUserId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PhotoId");
+
                     b.HasIndex("UserId");
 
                     b.HasIndex("ChoreId", "CompletedAt");
 
                     b.ToTable("ChoreCompletions");
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Chores.ChorePhoto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UploadedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HouseholdId");
+
+                    b.ToTable("ChorePhotos");
                 });
 
             modelBuilder.Entity("Kubico.Domain.Households.Household", b =>
@@ -1010,7 +1055,21 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Kubico.Domain.Chores.ChorePhoto", null)
+                        .WithMany()
+                        .HasForeignKey("PhotoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Chore");
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Chores.ChorePhoto", b =>
+                {
+                    b.HasOne("Kubico.Domain.Households.Household", null)
+                        .WithMany()
+                        .HasForeignKey("HouseholdId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Kubico.Domain.Households.HouseholdPermission", b =>

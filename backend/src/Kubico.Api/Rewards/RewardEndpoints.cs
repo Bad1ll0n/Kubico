@@ -264,10 +264,8 @@ public static class RewardEndpoints
 
         if (redemption.Status == RedemptionStatus.Pending)
         {
-            var adults = await db.Memberships
-                .Where(m => m.HouseholdId == householdId && (m.Role == HouseholdRole.Admin || m.Role == HouseholdRole.Adult))
-                .Select(m => m.UserId)
-                .ToListAsync(ct);
+            // Quem pode aprovar: quem gere as recompensas nesta casa.
+            var adults = await access.MembersWithAsync(householdId, HouseholdModule.Rewards, ModuleAccess.Manage, ct);
             var name = await db.Users.Where(u => u.Id == userId).Select(u => u.DisplayName).SingleAsync(ct);
             await notifications.NotifyAsync(
                 householdId,
@@ -409,7 +407,7 @@ public static class RewardEndpoints
             .ToListAsync(ct);
 
         var earned = await db.ChoreCompletions.AsNoTracking()
-            .Where(c => c.Chore.HouseholdId == householdId)
+            .Where(c => c.Chore.HouseholdId == householdId && c.RejectedAt == null)
             .GroupBy(c => c.UserId)
             .Select(g => new { UserId = g.Key, Points = g.Sum(c => c.Points) })
             .ToDictionaryAsync(x => x.UserId, x => x.Points, ct);

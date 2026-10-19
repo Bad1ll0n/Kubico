@@ -25,9 +25,13 @@ public record SaveChoreRequest(
     Guid? AssigneeUserId = null,
     IReadOnlyList<Guid>? RotationUserIds = null,
     ChoreTimeOfDay TimeOfDay = ChoreTimeOfDay.Any,
-    IReadOnlyList<string>? Steps = null);
+    IReadOnlyList<string>? Steps = null,
+    bool RequiresPhoto = false);
 
 public record SetChoreStepRequest(bool Done);
+
+/// <summary>Concluir uma tarefa; <c>PhotoId</c> é a foto de prova já enviada (obrigatória se a tarefa a pedir).</summary>
+public record CompleteChoreRequest(Guid? PhotoId = null);
 
 public record ChoreDto(
     Guid Id,
@@ -44,7 +48,8 @@ public record ChoreDto(
     DateTimeOffset UpdatedAt,
     ChoreTimeOfDay TimeOfDay = ChoreTimeOfDay.Any,
     IReadOnlyList<string>? Steps = null,
-    IReadOnlyList<int>? DoneSteps = null);
+    IReadOnlyList<int>? DoneSteps = null,
+    bool RequiresPhoto = false);
 
 public record ChoreCompletedDto(ChoreDto Chore, int PointsEarned);
 
@@ -224,6 +229,7 @@ public static class ChoreEndpoints
     private static async Task<IResult> CompleteChore(
         Guid householdId,
         Guid choreId,
+        CompleteChoreRequest? request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
         HouseholdAccess access,
@@ -253,7 +259,32 @@ public static class ChoreEndpoints
             return refused;
         }
 
-        var completion = await CompleteAsync(db, notifier, notifications, chore, userId, clock.GetUtcNow(), ct);
+        var photoId = request?.PhotoId;
+        if (photoId is null && chore.RequiresPhoto)
+        {
+            return Results.Problem(
+                title: "Esta tarefa precisa de uma foto do trabalho feito.", statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        // A foto tem de ser desta pessoa, desta casa, e ainda não ter servido para outra tarefa.
+        if (photoId is { } id
+            && (!await db.ChorePhotos.AnyAsync(p => p.Id == id && p.HouseholdId == householdId && p.UploadedByUserId == userId, ct)
+                || await db.ChoreCompletions.AnyAsync(c => c.PhotoId == id, ct)))
+        {
+            return Results.Problem(title: "Esta foto não serve: envia outra.", statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var completion = await CompleteAsync(db, notifier, notifications, chore, userId, clock.GetUtcNow(), ct, photoId);
+        if (photoId is not null)
+        {
+            // Quem gere as tarefas é avisado para ver a foto.
+            var managers = await access.MembersWithAsync(householdId, HouseholdModule.Chores, ModuleAccess.Manage, ct);
+            var name = await db.Users.Where(u => u.Id == userId).Select(u => u.DisplayName).SingleAsync(ct);
+            await notifications.NotifyAsync(
+                householdId, managers, userId, NotificationKind.ChoreCompleted,
+                $"{name} fez: {chore.Title}", "Com foto. Vê no histórico das tarefas.", chore.Id, ct);
+        }
+
         return Results.Ok(new ChoreCompletedDto(ToDto(chore), completion.Points));
     }
 
@@ -298,7 +329,8 @@ public static class ChoreEndpoints
             return Results.NotFound();
         }
 
-        if (chore.AllStepsDone)
+        // Com foto de prova, o último passo não conclui: falta enviar a foto.
+        if (chore.AllStepsDone && !chore.RequiresPhoto)
         {
             var completion = await CompleteAsync(db, notifier, notifications, chore, userId, now, ct);
             return Results.Ok(new ChoreStepResultDto(ToDto(chore), true, completion.Points));
@@ -337,7 +369,8 @@ public static class ChoreEndpoints
         Chore chore,
         Guid userId,
         DateTimeOffset now,
-        CancellationToken ct)
+        CancellationToken ct,
+        Guid? photoId = null)
     {
         var today = chore.Household.Today(now);
         var previousAssignee = chore.AssigneeUserId;
@@ -345,6 +378,7 @@ public static class ChoreEndpoints
             .Where(a => a.HouseholdId == chore.HouseholdId && a.EndDate >= today)
             .ToListAsync(ct);
         var completion = chore.Complete(userId, now, today, MemberAbsence.Checker(absences));
+        completion.PhotoId = photoId;
 
         // O Id já vem preenchido; sem Add explícito o EF trataria o registo como existente (UPDATE).
         db.ChoreCompletions.Add(completion);
@@ -381,7 +415,7 @@ public static class ChoreEndpoints
             .ToListAsync(ct);
 
         var completions = await db.ChoreCompletions.AsNoTracking()
-            .Where(c => c.Chore.HouseholdId == householdId && c.CompletedAt >= since)
+            .Where(c => c.Chore.HouseholdId == householdId && c.CompletedAt >= since && c.RejectedAt == null)
             .Select(c => new { c.UserId, c.Points })
             .ToListAsync(ct);
 
@@ -468,6 +502,7 @@ public static class ChoreEndpoints
         chore.Recurrence = request.Recurrence;
         chore.RotationUserIds = [.. request.RotationUserIds ?? []];
         chore.TimeOfDay = request.TimeOfDay;
+        chore.RequiresPhoto = request.RequiresPhoto;
         chore.SetSteps(CleanSteps(request.Steps));
 
         // Com rotação e sem responsável indicado, começa pelo primeiro da lista.
@@ -484,5 +519,6 @@ public static class ChoreEndpoints
 
     internal static ChoreDto ToDto(Chore c) => new(
         c.Id, c.HouseholdId, c.Title, c.Notes, c.Points, c.DueDate, c.Recurrence,
-        c.AssigneeUserId, c.RotationUserIds, c.IsDone, c.CompletedAt, c.UpdatedAt, c.TimeOfDay, c.Steps, c.DoneSteps);
+        c.AssigneeUserId, c.RotationUserIds, c.IsDone, c.CompletedAt, c.UpdatedAt, c.TimeOfDay, c.Steps, c.DoneSteps,
+        c.RequiresPhoto);
 }

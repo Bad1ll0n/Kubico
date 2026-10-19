@@ -16,6 +16,12 @@ public enum NotificationKind
 
     /// <summary>O teu pedido de recompensa foi aprovado ou recusado.</summary>
     RewardDecided = 4,
+
+    /// <summary>Alguém concluiu uma tarefa com foto de prova (para quem gere as tarefas ver).</summary>
+    ChoreCompleted = 5,
+
+    /// <summary>Uma tarefa que fizeste não foi aceite e voltou para ti.</summary>
+    ChoreRejected = 6,
 }
 
 /// <summary>

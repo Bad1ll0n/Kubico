@@ -169,6 +169,7 @@ api.MapChildSignInEndpoints();
 api.MapShoppingEndpoints();
 api.MapProductEndpoints();
 api.MapChoreEndpoints();
+api.MapChoreHistoryEndpoints();
 api.MapCalendarEndpoints();
 api.MapCalendarFeedEndpoints();
 api.MapCalendarSyncEndpoints();

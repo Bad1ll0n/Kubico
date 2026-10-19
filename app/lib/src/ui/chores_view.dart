@@ -8,6 +8,7 @@ import '../api/models.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import 'chore_editor.dart';
+import 'chore_history_screen.dart';
 import 'theme.dart';
 
 enum ChoreGroup {
@@ -36,9 +37,12 @@ ChoreGroup choreGroupFor(Chore chore, DateTime today) {
 
 /// Tarefas da casa, sincronizadas em tempo real, com o resumo de pontos do mês.
 class ChoresView extends StatefulWidget {
-  const ChoresView({super.key, required this.household});
+  const ChoresView({super.key, required this.household, this.pickPhoto = pickChorePhoto});
 
   final HouseholdSummary household;
+
+  /// Pede a foto de prova (por omissão, com a câmara ou da galeria).
+  final Future<PickedPhoto?> Function(BuildContext context) pickPhoto;
 
   @override
   State<ChoresView> createState() => _ChoresViewState();
@@ -134,7 +138,13 @@ class _ChoresViewState extends State<ChoresView> {
 
   Future<void> _complete(Chore chore) async {
     try {
-      final (updated, points) = await _api.completeChore(_householdId, chore.id);
+      String? photoId;
+      if (chore.requiresPhoto) {
+        final photo = await widget.pickPhoto(context);
+        if (photo == null || !mounted) return;
+        photoId = await _api.uploadChorePhoto(_householdId, photo.bytes, photo.name);
+      }
+      final (updated, points) = await _api.completeChore(_householdId, chore.id, photoId: photoId);
       _upsert(updated);
       _loadStats();
       if (!mounted) return;
@@ -169,6 +179,13 @@ class _ChoresViewState extends State<ChoresView> {
     try {
       final result = await _api.setChoreStep(_householdId, chore.id, index, done: done);
       _upsert(result.chore, force: true);
+      // Todos os passos feitos, mas a tarefa pede foto: falta a foto para a dar como feita.
+      if (!result.completed &&
+          result.chore.requiresPhoto &&
+          result.chore.doneSteps.length == result.chore.steps.length) {
+        await _complete(result.chore);
+        return;
+      }
       if (!result.completed) return;
       _loadStats();
       if (!mounted) return;
@@ -251,7 +268,13 @@ class _ChoresViewState extends State<ChoresView> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
           children: [
-            if (_stats.any((s) => s.points > 0 || s.completed > 0)) _StatsCard(stats: _stats),
+            if (_stats.any((s) => s.points > 0 || s.completed > 0))
+              _StatsCard(
+                stats: _stats,
+                onHistory: () =>
+                    Navigator.of(context)
+                        .push(MaterialPageRoute<void>(builder: (_) => ChoreHistoryScreen(household: widget.household))),
+              ),
             if (chores.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(32),
@@ -319,6 +342,7 @@ class _ChoreTile extends StatelessWidget {
       if (chore.recurrence != ChoreRecurrence.none) chore.recurrence.label.toLowerCase(),
       if (chore.rotates) 'em rotação',
       if (chore.isRoutine) '${chore.doneSteps.length}/${chore.steps.length} passos',
+      if (chore.requiresPhoto) 'com foto',
     ].join(' · ');
 
     final tile = ListTile(
@@ -397,9 +421,10 @@ class _ChoreTile extends StatelessWidget {
 }
 
 class _StatsCard extends StatelessWidget {
-  const _StatsCard({required this.stats});
+  const _StatsCard({required this.stats, required this.onHistory});
 
   final List<MemberChoreStats> stats;
+  final VoidCallback onHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -411,8 +436,17 @@ class _StatsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Últimos 30 dias', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: Text('Últimos 30 dias', style: theme.textTheme.titleSmall)),
+                TextButton.icon(
+                  onPressed: onHistory,
+                  icon: const Icon(Icons.history, size: 18),
+                  label: const Text('Quem fez o quê'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
             for (final s in stats)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),

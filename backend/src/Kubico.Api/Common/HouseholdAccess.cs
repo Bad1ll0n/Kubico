@@ -78,6 +78,18 @@ public class HouseholdAccess(KubicoDbContext db)
         return chosen ?? ModulePermissions.Default(role, module);
     }
 
+    /// <summary>Quem tem pelo menos este acesso a uma área (por exemplo, quem aprova pedidos ou vê as fotos).</summary>
+    public async Task<List<Guid>> MembersWithAsync(
+        Guid householdId, HouseholdModule module, ModuleAccess needed, CancellationToken ct)
+    {
+        var members = await db.Memberships.AsNoTracking()
+            .Where(m => m.HouseholdId == householdId)
+            .Select(m => new { m.UserId, m.Role })
+            .ToListAsync(ct);
+        var chosen = await db.HouseholdPermissions.AsNoTracking().Where(p => p.HouseholdId == householdId).ToListAsync(ct);
+        return [.. members.Where(m => ModulePermissions.Resolve(m.Role, module, chosen) >= needed).Select(m => m.UserId)];
+    }
+
     /// <summary>O acesso de um papel a todas as áreas da casa.</summary>
     public async Task<Dictionary<HouseholdModule, ModuleAccess>> GetAllAccessAsync(
         Guid householdId, HouseholdRole role, CancellationToken ct)

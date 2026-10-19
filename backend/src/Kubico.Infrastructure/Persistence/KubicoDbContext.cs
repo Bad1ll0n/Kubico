@@ -21,6 +21,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<Invite> Invites => Set<Invite>();
     public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
     public DbSet<ShoppingItem> ShoppingItems => Set<ShoppingItem>();
+    public DbSet<ChorePhoto> ChorePhotos => Set<ChorePhoto>();
     public DbSet<ProductInfo> ProductInfos => Set<ProductInfo>();
     public DbSet<HouseholdProduct> HouseholdProducts => Set<HouseholdProduct>();
     public DbSet<Chore> Chores => Set<Chore>();
@@ -116,6 +117,13 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasOne(i => i.List).WithMany(l => l.Items).HasForeignKey(i => i.ListId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<ChorePhoto>(e =>
+        {
+            e.Property(p => p.ContentType).HasMaxLength(50);
+            e.HasIndex(p => p.HouseholdId);
+            e.HasOne<Household>().WithMany().HasForeignKey(p => p.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<ProductInfo>(e =>
         {
             e.HasKey(p => p.Barcode);
@@ -149,6 +157,8 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         {
             e.HasIndex(c => new { c.ChoreId, c.CompletedAt });
             e.HasIndex(c => c.UserId);
+            e.HasIndex(c => c.PhotoId);
+            e.HasOne<ChorePhoto>().WithMany().HasForeignKey(c => c.PhotoId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(c => c.Chore).WithMany(c => c.Completions).HasForeignKey(c => c.ChoreId).OnDelete(DeleteBehavior.Cascade);
         });
 

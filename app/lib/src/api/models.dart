@@ -563,6 +563,7 @@ class Chore {
     this.timeOfDay = ChoreTimeOfDay.any,
     this.steps = const [],
     this.doneSteps = const [],
+    this.requiresPhoto = false,
   });
 
   final String id;
@@ -586,6 +587,9 @@ class Chore {
   /// Os passos já feitos desta vez (posições em [steps]).
   final List<int> doneSteps;
 
+  /// Para concluir é preciso uma foto do trabalho feito.
+  final bool requiresPhoto;
+
   bool get rotates => rotationUserIds.isNotEmpty;
   bool get isRoutine => steps.isNotEmpty;
 
@@ -604,6 +608,7 @@ class Chore {
     timeOfDay: timeOfDay,
     steps: steps,
     doneSteps: doneSteps ?? this.doneSteps,
+    requiresPhoto: requiresPhoto,
   );
 
   factory Chore.fromJson(Map<String, dynamic> json) => Chore(
@@ -621,6 +626,41 @@ class Chore {
     timeOfDay: ChoreTimeOfDay.fromApi(json['timeOfDay'] as String?),
     steps: (json['steps'] as List?)?.cast<String>() ?? const [],
     doneSteps: (json['doneSteps'] as List?)?.cast<int>() ?? const [],
+    requiresPhoto: json['requiresPhoto'] as bool? ?? false,
+  );
+}
+
+/// Uma tarefa feita. [rejected]: quem gere as tarefas não a aceitou (os pontos não contam).
+class ChoreHistoryItem {
+  const ChoreHistoryItem({
+    required this.id,
+    required this.choreId,
+    required this.choreTitle,
+    required this.userId,
+    required this.points,
+    required this.completedAt,
+    this.photoId,
+    this.rejected = false,
+  });
+
+  final String id;
+  final String choreId;
+  final String choreTitle;
+  final String userId;
+  final int points;
+  final DateTime completedAt;
+  final String? photoId;
+  final bool rejected;
+
+  factory ChoreHistoryItem.fromJson(Map<String, dynamic> json) => ChoreHistoryItem(
+    id: json['id'] as String,
+    choreId: json['choreId'] as String,
+    choreTitle: json['choreTitle'] as String,
+    userId: json['userId'] as String,
+    points: json['points'] as int,
+    completedAt: DateTime.parse(json['completedAt'] as String).toLocal(),
+    photoId: json['photoId'] as String?,
+    rejected: json['rejected'] as bool? ?? false,
   );
 }
 
@@ -650,6 +690,7 @@ class ChoreDraft {
     this.rotationUserIds = const [],
     this.timeOfDay = ChoreTimeOfDay.any,
     this.steps = const [],
+    this.requiresPhoto = false,
   });
 
   final String title;
@@ -661,6 +702,7 @@ class ChoreDraft {
   final List<String> rotationUserIds;
   final ChoreTimeOfDay timeOfDay;
   final List<String> steps;
+  final bool requiresPhoto;
 
   factory ChoreDraft.from(Chore chore) => ChoreDraft(
     title: chore.title,
@@ -672,6 +714,7 @@ class ChoreDraft {
     rotationUserIds: chore.rotationUserIds,
     timeOfDay: chore.timeOfDay,
     steps: chore.steps,
+    requiresPhoto: chore.requiresPhoto,
   );
 
   Map<String, dynamic> toJson() => {
@@ -684,6 +727,7 @@ class ChoreDraft {
     'rotationUserIds': rotationUserIds,
     'timeOfDay': timeOfDay.apiValue,
     'steps': steps,
+    'requiresPhoto': requiresPhoto,
   };
 }
 

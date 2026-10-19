@@ -56,6 +56,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
   late List<String> _rotation;
   late bool _rotates;
   late ChoreTimeOfDay _timeOfDay;
+  late bool _requiresPhoto;
 
   /// Os passos da rotina (cada um com a sua caixa de texto).
   final _steps = <TextEditingController>[];
@@ -75,6 +76,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
     _rotation = [...?chore?.rotationUserIds];
     _rotates = _rotation.isNotEmpty;
     _timeOfDay = chore?.timeOfDay ?? ChoreTimeOfDay.any;
+    _requiresPhoto = chore?.requiresPhoto ?? false;
     for (final step in chore?.steps ?? const <String>[]) {
       _steps.add(TextEditingController(text: step));
     }
@@ -126,6 +128,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
           assigneeUserId: rotation.isNotEmpty ? (rotation.contains(_assignee) ? _assignee : null) : _assignee,
           rotationUserIds: rotation,
           timeOfDay: _timeOfDay,
+          requiresPhoto: _requiresPhoto,
           steps: [
             for (final s in _steps)
               if (s.text.trim().isNotEmpty) s.text.trim(),
@@ -274,6 +277,14 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                 icon: const Icon(Icons.add),
                 label: const Text('Adicionar passo'),
               ),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Pedir foto de prova'),
+              subtitle: const Text('Para a dar como feita, é preciso uma foto do trabalho.'),
+              value: _requiresPhoto,
+              onChanged: (value) => setState(() => _requiresPhoto = value),
             ),
             const SizedBox(height: 8),
             Row(

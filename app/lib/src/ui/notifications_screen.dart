@@ -103,6 +103,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   static IconData _icon(String kind) => switch (kind) {
     'ChoreAssigned' => Icons.task_alt,
+    'ChoreCompleted' => Icons.photo_camera_outlined,
+    'ChoreRejected' => Icons.replay,
     'EventAssigned' => Icons.event,
     'RideAssigned' => Icons.directions_car_outlined,
     'RewardRequested' || 'RewardDecided' => Icons.card_giftcard,

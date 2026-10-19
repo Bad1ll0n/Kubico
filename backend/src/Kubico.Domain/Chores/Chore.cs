@@ -42,6 +42,9 @@ public class Chore
     /// <summary>Uma rotina com todos os passos feitos.</summary>
     public bool AllStepsDone => Steps.Count > 0 && Enumerable.Range(0, Steps.Count).All(DoneSteps.Contains);
 
+    /// <summary>Para concluir é preciso uma foto do trabalho feito.</summary>
+    public bool RequiresPhoto { get; set; }
+
     /// <summary>Preenchido quando uma tarefa não recorrente é concluída.</summary>
     public DateTimeOffset? CompletedAt { get; set; }
 
@@ -52,6 +55,27 @@ public class Chore
     public List<ChoreCompletion> Completions { get; set; } = [];
 
     public bool IsDone => CompletedAt is not null;
+
+    /// <summary>
+    /// Uma conclusão não foi aceite: a tarefa volta a estar por fazer, hoje, por quem a fez (numa tarefa que se
+    /// repete, a rotação continua a partir dessa pessoa).
+    /// </summary>
+    public void Reopen(Guid userId, DateOnly today, DateTimeOffset now)
+    {
+        if (Recurrence == ChoreRecurrence.None)
+        {
+            CompletedAt = null;
+            DueDate ??= today;
+        }
+        else
+        {
+            DueDate = today;
+        }
+
+        AssigneeUserId = userId;
+        DoneSteps = [];
+        UpdatedAt = now;
+    }
 
     /// <summary>Marca ou desmarca um passo da rotina. Devolve false se o passo não existe.</summary>
     public bool SetStep(int index, bool done, DateTimeOffset now)

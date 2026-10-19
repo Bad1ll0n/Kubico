@@ -1,8 +1,12 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
 import 'models.dart';
+
+/// Um ficheiro a enviar num pedido multipart.
+typedef _Upload = ({String field, List<int> bytes, String filename});
 
 /// Erro devolvido pela API, já com uma mensagem pronta a mostrar ao utilizador.
 class ApiException implements Exception {
@@ -267,11 +271,39 @@ class ApiClient {
   Future<void> deleteChore(String householdId, String choreId) =>
       _send('DELETE', '/api/households/$householdId/chores/$choreId');
 
-  /// Conclui a tarefa e devolve a versão atualizada e os pontos ganhos.
-  Future<(Chore, int)> completeChore(String householdId, String choreId) async {
-    final json = await _send('POST', '/api/households/$householdId/chores/$choreId/complete') as Map<String, dynamic>;
+  /// Conclui a tarefa e devolve a versão atualizada e os pontos ganhos. [photoId]: a foto de prova já enviada.
+  Future<(Chore, int)> completeChore(String householdId, String choreId, {String? photoId}) async {
+    final json = await _send(
+      'POST',
+      '/api/households/$householdId/chores/$choreId/complete',
+      body: photoId == null ? null : {'photoId': photoId},
+    ) as Map<String, dynamic>;
     return (Chore.fromJson(json['chore'] as Map<String, dynamic>), json['pointsEarned'] as int);
   }
+
+  /// Envia a foto de prova de uma tarefa e devolve o id com que se conclui.
+  Future<String> uploadChorePhoto(String householdId, Uint8List bytes, String name) async {
+    final json = await _send(
+      'POST',
+      '/api/households/$householdId/chores/photos',
+      upload: (field: 'photo', bytes: bytes, filename: name),
+    ) as Map<String, dynamic>;
+    return json['id'] as String;
+  }
+
+  Future<Uint8List> getChorePhoto(String householdId, String photoId) async =>
+      (await _execute('GET', '/api/households/$householdId/chores/photos/$photoId')).bodyBytes;
+
+  Future<List<ChoreHistoryItem>> getChoreHistory(String householdId, {int days = 30}) async => [
+    for (final i in await _send('GET', '/api/households/$householdId/chores/history?days=$days') as List)
+      ChoreHistoryItem.fromJson(i as Map<String, dynamic>),
+  ];
+
+  /// Não aceita uma tarefa feita: os pontos deixam de contar e a tarefa volta para quem a fez.
+  Future<ChoreHistoryItem> rejectChoreCompletion(String householdId, String completionId) async =>
+      ChoreHistoryItem.fromJson(
+        await _send('POST', '/api/households/$householdId/chores/completions/$completionId/reject'),
+      );
 
   /// Marca ou desmarca um passo de uma rotina. Se era o último, a rotina fica concluída ([completed]) e dá pontos.
   Future<({Chore chore, bool completed, int points})> setChoreStep(
@@ -427,14 +459,34 @@ class ApiClient {
 
   // --- HTTP ---
 
-  Future<dynamic> _send(String method, String path, {Map<String, dynamic>? body, bool retry = true}) async {
-    final request = http.Request(method, Uri.parse('$baseUrl$path'))..headers['Accept'] = 'application/json';
+  /// Pedido com resposta em JSON (ou vazia). [upload] envia um ficheiro (multipart) em vez de [body].
+  Future<dynamic> _send(String method, String path, {Map<String, dynamic>? body, _Upload? upload}) async =>
+      _decode((await _execute(method, path, body: body, upload: upload)).bodyBytes);
+
+  /// Faz o pedido com a sessão; num 401 renova a sessão e repete uma vez. Erros viram [ApiException].
+  Future<http.Response> _execute(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    _Upload? upload,
+    bool retry = true,
+  }) async {
+    final uri = Uri.parse('$baseUrl$path');
+    final http.BaseRequest request;
+    if (upload != null) {
+      request = http.MultipartRequest(method, uri)
+        ..files.add(http.MultipartFile.fromBytes(upload.field, upload.bytes, filename: upload.filename));
+    } else {
+      final plain = http.Request(method, uri);
+      if (body != null) {
+        plain.headers['Content-Type'] = 'application/json';
+        plain.body = jsonEncode(body);
+      }
+      request = plain;
+    }
+    request.headers['Accept'] = 'application/json';
     if (accessToken != null) request.headers['Authorization'] = 'Bearer $accessToken';
     if (deviceKind != null) request.headers['X-Kubico-Device'] = deviceKind!;
-    if (body != null) {
-      request.headers['Content-Type'] = 'application/json';
-      request.body = jsonEncode(body);
-    }
 
     final http.Response response;
     try {
@@ -442,23 +494,23 @@ class ApiClient {
     } on Exception {
       throw const ApiException(0, 'Sem ligação ao servidor. Verifica a tua internet.');
     }
-
-    dynamic decoded;
-    if (response.bodyBytes.isNotEmpty) {
-      try {
-        decoded = jsonDecode(utf8.decode(response.bodyBytes));
-      } on FormatException {
-        decoded = null; // Corpo que não é JSON (ex.: página de erro de um proxy).
-      }
-    }
-    if (response.statusCode >= 200 && response.statusCode < 300) return decoded;
+    if (response.statusCode >= 200 && response.statusCode < 300) return response;
 
     final renew = onUnauthorized;
     if (response.statusCode == 401 && retry && accessToken != null && renew != null && !_authPaths.contains(path)) {
-      if (await renew()) return _send(method, path, body: body, retry: false);
+      if (await renew()) return _execute(method, path, body: body, upload: upload, retry: false);
     }
 
-    throw ApiException(response.statusCode, _errorMessage(response.statusCode, decoded));
+    throw ApiException(response.statusCode, _errorMessage(response.statusCode, _decode(response.bodyBytes)));
+  }
+
+  static dynamic _decode(List<int> bytes) {
+    if (bytes.isEmpty) return null;
+    try {
+      return jsonDecode(utf8.decode(bytes));
+    } on FormatException {
+      return null; // Corpo que não é JSON (ex.: página de erro de um proxy).
+    }
   }
 
   static String _errorMessage(int status, dynamic body) {
