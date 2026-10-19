@@ -628,6 +628,74 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.ToTable("PushDevices");
                 });
 
+            modelBuilder.Entity("Kubico.Domain.Rewards.Allowance", b =>
+                {
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AmountCents")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BonusPerChoreCents")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Period")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("HouseholdId", "UserId");
+
+                    b.ToTable("Allowances");
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Rewards.AllowancePayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AmountCents")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ChoresDone")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("PaidAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PaidByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HouseholdId", "UserId", "PeriodStart")
+                        .IsUnique();
+
+                    b.ToTable("AllowancePayments");
+                });
+
             modelBuilder.Entity("Kubico.Domain.Rewards.Reward", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1155,6 +1223,24 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.HasOne("Kubico.Domain.Users.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Rewards.Allowance", b =>
+                {
+                    b.HasOne("Kubico.Domain.Households.Household", null)
+                        .WithMany()
+                        .HasForeignKey("HouseholdId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Rewards.AllowancePayment", b =>
+                {
+                    b.HasOne("Kubico.Domain.Households.Household", null)
+                        .WithMany()
+                        .HasForeignKey("HouseholdId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

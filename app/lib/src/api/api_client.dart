@@ -329,6 +329,42 @@ class ApiClient {
     return (json['members'] as List).map((m) => MemberChoreStats.fromJson(m as Map<String, dynamic>)).toList();
   }
 
+  // --- Mesada ---
+
+  Future<List<Allowance>> getAllowances(String householdId) async => [
+    for (final a in await _send('GET', '/api/households/$householdId/allowances') as List)
+      Allowance.fromJson(a as Map<String, dynamic>),
+  ];
+
+  Future<Allowance> saveAllowance(
+    String householdId,
+    String userId, {
+    required int amountCents,
+    int bonusPerChoreCents = 0,
+    AllowancePeriod period = AllowancePeriod.weekly,
+  }) async => Allowance.fromJson(
+    await _send(
+      'PUT',
+      '/api/households/$householdId/allowances/$userId',
+      body: {'amountCents': amountCents, 'bonusPerChoreCents': bonusPerChoreCents, 'period': period.apiValue},
+    ),
+  );
+
+  Future<void> stopAllowance(String householdId, String userId) =>
+      _send('DELETE', '/api/households/$householdId/allowances/$userId');
+
+  /// Marca o período que começa em [periodStart] como pago (com o valor que tem agora).
+  Future<Allowance> payAllowance(String householdId, String userId, DateTime periodStart) async => Allowance.fromJson(
+    await _send(
+      'POST',
+      '/api/households/$householdId/allowances/$userId/payments',
+      body: {'periodStart': apiDate(periodStart)},
+    ),
+  );
+
+  Future<void> undoAllowancePayment(String householdId, String userId, String paymentId) =>
+      _send('DELETE', '/api/households/$householdId/allowances/$userId/payments/$paymentId');
+
   // --- Calendário ---
 
   /// Eventos, ocorrências e feriados entre dois dias (inclusive; no máximo 92 dias).

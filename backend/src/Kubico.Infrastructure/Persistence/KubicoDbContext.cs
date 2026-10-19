@@ -22,6 +22,8 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
     public DbSet<ShoppingItem> ShoppingItems => Set<ShoppingItem>();
     public DbSet<ChorePhoto> ChorePhotos => Set<ChorePhoto>();
+    public DbSet<Allowance> Allowances => Set<Allowance>();
+    public DbSet<AllowancePayment> AllowancePayments => Set<AllowancePayment>();
     public DbSet<ProductInfo> ProductInfos => Set<ProductInfo>();
     public DbSet<HouseholdProduct> HouseholdProducts => Set<HouseholdProduct>();
     public DbSet<Chore> Chores => Set<Chore>();
@@ -115,6 +117,19 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(i => i.Barcode).HasMaxLength(14);
             e.HasIndex(i => i.ListId);
             e.HasOne(i => i.List).WithMany(l => l.Items).HasForeignKey(i => i.ListId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Allowance>(e =>
+        {
+            e.HasKey(a => new { a.HouseholdId, a.UserId });
+            e.Property(a => a.Period).HasConversion<string>().HasMaxLength(20);
+            e.HasOne<Household>().WithMany().HasForeignKey(a => a.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AllowancePayment>(e =>
+        {
+            e.HasIndex(p => new { p.HouseholdId, p.UserId, p.PeriodStart }).IsUnique();
+            e.HasOne<Household>().WithMany().HasForeignKey(p => p.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ChorePhoto>(e =>

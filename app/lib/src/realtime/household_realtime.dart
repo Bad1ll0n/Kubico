@@ -62,6 +62,12 @@ class RewardsChanged extends HouseholdEvent {
   const RewardsChanged();
 }
 
+/// Mudou a mesada de alguém (valores, ou um período pago).
+class AllowanceChanged extends HouseholdEvent {
+  const AllowanceChanged(this.userId);
+  final String userId;
+}
+
 /// Mudou quem está numa casa: alguém entrou ou mudou de papel ([member]), ou saiu ([removedUserId]). A saída também
 /// chega pelo canal pessoal de quem saiu.
 class MembersChanged extends HouseholdEvent {
@@ -159,6 +165,8 @@ class HouseholdRealtime {
       'MemberDeleted',
       (args) => _emit(args, (a) => MembersChanged(a[0] as String, removedUserId: a[1] as String)),
     );
+
+    connection.on('AllowanceChanged', (args) => _emit(args, (a) => AllowanceChanged(a[0] as String)));
 
     connection.on('PermissionsChanged', (args) => _emit(args, (a) => PermissionsChanged(a[0] as String)));
 

@@ -1236,6 +1236,103 @@ class RewardRedemption {
 }
 
 /// Saldo de um membro: ganhos nas tarefas, já trocados, reservados (pedidos à espera) e disponíveis.
+/// Euros como se escrevem em Portugal: "6,20 €" (ou "6,20", sem o símbolo).
+String formatEuros(int cents, {bool symbol = true}) {
+  final text = '${cents ~/ 100},${(cents % 100).toString().padLeft(2, '0')}';
+  return symbol ? '$text €' : text;
+}
+
+/// "5", "5,5", "5,50" ou "5.50" → cêntimos; null se não for um valor válido.
+int? parseEuros(String text) {
+  final match = RegExp(r'^\s*(\d{1,4})(?:[.,](\d{1,2}))?\s*€?\s*$').firstMatch(text);
+  if (match == null) return null;
+  final cents = (match.group(2) ?? '0').padRight(2, '0');
+  return int.parse(match.group(1)!) * 100 + int.parse(cents);
+}
+
+enum AllowancePeriod {
+  weekly('Weekly', 'por semana'),
+  monthly('Monthly', 'por mês');
+
+  const AllowancePeriod(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
+
+  static AllowancePeriod fromApi(String value) => values.firstWhere((p) => p.apiValue == value, orElse: () => weekly);
+}
+
+/// Um período da mesada: o atual (a decorrer), um por pagar, ou um pago.
+class AllowancePeriodEntry {
+  const AllowancePeriodEntry({
+    required this.start,
+    required this.end,
+    required this.choresDone,
+    required this.amountCents,
+    required this.isCurrent,
+    this.paymentId,
+    this.paidAt,
+  });
+
+  final DateTime start;
+  final DateTime end;
+  final int choresDone;
+  final int amountCents;
+  final bool isCurrent;
+  final String? paymentId;
+  final DateTime? paidAt;
+
+  bool get isPaid => paidAt != null;
+
+  factory AllowancePeriodEntry.fromJson(Map<String, dynamic> json) => AllowancePeriodEntry(
+    start: DateTime.parse(json['start'] as String),
+    end: DateTime.parse(json['end'] as String),
+    choresDone: json['choresDone'] as int,
+    amountCents: json['amountCents'] as int,
+    isCurrent: json['isCurrent'] as bool,
+    paymentId: json['paymentId'] as String?,
+    paidAt: json['paidAt'] == null ? null : DateTime.parse(json['paidAt'] as String).toLocal(),
+  );
+}
+
+/// A mesada de um membro: valor por semana ou por mês, mais um extra por tarefa feita.
+class Allowance {
+  const Allowance({
+    required this.userId,
+    required this.amountCents,
+    required this.bonusPerChoreCents,
+    required this.period,
+    required this.owedCents,
+    required this.periods,
+  });
+
+  final String userId;
+  final int amountCents;
+  final int bonusPerChoreCents;
+  final AllowancePeriod period;
+
+  /// Quanto falta pagar dos períodos que já acabaram.
+  final int owedCents;
+
+  /// Do mais recente (o atual) para o mais antigo.
+  final List<AllowancePeriodEntry> periods;
+
+  /// "5,00 € por semana + 0,50 € por tarefa feita"
+  String describe() => [
+    '${formatEuros(amountCents)} ${period.label}',
+    if (bonusPerChoreCents > 0) '+ ${formatEuros(bonusPerChoreCents)} por tarefa feita',
+  ].join(' ');
+
+  factory Allowance.fromJson(Map<String, dynamic> json) => Allowance(
+    userId: json['userId'] as String,
+    amountCents: json['amountCents'] as int,
+    bonusPerChoreCents: json['bonusPerChoreCents'] as int,
+    period: AllowancePeriod.fromApi(json['period'] as String),
+    owedCents: json['owedCents'] as int,
+    periods: [for (final p in json['periods'] as List) AllowancePeriodEntry.fromJson(p as Map<String, dynamic>)],
+  );
+}
+
 class MemberPoints {
   const MemberPoints({
     required this.userId,

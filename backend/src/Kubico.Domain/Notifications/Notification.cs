@@ -22,6 +22,9 @@ public enum NotificationKind
 
     /// <summary>Uma tarefa que fizeste não foi aceite e voltou para ti.</summary>
     ChoreRejected = 6,
+
+    /// <summary>A tua mesada foi paga.</summary>
+    AllowancePaid = 7,
 }
 
 /// <summary>

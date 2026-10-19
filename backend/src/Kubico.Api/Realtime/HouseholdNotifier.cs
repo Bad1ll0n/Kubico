@@ -24,6 +24,9 @@ public static class HouseholdEvents
     public const string RewardDeleted = "RewardDeleted";
     public const string RedemptionUpserted = "RedemptionUpserted";
     public const string RedemptionDeleted = "RedemptionDeleted";
+
+    /// <summary>Mudou a mesada de alguém (valores, ou um período pago). Leva o id da pessoa.</summary>
+    public const string AllowanceChanged = "AllowanceChanged";
     public const string MemberUpserted = "MemberUpserted";
     public const string AbsenceUpserted = "AbsenceUpserted";
     public const string AbsenceDeleted = "AbsenceDeleted";
@@ -119,6 +122,9 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub, HouseholdGroups gr
 
     public Task RedemptionUpserted(Guid householdId, RedemptionDto redemption, CancellationToken ct) =>
         Area(householdId, HouseholdModule.Rewards).SendAsync(HouseholdEvents.RedemptionUpserted, redemption, ct);
+
+    public Task AllowanceChanged(Guid householdId, Guid userId, CancellationToken ct) =>
+        Area(householdId, HouseholdModule.Rewards).SendAsync(HouseholdEvents.AllowanceChanged, userId, ct);
 
     public Task RedemptionDeleted(Guid householdId, Guid redemptionId, CancellationToken ct) =>
         Area(householdId, HouseholdModule.Rewards).SendAsync(HouseholdEvents.RedemptionDeleted, redemptionId, ct);

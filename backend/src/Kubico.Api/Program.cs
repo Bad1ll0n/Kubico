@@ -174,6 +174,7 @@ api.MapCalendarEndpoints();
 api.MapCalendarFeedEndpoints();
 api.MapCalendarSyncEndpoints();
 api.MapRewardEndpoints();
+api.MapAllowanceEndpoints();
 api.MapNotificationEndpoints();
 api.MapFeedbackEndpoints();
 

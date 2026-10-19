@@ -75,6 +75,8 @@ class _FakeApi {
         'points': [_points('rita', 'Rita', 30), _points('rui', 'Rui', 0, reserved: 5), _points('mom', 'Mãe', 12)],
       });
     }
+    // Sem mesada nesta casa.
+    if (path == '/api/households/h1/allowances') return _json(<Object>[]);
     actions.add('${request.method} $path');
     if (path == '/api/households/h1/rewards/r1/redeem') {
       return _json(_redemption('x2', me, 'Escolher o filme de sexta', 25, 'Pending'), 201);

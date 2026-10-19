@@ -7,6 +7,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
+import 'allowance_section.dart';
 import 'dates_pt.dart';
 import 'reward_editor.dart';
 import 'theme.dart';
@@ -178,6 +179,7 @@ class _RewardsViewState extends State<RewardsView> {
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
           children: [
             _PointsCard(points: overview.points, me: me),
+            AllowanceSection(household: widget.household, members: overview.points),
             if (pending.isNotEmpty) ...[
               const _Header('À espera de aprovação'),
               for (final r in pending)

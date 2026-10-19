@@ -121,12 +121,12 @@ public static class ChoreHistoryEndpoints
         var since = clock.GetUtcNow().AddDays(-Math.Clamp(days ?? 30, 1, 365));
         var items = await db.ChoreCompletions.AsNoTracking()
             .Where(c => c.Chore.HouseholdId == householdId && c.CompletedAt >= since)
+            .OrderByDescending(c => c.CompletedAt)
+            .Take(200)
             .Select(c => new ChoreHistoryItemDto(
                 c.Id, c.ChoreId, c.Chore.Title, c.UserId, c.Points, c.CompletedAt, c.PhotoId, c.RejectedAt != null))
             .ToListAsync(ct);
-
-        // Ordena-se aqui: o SQLite não ordena por DateTimeOffset.
-        return Results.Ok(items.OrderByDescending(i => i.CompletedAt).Take(200));
+        return Results.Ok(items);
     }
 
     /// <summary>Não aceitar uma tarefa feita: os pontos deixam de contar e a tarefa volta para quem a fez, para hoje.</summary>
