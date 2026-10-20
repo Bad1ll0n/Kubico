@@ -13,9 +13,11 @@ using Microsoft.Extensions.Options;
 
 namespace Kubico.Api.Households;
 
+/// <summary>Criar uma casa; com <c>Template</c>, já vem com as listas, tarefas e recompensas desse modelo.</summary>
 public record CreateHouseholdRequest(
     [property: Required, StringLength(100, MinimumLength = 1)] string Name,
-    [property: StringLength(64)] string? TimeZoneId = null);
+    [property: StringLength(64)] string? TimeZoneId = null,
+    HouseholdTemplate Template = HouseholdTemplate.Blank);
 
 public record CreateInviteRequest(HouseholdRole Role = HouseholdRole.Adult, int ValidForDays = 7);
 
@@ -56,6 +58,7 @@ public static class HouseholdEndpoints
     public static RouteGroupBuilder MapHouseholdEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/me", GetMe).WithTags("Households").RequireAuthorization();
+        api.MapGet("/household-templates", () => Results.Ok(HouseholdTemplates.List())).WithTags("Households").RequireAuthorization();
 
         var households = api.MapGroup("/households").WithTags("Households").RequireAuthorization();
         households.MapPost("/", CreateHousehold);
@@ -105,6 +108,11 @@ public static class HouseholdEndpoints
             });
         }
 
+        if (!Enum.IsDefined(request.Template))
+        {
+            return Results.Problem(title: "Esse modelo de casa não existe.", statusCode: StatusCodes.Status400BadRequest);
+        }
+
         var userId = principal.GetUserId();
         if (await IsChildProfile(db, userId, ct))
         {
@@ -123,6 +131,7 @@ public static class HouseholdEndpoints
         });
 
         db.Households.Add(household);
+        HouseholdTemplates.Apply(db, household, request.Template, userId, now);
         await db.SaveChangesAsync(ct);
 
         return Results.Created(

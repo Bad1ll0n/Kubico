@@ -183,8 +183,8 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> createHousehold(String name) async {
-    final created = await api.createHousehold(name.trim());
+  Future<void> createHousehold(String name, {String? template}) async {
+    final created = await api.createHousehold(name.trim(), template: template);
     await refresh();
     await selectHousehold(created.id);
   }

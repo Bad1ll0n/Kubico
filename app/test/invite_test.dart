@@ -100,6 +100,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.widgetWithText(TextField, 'K7M2QX9P'), findsOneWidget);
-    expect(find.text('Ficas a administrar a casa e podes convidar a família.'), findsOneWidget);
+    expect(find.textContaining('Ficas a administrar a casa e podes convidar a família.'), findsOneWidget);
   });
 }

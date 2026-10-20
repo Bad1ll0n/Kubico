@@ -131,8 +131,14 @@ class ApiClient {
 
   // --- Agregados ---
 
-  Future<HouseholdSummary> createHousehold(String name) async =>
-      HouseholdSummary.fromJson(await _send('POST', '/api/households', body: {'name': name}));
+  /// Cria a casa; com [template], já vem com as listas, tarefas e recompensas desse modelo.
+  Future<HouseholdSummary> createHousehold(String name, {String? template}) async =>
+      HouseholdSummary.fromJson(await _send('POST', '/api/households', body: {'name': name, 'template': ?template}));
+
+  Future<List<HouseholdTemplate>> getHouseholdTemplates() async => [
+    for (final t in await _send('GET', '/api/household-templates') as List)
+      HouseholdTemplate.fromJson(t as Map<String, dynamic>),
+  ];
 
   Future<HouseholdDetails> getHousehold(String householdId) async =>
       HouseholdDetails.fromJson(await _send('GET', '/api/households/$householdId'));

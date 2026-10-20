@@ -205,6 +205,44 @@ class ActivityItem {
   );
 }
 
+/// Um modelo para criar a casa já com listas, tarefas e recompensas ("Família com crianças", "Casa partilhada"…).
+class HouseholdTemplate {
+  const HouseholdTemplate({
+    required this.key,
+    required this.name,
+    required this.description,
+    this.lists = const [],
+    this.chores = const [],
+    this.rewards = const [],
+  });
+
+  /// "FamilyWithKids", "Couple", "SharedHouse", "CaringForParents" ou "Blank".
+  final String key;
+  final String name;
+  final String description;
+  final List<String> lists;
+  final List<String> chores;
+  final List<String> rewards;
+
+  bool get isBlank => key == 'Blank';
+
+  /// "2 listas · 5 tarefas · 3 recompensas"
+  String get contents => [
+    if (lists.isNotEmpty) '${lists.length} ${lists.length == 1 ? 'lista' : 'listas'}',
+    if (chores.isNotEmpty) '${chores.length} ${chores.length == 1 ? 'tarefa' : 'tarefas'}',
+    if (rewards.isNotEmpty) '${rewards.length} ${rewards.length == 1 ? 'recompensa' : 'recompensas'}',
+  ].join(' · ');
+
+  factory HouseholdTemplate.fromJson(Map<String, dynamic> json) => HouseholdTemplate(
+    key: json['key'] as String,
+    name: json['name'] as String,
+    description: json['description'] as String,
+    lists: (json['lists'] as List).cast<String>(),
+    chores: (json['chores'] as List).cast<String>(),
+    rewards: (json['rewards'] as List).cast<String>(),
+  );
+}
+
 /// O acesso de um papel a cada área.
 class RolePermissions {
   const RolePermissions({required this.role, required this.access});
