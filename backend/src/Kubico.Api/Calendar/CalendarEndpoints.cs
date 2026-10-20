@@ -102,6 +102,7 @@ public static class CalendarEndpoints
         ClaimsPrincipal principal,
         KubicoDbContext db,
         HouseholdAccess access,
+        HttpContext http,
         CancellationToken ct)
     {
         var (_, _, error) = await access.RequireAsync(
@@ -154,7 +155,7 @@ public static class CalendarEndpoints
             last,
             [.. visible.Select(x => x.Item.Event).DistinctBy(e => e.Id).Select(ToDto)],
             [.. visible.Select(x => ToDto(x.Item, conflicts[x.Index]))],
-            [.. PortugueseHolidays.Between(first, last).Select(h => new HolidayDto(h.Date, h.Name))]));
+            [.. PortugueseHolidays.Between(first, last).Select(h => new HolidayDto(h.Date, Texts.Translate(h.Name, Texts.LanguageOf(http))))]));
     }
 
     private static async Task<IResult> CreateEvent(

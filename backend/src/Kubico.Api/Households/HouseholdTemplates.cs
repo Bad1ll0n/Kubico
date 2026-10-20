@@ -1,3 +1,4 @@
+using Kubico.Api.Common;
 using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
 using Kubico.Domain.Rewards;
@@ -95,17 +96,28 @@ public static class HouseholdTemplates
             []),
     ];
 
-    /// <summary>Os modelos, com "Começar do zero" no fim.</summary>
-    public static IReadOnlyList<HouseholdTemplateDto> List() =>
-    [
-        .. All.Select(d => new HouseholdTemplateDto(
-            d.Key, d.Name, d.Description, d.Lists, [.. d.Chores.Select(c => c.Title)], [.. d.Rewards.Select(r => r.Title)])),
-        new(HouseholdTemplate.Blank, "Começar do zero", "Uma casa vazia: crias tu as listas e as tarefas.", [], [], []),
-    ];
-
-    /// <summary>Junta à casa nova o que o modelo traz (grava-se com a casa).</summary>
-    public static void Apply(KubicoDbContext db, Household household, HouseholdTemplate template, Guid userId, DateTimeOffset now)
+    /// <summary>Os modelos (na língua de quem pede), com "Começar do zero" no fim.</summary>
+    public static IReadOnlyList<HouseholdTemplateDto> List(string language)
     {
+        string T(string text) => Texts.Translate(text, language);
+        return
+        [
+            .. All.Select(d => new HouseholdTemplateDto(
+                d.Key,
+                T(d.Name),
+                T(d.Description),
+                [.. d.Lists.Select(T)],
+                [.. d.Chores.Select(c => T(c.Title))],
+                [.. d.Rewards.Select(r => T(r.Title))])),
+            new(HouseholdTemplate.Blank, T("Começar do zero"), T("Uma casa vazia: crias tu as listas e as tarefas."), [], [], []),
+        ];
+    }
+
+    /// <summary>Junta à casa nova o que o modelo traz, na língua de quem a cria (grava-se com a casa).</summary>
+    public static void Apply(
+        KubicoDbContext db, Household household, HouseholdTemplate template, Guid userId, DateTimeOffset now, string language)
+    {
+        string T(string text) => Texts.Translate(text, language);
         if (All.SingleOrDefault(d => d.Key == template) is not { } definition)
         {
             return;
@@ -114,7 +126,7 @@ public static class HouseholdTemplates
         var today = household.Today(now);
         foreach (var name in definition.Lists)
         {
-            db.ShoppingLists.Add(new ShoppingList { HouseholdId = household.Id, Name = name, CreatedAt = now });
+            db.ShoppingLists.Add(new ShoppingList { HouseholdId = household.Id, Name = T(name), CreatedAt = now });
         }
 
         foreach (var chore in definition.Chores)
@@ -122,12 +134,12 @@ public static class HouseholdTemplates
             db.Chores.Add(new Chore
             {
                 HouseholdId = household.Id,
-                Title = chore.Title,
+                Title = T(chore.Title),
                 Points = chore.Points,
                 DueDate = today,
                 Recurrence = chore.Recurrence,
                 TimeOfDay = chore.TimeOfDay,
-                Steps = [.. chore.Steps ?? []],
+                Steps = [.. (chore.Steps ?? []).Select(T)],
                 CreatedByUserId = userId,
                 CreatedAt = now,
                 UpdatedAt = now,

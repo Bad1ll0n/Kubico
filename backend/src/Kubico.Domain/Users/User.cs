@@ -12,6 +12,11 @@ public class User
     public string? Email { get; set; }
 
     public required string DisplayName { get; set; }
+
+    /// <summary>A língua da app ("pt" ou "en"): os avisos chegam nela.</summary>
+    public string Language { get; set; } = DefaultLanguage;
+
+    public const string DefaultLanguage = "pt";
     public string PasswordHash { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
 

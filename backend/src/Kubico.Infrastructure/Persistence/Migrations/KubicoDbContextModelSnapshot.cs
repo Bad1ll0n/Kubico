@@ -1073,6 +1073,13 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<int>("FailedTwoFactorAttempts")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasDefaultValue("pt");
+
                     b.Property<long?>("LastTotpStep")
                         .HasColumnType("bigint");
 

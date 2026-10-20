@@ -58,7 +58,7 @@ public static class HouseholdEndpoints
     public static RouteGroupBuilder MapHouseholdEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/me", GetMe).WithTags("Households").RequireAuthorization();
-        api.MapGet("/household-templates", () => Results.Ok(HouseholdTemplates.List())).WithTags("Households").RequireAuthorization();
+        api.MapGet("/household-templates", (HttpContext http) => Results.Ok(HouseholdTemplates.List(Texts.LanguageOf(http)))).WithTags("Households").RequireAuthorization();
 
         var households = api.MapGroup("/households").WithTags("Households").RequireAuthorization();
         households.MapPost("/", CreateHousehold);
@@ -97,7 +97,12 @@ public static class HouseholdEndpoints
     }
 
     private static async Task<IResult> CreateHousehold(
-        CreateHouseholdRequest request, ClaimsPrincipal principal, KubicoDbContext db, TimeProvider clock, CancellationToken ct)
+        CreateHouseholdRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        TimeProvider clock,
+        HttpContext http,
+        CancellationToken ct)
     {
         var timeZoneId = string.IsNullOrWhiteSpace(request.TimeZoneId) ? Household.DefaultTimeZoneId : request.TimeZoneId.Trim();
         if (!TimeZoneInfo.TryFindSystemTimeZoneById(timeZoneId, out _))
@@ -131,7 +136,7 @@ public static class HouseholdEndpoints
         });
 
         db.Households.Add(household);
-        HouseholdTemplates.Apply(db, household, request.Template, userId, now);
+        HouseholdTemplates.Apply(db, household, request.Template, userId, now, Texts.LanguageOf(http));
         await db.SaveChangesAsync(ct);
 
         return Results.Created(

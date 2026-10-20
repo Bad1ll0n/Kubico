@@ -83,7 +83,8 @@ public class CalendarSyncService(
         var provider = Provider(connection.Provider);
         var household = await db.Households.AsNoTracking().SingleAsync(h => h.Id == connection.HouseholdId, ct);
         var level = await access.GetAccessAsync(connection.HouseholdId, role.Value, HouseholdModule.Calendar, ct);
-        var run = new SyncRun(connection, household, level >= ModuleAccess.Manage);
+        var language = await db.Users.Where(u => u.Id == connection.UserId).Select(u => u.Language).SingleAsync(ct);
+        var run = new SyncRun(connection, household, level >= ModuleAccess.Manage, language);
         if (provider is not { IsConfigured: true })
         {
             connection.LastError = "Este serviço deixou de estar disponível no servidor do Kubico.";
@@ -128,7 +129,7 @@ public class CalendarSyncService(
 
             connection.Status = CalendarConnectionStatus.Active;
             connection.LastSyncedAt = clock.GetUtcNow();
-            connection.LastError = run.Warnings.Count == 0 ? null : string.Join(" ", run.Warnings.Take(MaxWarnings));
+            connection.LastError = run.Warnings.Count == 0 ? null : string.Join("\n", run.Warnings.Take(MaxWarnings));
         }
         catch (CalendarAuthException e)
         {
@@ -505,7 +506,7 @@ public class CalendarSyncService(
                 continue;
             }
 
-            var data = ToExternal(calendarEvent, names, replaced);
+            var data = ToExternal(calendarEvent, names, replaced, run.Language);
             ExternalRef? copy;
             try
             {
@@ -551,9 +552,12 @@ public class CalendarSyncService(
     /// a exceção ocupa o lugar deles.
     /// </summary>
     public static ExternalEventData ToExternal(
-        CalendarEvent e, IReadOnlyDictionary<Guid, string> names, IReadOnlySet<(Guid, DateOnly)> replaced) => new(
+        CalendarEvent e,
+        IReadOnlyDictionary<Guid, string> names,
+        IReadOnlySet<(Guid, DateOnly)> replaced,
+        string language = Texts.Portuguese) => new(
         e.Title,
-        Description(e, names),
+        Description(e, names, language),
         e.Location,
         e.StartsAt,
         e.EndsAt,
@@ -563,22 +567,22 @@ public class CalendarSyncService(
         [.. e.ExcludedDates.Where(d => !replaced.Contains((e.Id, d))).Order()]);
 
     /// <summary>As notas, e depois da marca do Kubico quem participa e as boleias (que lá não têm onde ficar).</summary>
-    public static string? Description(CalendarEvent e, IReadOnlyDictionary<Guid, string> names)
+    public static string? Description(CalendarEvent e, IReadOnlyDictionary<Guid, string> names, string language = Texts.Portuguese)
     {
         var lines = new List<string>();
         if (e.ParticipantUserIds.Count > 0)
         {
-            lines.Add("Participantes: " + string.Join(", ", e.ParticipantUserIds.Select(id => names.GetValueOrDefault(id, "?"))));
+            lines.Add(Texts.Format(language, "Participantes: {0}", string.Join(", ", e.ParticipantUserIds.Select(id => names.GetValueOrDefault(id, "?")))));
         }
 
         if (e.DropOffUserId is { } dropOff)
         {
-            lines.Add($"Leva: {names.GetValueOrDefault(dropOff, "?")}");
+            lines.Add(Texts.Format(language, "Leva: {0}", names.GetValueOrDefault(dropOff, "?")));
         }
 
         if (e.PickUpUserId is { } pickUp)
         {
-            lines.Add($"Vai buscar: {names.GetValueOrDefault(pickUp, "?")}");
+            lines.Add(Texts.Format(language, "Vai buscar: {0}", names.GetValueOrDefault(pickUp, "?")));
         }
 
         if (lines.Count == 0)
@@ -645,7 +649,7 @@ public class CalendarSyncService(
             await notifier.CalendarEventDeleted(run.Household.Id, id, ct);
         }
 
-        await notifier.CalendarConnectionUpserted(run.Connection.UserId, CalendarSyncEndpoints.ToDto(run.Connection), ct);
+        await notifier.CalendarConnectionUpserted(run.Connection.UserId, CalendarSyncEndpoints.ToDto(run.Connection, run.Language), ct);
     }
 
     private static string Short(string title) => title.Length <= 40 ? title : title[..39] + "…";
@@ -653,8 +657,11 @@ public class CalendarSyncService(
     private static string Truncate(string text, int max) => text.Length <= max ? text : text[..max];
 
     /// <summary>O estado de uma sincronização: a ligação, os eventos da casa, as ligações aos eventos e o que mudou.</summary>
-    private sealed class SyncRun(CalendarConnection connection, Household household, bool canEdit)
+    private sealed class SyncRun(CalendarConnection connection, Household household, bool canEdit, string language)
     {
+        /// <summary>A língua de quem ligou a conta: as informações que o Kubico escreve nos eventos vão nela.</summary>
+        public string Language => language;
+
         public CalendarConnection Connection => connection;
 
         public Household Household => household;

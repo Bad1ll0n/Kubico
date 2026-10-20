@@ -87,6 +87,7 @@ public static class CalendarFeedEndpoints
     {
         var membership = await db.Memberships.AsNoTracking()
             .Include(m => m.Household)
+            .Include(m => m.User)
             .SingleOrDefaultAsync(m => m.CalendarFeedToken == token, ct);
         if (membership is null)
         {
@@ -109,7 +110,7 @@ public static class CalendarFeedEndpoints
             .Select(m => new { m.UserId, m.User.DisplayName })
             .ToDictionaryAsync(m => m.UserId, m => m.DisplayName, ct);
 
-        var ics = new IcsWriter(household, names).Write(events, now);
+        var ics = new IcsWriter(household, names, membership.User.Language).Write(events, now);
         return Results.Text(ics, "text/calendar", Encoding.UTF8);
     }
 }

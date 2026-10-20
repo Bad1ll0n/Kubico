@@ -1,3 +1,4 @@
+using Kubico.Api.Common;
 using Kubico.Domain.Notifications;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -39,10 +40,11 @@ public class NotificationDispatcher(KubicoDbContext db, IPushSender sender, Time
                 continue; // Horas de silêncio, ou ainda não é a hora do resumo.
             }
 
+            var language = await db.Users.Where(u => u.Id == userId).Select(u => u.Language).SingleOrDefaultAsync(ct);
             var messages = preferences.Delivery switch
             {
                 NotificationDelivery.InAppOnly => [],
-                NotificationDelivery.DailyDigest when unread.Count > 0 => [Digest(unread)],
+                NotificationDelivery.DailyDigest when unread.Count > 0 => [Digest(unread, Texts.Normalize(language))],
                 _ => unread.Select(ToMessage).ToList(),
             };
 
@@ -89,7 +91,7 @@ public class NotificationDispatcher(KubicoDbContext db, IPushSender sender, Time
 
     private static PushMessage ToMessage(Notification n) => new(n.Title, n.Body, Data(n));
 
-    private static PushMessage Digest(IReadOnlyList<Notification> unread)
+    private static PushMessage Digest(IReadOnlyList<Notification> unread, string language)
     {
         if (unread.Count == 1)
         {
@@ -97,10 +99,9 @@ public class NotificationDispatcher(KubicoDbContext db, IPushSender sender, Time
         }
 
         var titles = string.Join(" · ", unread.Take(DigestTitles).Select(n => n.Title));
-        var more = unread.Count > DigestTitles ? $" e mais {unread.Count - DigestTitles}" : "";
         return new PushMessage(
-            $"Kubico: {unread.Count} novidades",
-            titles + more,
+            Texts.Format(language, "Kubico: {0} novidades", unread.Count),
+            unread.Count > DigestTitles ? Texts.Format(language, "{0} e mais {1}", titles, unread.Count - DigestTitles) : titles,
             new Dictionary<string, string> { ["kind"] = "Digest" });
     }
 

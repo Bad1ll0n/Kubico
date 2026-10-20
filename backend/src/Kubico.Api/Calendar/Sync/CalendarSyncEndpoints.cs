@@ -65,6 +65,7 @@ public static class CalendarSyncEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         CalendarSyncService sync,
+        HttpContext http,
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
@@ -82,7 +83,7 @@ public static class CalendarSyncEndpoints
         return Results.Ok(new CalendarSyncDto(
             level >= ModuleAccess.Manage,
             [.. Enum.GetValues<CalendarProvider>().Select(p => new CalendarSyncProviderDto(p, sync.Provider(p)?.IsConfigured == true))],
-            [.. connections.OrderBy(c => c.Provider).Select(ToDto)]));
+            [.. connections.OrderBy(c => c.Provider).Select(c => ToDto(c, Texts.LanguageOf(http)))]));
     }
 
     /// <summary>Começa a ligação: devolve o endereço da página de autorização (OAuth com PKCE).</summary>
@@ -146,21 +147,23 @@ public static class CalendarSyncEndpoints
         ILoggerFactory loggers,
         CancellationToken ct)
     {
+        var language = Texts.LanguageOf(http.HttpContext);
         if (error is not null)
         {
-            return Page("Ligação cancelada", "Não foi dada autorização ao Kubico. Podes fechar esta página e tentar outra vez na app.", 400);
+            return Page(language, "Ligação cancelada", "Não foi dada autorização ao Kubico. Podes fechar esta página e tentar outra vez na app.", 400);
         }
 
         var request = secrets.UnprotectState(state);
         if (request is null || ParseProvider(provider) is not { } kind || request.Provider != kind || string.IsNullOrEmpty(code))
         {
-            return Page("Pedido inválido", "Este endereço não é válido. Volta à app do Kubico e tenta outra vez.", 400);
+            return Page(language, "Pedido inválido", "Este endereço não é válido. Volta à app do Kubico e tenta outra vez.", 400);
         }
 
+        language = await db.Users.Where(u => u.Id == request.UserId).Select(u => u.Language).SingleOrDefaultAsync(ct) ?? language;
         var now = clock.GetUtcNow();
         if (request.ExpiresAt < now)
         {
-            return Page("O pedido expirou", "Passou demasiado tempo. Volta à app do Kubico e tenta outra vez.", 400);
+            return Page(language, "O pedido expirou", "Passou demasiado tempo. Volta à app do Kubico e tenta outra vez.", 400);
         }
 
         var role = await access.GetRoleAsync(request.UserId, request.HouseholdId, ct);
@@ -168,12 +171,12 @@ public static class CalendarSyncEndpoints
         if (role is null || household is null
             || await access.GetAccessAsync(request.HouseholdId, role.Value, HouseholdModule.Calendar, ct) < ModuleAccess.Manage)
         {
-            return Page("Sem permissão", "Já não podes ligar calendários nesta casa.", 403);
+            return Page(language, "Sem permissão", "Já não podes ligar calendários nesta casa.", 403);
         }
 
         if (sync.Provider(kind) is not { IsConfigured: true } service)
         {
-            return Page("Indisponível", $"A ligação ao {ServiceName(kind)} não está configurada neste servidor.", 400);
+            return Page(language, "Indisponível", $"A ligação ao {ServiceName(kind)} não está configurada neste servidor.", 400);
         }
 
         var logger = loggers.CreateLogger(typeof(CalendarSyncEndpoints));
@@ -185,7 +188,7 @@ public static class CalendarSyncEndpoints
             var tokens = await service.ExchangeCodeAsync(code, RedirectUri(http, configuration, kind), request.CodeVerifier, ct);
             if (tokens.RefreshToken is null)
             {
-                return Page("Não foi possível ligar", $"O {ServiceName(kind)} não deu acesso permanente. Tenta outra vez.", 502);
+                return Page(language, "Não foi possível ligar", $"O {ServiceName(kind)} não deu acesso permanente. Tenta outra vez.", 502);
             }
 
             email = tokens.Email ?? "(conta sem email)";
@@ -223,7 +226,7 @@ public static class CalendarSyncEndpoints
         catch (Exception e) when (e is CalendarAuthException or CalendarProviderException or HttpRequestException)
         {
             logger.LogWarning(e, "Falha a ligar uma conta {Provider}.", kind);
-            return Page("Não foi possível ligar", $"O {ServiceName(kind)} não confirmou a autorização. Tenta outra vez.", 502);
+            return Page(language, "Não foi possível ligar", $"O {ServiceName(kind)} não confirmou a autorização. Tenta outra vez.", 502);
         }
 
         connection.Status = CalendarConnectionStatus.Active;
@@ -231,8 +234,8 @@ public static class CalendarSyncEndpoints
         await db.SaveChangesAsync(ct);
 
         trigger.Request(request.HouseholdId);
-        await notifier.CalendarConnectionUpserted(request.UserId, ToDto(connection), ct);
-        return Page("Calendário ligado",
+        await notifier.CalendarConnectionUpserted(request.UserId, ToDto(connection, language), ct);
+        return Page(language, "Calendário ligado",
             $"Os eventos da casa vão aparecer no calendário «{name}» da conta {email}. Já podes voltar ao Kubico.", 200);
     }
 
@@ -243,6 +246,7 @@ public static class CalendarSyncEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         CalendarSyncService sync,
+        HttpContext http,
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
@@ -259,7 +263,7 @@ public static class CalendarSyncEndpoints
             return Results.NotFound();
         }
 
-        return Results.Ok(ToDto(connection));
+        return Results.Ok(ToDto(connection, Texts.LanguageOf(http)));
     }
 
     /// <summary>
@@ -318,8 +322,10 @@ public static class CalendarSyncEndpoints
         return Results.NoContent();
     }
 
-    public static CalendarConnectionDto ToDto(CalendarConnection c) =>
-        new(c.Id, c.HouseholdId, c.Provider, c.AccountEmail, c.Status, c.LastSyncedAt, c.LastError);
+    /// <summary>A ligação, com os avisos da última sincronização (um por linha) na língua de quem a vê.</summary>
+    public static CalendarConnectionDto ToDto(CalendarConnection c, string language) => new(
+        c.Id, c.HouseholdId, c.Provider, c.AccountEmail, c.Status, c.LastSyncedAt,
+        c.LastError is { } error ? string.Join(" ", error.Split('\n').Select(line => Texts.Translate(line, language))) : null);
 
     /// <summary>O endereço de regresso, que tem de estar registado na app OAuth do Google ou da Microsoft.</summary>
     public static string RedirectUri(HttpRequest http, IConfiguration configuration, CalendarProvider kind) =>
@@ -336,11 +342,12 @@ public static class CalendarSyncEndpoints
         kind == CalendarProvider.Google ? "Google Calendar" : "Outlook";
 
     /// <summary>Uma página simples para o navegador, em vez de JSON.</summary>
-    private static IResult Page(string title, string message, int statusCode)
+    private static IResult Page(string language, string title, string message, int statusCode)
     {
+        (title, message) = (Texts.Translate(title, language), Texts.Translate(message, language));
         var html = $$"""
             <!doctype html>
-            <html lang="pt-PT">
+            <html lang="{{(language == Texts.English ? "en" : "pt-PT")}}">
             <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">

@@ -1,7 +1,9 @@
+using Kubico.Api.Common;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Notifications;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Kubico.Api.Notifications;
 
@@ -21,7 +23,10 @@ public record NotificationDto(
 /// </summary>
 public class NotificationService(KubicoDbContext db, IHubContext<HouseholdHub> hub, TimeProvider clock)
 {
-    /// <summary>Um aviso para cada destinatário, menos para quem fez a alteração (esse já sabe).</summary>
+    /// <summary>
+    /// Um aviso para cada destinatário, menos para quem fez a alteração (esse já sabe). Os textos escrevem-se em
+    /// português; cada um recebe-os na língua da sua app.
+    /// </summary>
     public async Task NotifyAsync(
         Guid householdId,
         IEnumerable<Guid> recipients,
@@ -33,24 +38,31 @@ public class NotificationService(KubicoDbContext db, IHubContext<HouseholdHub> h
         CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        var created = recipients
-            .Distinct()
-            .Where(userId => userId != actorUserId)
-            .Select(userId => new Notification
-            {
-                UserId = userId,
-                HouseholdId = householdId,
-                Kind = kind,
-                Title = Trim(title, 200),
-                Body = body is null ? null : Trim(body, 500),
-                EntityId = entityId,
-                CreatedAt = now,
-            })
-            .ToList();
-        if (created.Count == 0)
+        var ids = recipients.Distinct().Where(userId => userId != actorUserId).ToList();
+        if (ids.Count == 0)
         {
             return;
         }
+
+        var languages = await db.Users.Where(u => ids.Contains(u.Id))
+            .Select(u => new { u.Id, u.Language })
+            .ToDictionaryAsync(u => u.Id, u => u.Language, ct);
+        var created = ids
+            .Select(userId =>
+            {
+                var language = languages.GetValueOrDefault(userId, Texts.Portuguese);
+                return new Notification
+                {
+                    UserId = userId,
+                    HouseholdId = householdId,
+                    Kind = kind,
+                    Title = Trim(Texts.Translate(title, language), 200),
+                    Body = body is null ? null : Trim(Texts.Translate(body, language), 500),
+                    EntityId = entityId,
+                    CreatedAt = now,
+                };
+            })
+            .ToList();
 
         db.Notifications.AddRange(created);
         await db.SaveChangesAsync(ct);

@@ -56,6 +56,7 @@ public static class ChildProfileEndpoints
         IPasswordHasher<User> hasher,
         HouseholdNotifier notifier,
         TimeProvider clock,
+        HttpContext http,
         CancellationToken ct)
     {
         var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct, r => r.CanManageContent());
@@ -73,6 +74,7 @@ public static class ChildProfileEndpoints
         var child = new User
         {
             DisplayName = request.DisplayName.Trim(),
+            Language = Texts.LanguageOf(http),
             ManagedByHouseholdId = householdId,
             BirthDate = request.BirthDate,
             CreatedAt = now,

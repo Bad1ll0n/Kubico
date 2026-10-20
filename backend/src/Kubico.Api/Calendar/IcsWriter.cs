@@ -1,3 +1,4 @@
+using Kubico.Api.Common;
 using System.Globalization;
 using System.Text;
 using Kubico.Domain.Calendar;
@@ -20,8 +21,11 @@ public sealed class IcsWriter
 
     /// <param name="household">A casa, com o nome e o fuso.</param>
     /// <param name="names">Nome de cada membro, para os participantes e as boleias.</param>
-    public IcsWriter(Household household, IReadOnlyDictionary<Guid, string> names)
+    private readonly string _language;
+
+    public IcsWriter(Household household, IReadOnlyDictionary<Guid, string> names, string language = Texts.Portuguese)
     {
+        _language = language;
         _household = household;
         _names = names;
         _zone = household.TimeZone;
@@ -168,17 +172,17 @@ public sealed class IcsWriter
 
         if (e.ParticipantUserIds.Count > 0)
         {
-            lines.Add("Participantes: " + string.Join(", ", e.ParticipantUserIds.Select(Name)));
+            lines.Add(Texts.Format(_language, "Participantes: {0}", string.Join(", ", e.ParticipantUserIds.Select(Name))));
         }
 
         if (e.DropOffUserId is { } dropOff)
         {
-            lines.Add($"Leva: {Name(dropOff)}");
+            lines.Add(Texts.Format(_language, "Leva: {0}", Name(dropOff)));
         }
 
         if (e.PickUpUserId is { } pickUp)
         {
-            lines.Add($"Vai buscar: {Name(pickUp)}");
+            lines.Add(Texts.Format(_language, "Vai buscar: {0}", Name(pickUp)));
         }
 
         return string.Join("\n", lines);

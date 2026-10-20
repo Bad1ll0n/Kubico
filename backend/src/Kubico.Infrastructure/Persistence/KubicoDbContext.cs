@@ -61,6 +61,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(u => u.Email).HasMaxLength(256);
             e.Property(u => u.DisplayName).HasMaxLength(100);
             e.Property(u => u.PinHash).HasMaxLength(200);
+            e.Property(u => u.Language).HasMaxLength(8).HasDefaultValue(User.DefaultLanguage);
             e.HasIndex(u => u.Email).IsUnique();
 
             // Os perfis de criança são da casa: apagar a casa apaga-os.

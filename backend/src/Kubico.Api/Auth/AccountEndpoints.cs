@@ -29,6 +29,9 @@ public record TwoFactorEnabledDto(IReadOnlyList<string> RecoveryCodes);
 
 public record DisableTwoFactorRequest([property: Required] string Password, [property: Required] string Code);
 
+/// <summary>"pt" ou "en".</summary>
+public record LanguageRequest([property: Required] string Language);
+
 /// <summary>
 /// A minha conta (RGPD): descarregar tudo o que o Kubico guarda sobre mim, e apagar a conta. Ao apagar, sai de todas
 /// as casas como se saísse de cada uma (a administração passa a outra pessoa se for preciso, e as casas onde mais
@@ -51,6 +54,7 @@ public static class AccountEndpoints
         account.MapPost("/2fa/setup", SetUpTwoFactor);
         account.MapPost("/2fa/enable", EnableTwoFactor);
         account.MapPost("/2fa/disable", DisableTwoFactor);
+        account.MapPut("/language", SetLanguage);
         return api;
     }
 
@@ -90,7 +94,7 @@ public static class AccountEndpoints
             Conta = new
             {
                 user.Id, Nome = user.DisplayName, user.Email, CriadaEm = user.CreatedAt, DataDeNascimento = user.BirthDate,
-                VerificacaoEmDoisPassos = user.TwoFactorEnabled,
+                VerificacaoEmDoisPassos = user.TwoFactorEnabled, Lingua = user.Language,
             },
             Casas = households.Select(h => new { Casa = h.Name, Papel = h.Role.ToString(), Cor = h.Color, EntrouEm = h.JoinedAt }),
             Sessoes = await db.RefreshTokens.AsNoTracking()
@@ -151,6 +155,30 @@ public static class AccountEndpoints
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(export, ExportJson));
         var day = clock.GetUtcNow().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         return Results.File(bytes, "application/json", $"kubico-dados-{day}.json");
+    }
+
+    /// <summary>A língua da app: os avisos (na app e no telemóvel) passam a chegar nela.</summary>
+    private static async Task<IResult> SetLanguage(
+        LanguageRequest request, ClaimsPrincipal principal, KubicoDbContext db, CancellationToken ct)
+    {
+        if (!Texts.Languages.Contains(request.Language))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["language"] = ["Escolhe português (pt) ou inglês (en)."],
+            });
+        }
+
+        var userId = principal.GetUserId();
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        user.Language = request.Language;
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(user.ToDto());
     }
 
     private static async Task<IResult> GetTwoFactor(ClaimsPrincipal principal, KubicoDbContext db, CancellationToken ct)

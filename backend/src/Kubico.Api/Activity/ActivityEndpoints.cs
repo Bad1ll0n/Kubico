@@ -52,6 +52,7 @@ public static class ActivityEndpoints
         KubicoDbContext db,
         HouseholdAccess access,
         ActivityLog log,
+        HttpContext http,
         CancellationToken ct)
     {
         var me = principal.GetUserId();
@@ -87,7 +88,7 @@ public static class ActivityEndpoints
 
             var canUndo = latest && entry.CanBeUndone
                 && (entry.UserId == me || (entry.Module is { } area && levels[area] >= ModuleAccess.Manage));
-            result.Add(ToDto(entry, canUndo));
+            result.Add(ToDto(entry, canUndo, Texts.LanguageOf(http)));
         }
 
         return Results.Ok(result);
@@ -102,6 +103,7 @@ public static class ActivityEndpoints
         HouseholdAccess access,
         ActivityLog log,
         HouseholdNotifier notifier,
+        HttpContext http,
         CancellationToken ct)
     {
         var me = principal.GetUserId();
@@ -160,7 +162,7 @@ public static class ActivityEndpoints
         await db.SaveChangesAsync(ct);
 
         await NotifyAsync(db, notifier, householdId, keys, itemLists, ct);
-        return Results.Ok(ToDto(entry, false));
+        return Results.Ok(ToDto(entry, false, Texts.LanguageOf(http)));
     }
 
     /// <summary>Avisa as apps do estado novo de cada coisa que o desfazer tocou.</summary>
@@ -213,6 +215,6 @@ public static class ActivityEndpoints
         }
     }
 
-    private static ActivityDto ToDto(ActivityEntry a, bool canUndo) => new(
-        a.Id, a.UserId, a.Module, a.Summary, a.CreatedAt, canUndo, a.UndoneAt, a.UndoneByUserId, a.UndoOfId is not null);
+    private static ActivityDto ToDto(ActivityEntry a, bool canUndo, string language) => new(
+        a.Id, a.UserId, a.Module, Texts.Translate(a.Summary, language), a.CreatedAt, canUndo, a.UndoneAt, a.UndoneByUserId, a.UndoOfId is not null);
 }

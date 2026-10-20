@@ -122,7 +122,9 @@ builder.Services.AddSignalR()
 
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddValidation();
-builder.Services.AddProblemDetails();
+// Os erros vão na língua da app (cabeçalho Accept-Language): o título e as mensagens de validação.
+builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = context =>
+    Texts.Localize(context.ProblemDetails, Texts.LanguageOf(context.HttpContext)));
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks().AddDbContextCheck<KubicoDbContext>();
 
