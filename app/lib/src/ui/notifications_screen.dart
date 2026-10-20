@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../notifications/notification_center.dart';
 import 'dates_pt.dart';
 import 'theme.dart';
@@ -15,7 +16,7 @@ class NotificationsBell extends StatelessWidget {
   Widget build(BuildContext context) {
     final unread = context.watch<NotificationCenter>().unreadCount;
     return IconButton(
-      tooltip: unread == 0 ? 'Avisos' : 'Avisos ($unread por ler)',
+      tooltip: unread == 0 ? 'Avisos'.tr : 'Avisos ($unread por ler)'.tr,
       onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const NotificationsScreen())),
       icon: Badge(
         isLabelVisible: unread > 0,
@@ -54,12 +55,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final center = context.watch<NotificationCenter>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Avisos'),
+        title: Text('Avisos'.tr),
         actions: [
           if (center.unreadCount > 0)
-            TextButton(onPressed: () => _run(center.markAllRead), child: const Text('Marcar como lidos')),
+            TextButton(onPressed: () => _run(center.markAllRead), child: Text('Marcar como lidos'.tr)),
           IconButton(
-            tooltip: 'Como receber os avisos',
+            tooltip: 'Como receber os avisos'.tr,
             onPressed: () =>
                 Navigator.of(context)
                     .push(MaterialPageRoute<void>(builder: (_) => const NotificationPreferencesScreen())),
@@ -73,10 +74,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
           children: [
             if (center.items.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(32),
+              Padding(
+                padding: const EdgeInsets.all(32),
                 child: Text(
-                  'Sem avisos. Aparecem aqui quando te atribuem uma tarefa ou um evento.',
+                  'Sem avisos. Aparecem aqui quando te atribuem uma tarefa ou um evento.'.tr,
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -169,7 +170,7 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
         ),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Preferências guardadas.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Preferências guardadas.'.tr)));
       Navigator.pop(context);
     } catch (e) {
       if (mounted) showError(context, e);
@@ -190,13 +191,13 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
     String time(TimeOfDay t) => localizations.formatTimeOfDay(t, alwaysUse24HourFormat: true);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Como receber os avisos')),
+      appBar: AppBar(title: Text('Como receber os avisos'.tr)),
       body: _saved == null
           ? Center(child: _error == null ? const CircularProgressIndicator() : Text(_error.toString()))
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Text('No telemóvel', style: theme.textTheme.titleSmall),
+                Text('No telemóvel'.tr, style: theme.textTheme.titleSmall),
                 RadioGroup<NotificationDelivery>(
                   groupValue: _delivery,
                   onChanged: (value) => setState(() => _delivery = value ?? _delivery),
@@ -210,35 +211,35 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
                 if (_delivery == NotificationDelivery.dailyDigest)
                   ListTile(
                     leading: const Icon(Icons.schedule),
-                    title: const Text('Hora do resumo'),
+                    title: Text('Hora do resumo'.tr),
                     trailing: Text(time(_digestAt)),
                     onTap: () => _pick(_digestAt, (t) => _digestAt = t),
                   ),
                 const Divider(height: 32),
                 SwitchListTile(
-                  title: const Text('Horas de silêncio'),
-                  subtitle: const Text('Os avisos esperam e chegam quando acabarem.'),
+                  title: Text('Horas de silêncio'.tr),
+                  subtitle: Text('Os avisos esperam e chegam quando acabarem.'.tr),
                   value: _quiet,
                   onChanged: (value) => setState(() => _quiet = value),
                 ),
                 if (_quiet) ...[
                   ListTile(
                     leading: const Icon(Icons.bedtime_outlined),
-                    title: const Text('Das'),
+                    title: Text('Das'.tr),
                     trailing: Text(time(_quietFrom)),
                     onTap: () => _pick(_quietFrom, (t) => _quietFrom = t),
                   ),
                   ListTile(
                     leading: const Icon(Icons.wb_sunny_outlined),
-                    title: const Text('Às'),
+                    title: Text('Às'.tr),
                     trailing: Text(time(_quietUntil)),
                     onTap: () => _pick(_quietUntil, (t) => _quietUntil = t),
                   ),
                 ],
                 const SizedBox(height: 16),
-                Text('Todos os avisos aparecem também aqui na app, no sino.', style: theme.textTheme.bodySmall),
+                Text('Todos os avisos aparecem também aqui na app, no sino.'.tr, style: theme.textTheme.bodySmall),
                 const SizedBox(height: 24),
-                FilledButton(onPressed: _saving ? null : _save, child: const Text('Guardar')),
+                FilledButton(onPressed: _saving ? null : _save, child: Text('Guardar'.tr)),
               ],
             ),
     );

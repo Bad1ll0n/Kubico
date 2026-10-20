@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'src/api/api_client.dart';
 import 'src/config.dart';
 import 'src/households/invite_link.dart';
+import 'src/l10n/strings.dart';
 import 'src/notifications/firebase_push.dart';
 import 'src/notifications/notification_center.dart';
 import 'src/notifications/push_registration.dart';
@@ -16,9 +17,11 @@ import 'src/shopping/shopping_repository.dart';
 import 'src/storage/key_value_store.dart';
 import 'src/ui/app.dart';
 
-void main() {
+Future<void> main() async {
   // O Firebase arranca antes do runApp e precisa dos canais da plataforma já prontos.
   WidgetsFlutterBinding.ensureInitialized();
+  final preferences = PreferencesStore();
+  await AppLanguage.restore(preferences);
   final api = ApiClient(baseUrl: AppConfig.apiUrl, deviceKind: currentDeviceKind());
   final session = SessionController(api: api, store: const SecureTokenStore())..restore();
 
@@ -26,7 +29,7 @@ void main() {
   final invite = kIsWeb ? Uri.base.queryParameters['convite'] : null;
   session.pendingInvite = invite == null ? null : inviteCodeFrom(invite);
   final realtime = HouseholdRealtime(baseUrl: AppConfig.apiUrl, accessToken: session.freshAccessToken);
-  final shopping = ShoppingRepository(api: api, store: PreferencesStore())..restore();
+  final shopping = ShoppingRepository(api: api, store: preferences)..restore();
   final notifications = NotificationCenter(api: api, realtime: realtime);
 
   // Avisos fora da app (Firebase, no Android e na web). Arranca em paralelo para não atrasar a abertura da app.

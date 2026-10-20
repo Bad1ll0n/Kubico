@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import 'theme.dart';
 
 /// O administrador escolhe, para adultos, crianças e convidados, o que podem fazer em cada área da casa.
@@ -67,7 +68,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
       setState(() => _show(saved));
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('Permissões guardadas.')));
+        ..showSnackBar(SnackBar(content: Text('Permissões guardadas.'.tr)));
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -80,11 +81,11 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
     final saved = _saved;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Permissões'),
+        title: Text('Permissões'.tr),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: FilledButton(onPressed: _changed && !_saving ? _save : null, child: const Text('Guardar')),
+            child: FilledButton(onPressed: _changed && !_saving ? _save : null, child: Text('Guardar'.tr)),
           ),
         ],
       ),
@@ -96,7 +97,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(_error.toString()),
-                        TextButton(onPressed: _load, child: const Text('Tentar de novo')),
+                        TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
                       ],
                     ),
             )
@@ -107,7 +108,8 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                   padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
                   child: Text(
                     'Escolhe o que cada papel pode fazer em cada área. O administrador pode sempre tudo. '
-                    'Uma área que "não aparece" deixa de estar na app dessas pessoas.',
+                            'Uma área que "não aparece" deixa de estar na app dessas pessoas.'
+                        .tr,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -133,7 +135,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                 if (!_same(draft, usual))
                   TextButton(
                     onPressed: () => setState(() => _draft[role] = {...usual}),
-                    child: const Text('Repor o habitual'),
+                    child: Text('Repor o habitual'.tr),
                   ),
               ],
             ),
@@ -170,16 +172,16 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
   }
 
   static String _plural(HouseholdRole role) => switch (role) {
-    HouseholdRole.adult => 'Adultos',
-    HouseholdRole.child => 'Crianças',
-    HouseholdRole.guest => 'Convidados',
-    HouseholdRole.admin => 'Administradores',
+    HouseholdRole.adult => 'Adultos'.tr,
+    HouseholdRole.child => 'Crianças'.tr,
+    HouseholdRole.guest => 'Convidados'.tr,
+    HouseholdRole.admin => 'Administradores'.tr,
   };
 
   static String _explain(HouseholdModule module, ModuleAccess access) => switch (access) {
-    ModuleAccess.none => 'Não aparece na app.',
-    ModuleAccess.view => 'Vê, mas não muda nada.',
-    ModuleAccess.participate => 'Vê e ${module.participateMeans}.',
-    ModuleAccess.manage => 'Cria, altera, apaga e aprova.',
+    ModuleAccess.none => 'Não aparece na app.'.tr,
+    ModuleAccess.view => 'Vê, mas não muda nada.'.tr,
+    ModuleAccess.participate => 'Vê e ${module.participateMeans}.'.tr,
+    ModuleAccess.manage => 'Cria, altera, apaga e aprova.'.tr,
   };
 }

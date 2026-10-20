@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import 'allowance_section.dart';
@@ -98,13 +99,13 @@ class _RewardsViewState extends State<RewardsView> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Trocar ${reward.cost} pontos?'),
+        title: Text('Trocar ${reward.cost} pontos?'.tr),
         content: Text(
-          _canManage ? 'Por "${reward.title}".' : 'Por "${reward.title}". Um adulto tem de aprovar o pedido.',
+          _canManage ? 'Por "${reward.title}".'.tr : 'Por "${reward.title}". Um adulto tem de aprovar o pedido.'.tr,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Trocar')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancelar'.tr)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text('Trocar'.tr)),
         ],
       ),
     );
@@ -112,19 +113,19 @@ class _RewardsViewState extends State<RewardsView> {
     await _run(() async {
       final redemption = await _api.redeemReward(_householdId, reward.id);
       return redemption.status == RedemptionStatus.approved
-          ? 'Feito! Aproveita.'
-          : 'Pedido enviado. Um adulto tem de aprovar.';
+          ? 'Feito! Aproveita.'.tr
+          : 'Pedido enviado. Um adulto tem de aprovar.'.tr;
     });
   }
 
   Future<void> _decide(RewardRedemption redemption, {required bool approve}) => _run(() async {
     await _api.decideRedemption(_householdId, redemption.id, approve: approve);
-    return approve ? 'Aprovado.' : 'Recusado. Os pontos voltaram.';
+    return approve ? 'Aprovado.'.tr : 'Recusado. Os pontos voltaram.'.tr;
   });
 
   Future<void> _cancel(RewardRedemption redemption) => _run(() async {
     await _api.cancelRedemption(_householdId, redemption.id);
-    return 'Pedido cancelado. Os pontos voltaram.';
+    return 'Pedido cancelado. Os pontos voltaram.'.tr;
   });
 
   Future<void> _edit([Reward? reward]) async {
@@ -154,7 +155,7 @@ class _RewardsViewState extends State<RewardsView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(_error.toString()),
-                  TextButton(onPressed: _load, child: const Text('Tentar de novo')),
+                  TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
                 ],
               ),
       );
@@ -170,7 +171,7 @@ class _RewardsViewState extends State<RewardsView> {
           ? FloatingActionButton.extended(
               onPressed: _edit,
               icon: const Icon(Icons.add),
-              label: const Text('Nova recompensa'),
+              label: Text('Nova recompensa'.tr),
             )
           : null,
       body: RefreshIndicator(
@@ -181,7 +182,7 @@ class _RewardsViewState extends State<RewardsView> {
             _PointsCard(points: overview.points, me: me),
             AllowanceSection(household: widget.household, members: overview.points),
             if (pending.isNotEmpty) ...[
-              const _Header('À espera de aprovação'),
+              _Header('À espera de aprovação'.tr),
               for (final r in pending)
                 _RedemptionTile(
                   redemption: r,
@@ -191,14 +192,14 @@ class _RewardsViewState extends State<RewardsView> {
                   onCancel: !_canManage && r.userId == _myUserId ? () => _cancel(r) : null,
                 ),
             ],
-            const _Header('Recompensas'),
+            _Header('Recompensas'.tr),
             if (overview.rewards.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
                   _canManage
-                      ? 'Ainda não há recompensas. Cria a primeira e combina-a com as tarefas!'
-                      : 'Ainda não há recompensas.',
+                      ? 'Ainda não há recompensas. Cria a primeira e combina-a com as tarefas!'.tr
+                      : 'Ainda não há recompensas.'.tr,
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -210,7 +211,7 @@ class _RewardsViewState extends State<RewardsView> {
                 onTap: _canManage ? () => _edit(reward) : null,
               ),
             if (history.isNotEmpty) ...[
-              const _Header('Histórico'),
+              _Header('Histórico'.tr),
               for (final r in history) _RedemptionTile(redemption: r, member: overview.pointsOf(r.userId)),
             ],
           ],
@@ -252,11 +253,11 @@ class _PointsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Os teus pontos', style: theme.textTheme.titleSmall),
+            Text('Os teus pontos'.tr, style: theme.textTheme.titleSmall),
             const SizedBox(height: 4),
             Text('${mine?.available ?? 0}', style: theme.textTheme.displaySmall),
             if (mine != null && mine.reserved > 0)
-              Text('Mais ${mine.reserved} reservados em pedidos à espera.', style: theme.textTheme.bodySmall),
+              Text('Mais ${mine.reserved} reservados em pedidos à espera.'.tr, style: theme.textTheme.bodySmall),
             if (others.isNotEmpty) ...[
               const SizedBox(height: 12),
               Wrap(
@@ -291,7 +292,7 @@ class _RewardTile extends StatelessWidget {
     final missing = reward.cost - available;
     final details = [
       if (reward.description != null) reward.description!,
-      if (missing > 0) 'Faltam $missing pontos',
+      if (missing > 0) 'Faltam $missing pontos'.tr,
     ].join(' · ');
     return Card(
       child: ListTile(
@@ -318,9 +319,9 @@ class _RedemptionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final name = member?.displayName ?? 'Alguém';
+    final name = member?.displayName ?? 'Alguém'.tr;
     final when = formatShortDate(redemption.decidedAt ?? redemption.requestedAt);
-    final status = redemption.status == RedemptionStatus.pending ? 'pediu a $when' : redemption.status.label;
+    final status = redemption.status == RedemptionStatus.pending ? 'pediu a $when'.tr : redemption.status.label;
     return Card(
       child: ListTile(
         leading: CircleAvatar(
@@ -335,12 +336,13 @@ class _RedemptionTile extends StatelessWidget {
           children: [
             if (onReject != null)
               IconButton(
-                tooltip: 'Recusar',
+                tooltip: 'Recusar'.tr,
                 onPressed: onReject,
                 icon: Icon(Icons.close, color: theme.colorScheme.error),
               ),
-            if (onApprove != null) IconButton(tooltip: 'Aprovar', onPressed: onApprove, icon: const Icon(Icons.check)),
-            if (onCancel != null) TextButton(onPressed: onCancel, child: const Text('Cancelar')),
+            if (onApprove != null)
+              IconButton(tooltip: 'Aprovar'.tr, onPressed: onApprove, icon: const Icon(Icons.check)),
+            if (onCancel != null) TextButton(onPressed: onCancel, child: Text('Cancelar'.tr)),
           ],
         ),
       ),

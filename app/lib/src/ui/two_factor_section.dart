@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../api/api_client.dart';
+import '../l10n/strings.dart';
 import 'theme.dart';
 
 /// Verificação em dois passos, no ecrã da conta: ligar (com o código QR da app de autenticação) e desligar.
@@ -74,7 +75,7 @@ class _TwoFactorSectionState extends State<TwoFactorSection> {
       if (mounted) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(content: Text('Verificação em dois passos desligada.')));
+          ..showSnackBar(SnackBar(content: Text('Verificação em dois passos desligada.'.tr)));
       }
     });
   }
@@ -91,11 +92,11 @@ class _TwoFactorSectionState extends State<TwoFactorSection> {
           children: [
             Row(
               children: [
-                Expanded(child: Text('Verificação em dois passos', style: theme.textTheme.titleMedium)),
+                Expanded(child: Text('Verificação em dois passos'.tr, style: theme.textTheme.titleMedium)),
                 if (status?.enabled ?? false)
                   Chip(
                     avatar: const Icon(Icons.verified_user_outlined, size: 18),
-                    label: const Text('Ligada'),
+                    label: Text('Ligada'.tr),
                     visualDensity: VisualDensity.compact,
                   ),
               ],
@@ -104,10 +105,12 @@ class _TwoFactorSectionState extends State<TwoFactorSection> {
             Text(
               status?.enabled ?? false
                   ? 'Para entrar, além da palavra-passe, é preciso o código da app de autenticação. '
-                        'Tens ${status!.recoveryCodesLeft} códigos de recuperação por usar.'
+                            'Tens ${status!.recoveryCodesLeft} códigos de recuperação por usar.'
+                        .tr
                   : 'Além da palavra-passe, pede um código que muda a cada 30 segundos, de uma app de autenticação '
-                        'no telemóvel (Google Authenticator, Microsoft Authenticator…). Assim, quem souber a tua '
-                        'palavra-passe não entra sem o teu telemóvel.',
+                            'no telemóvel (Google Authenticator, Microsoft Authenticator…). Assim, quem souber a tua '
+                            'palavra-passe não entra sem o teu telemóvel.'
+                        .tr,
             ),
             const SizedBox(height: 12),
             if (status != null)
@@ -115,12 +118,12 @@ class _TwoFactorSectionState extends State<TwoFactorSection> {
                   ? OutlinedButton.icon(
                       onPressed: _busy ? null : _turnOff,
                       icon: const Icon(Icons.lock_open_outlined),
-                      label: const Text('Desligar'),
+                      label: Text('Desligar'.tr),
                     )
                   : FilledButton.tonalIcon(
                       onPressed: _busy ? null : _turnOn,
                       icon: const Icon(Icons.verified_user_outlined),
-                      label: const Text('Ligar'),
+                      label: Text('Ligar'.tr),
                     ),
           ],
         ),
@@ -173,14 +176,14 @@ class _SetupDialogState extends State<_SetupDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('Ligar a verificação em dois passos'),
+      title: Text('Ligar a verificação em dois passos'.tr),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('1. Na app de autenticação do telemóvel, adiciona uma conta e lê este código:'),
+              Text('1. Na app de autenticação do telemóvel, adiciona uma conta e lê este código:'.tr),
               const SizedBox(height: 12),
               Container(
                 color: Colors.white,
@@ -188,7 +191,7 @@ class _SetupDialogState extends State<_SetupDialog> {
                 child: QrImageView(data: widget.uri, size: 180, backgroundColor: Colors.white),
               ),
               const SizedBox(height: 8),
-              Text('Ou escreve esta chave:', style: theme.textTheme.bodySmall),
+              Text('Ou escreve esta chave:'.tr, style: theme.textTheme.bodySmall),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -200,16 +203,16 @@ class _SetupDialogState extends State<_SetupDialog> {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Copiar a chave',
+                    tooltip: 'Copiar a chave'.tr,
                     icon: const Icon(Icons.copy, size: 18),
                     onPressed: () => Clipboard.setData(ClipboardData(text: widget.secret)),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              const Align(
+              Align(
                 alignment: Alignment.centerLeft,
-                child: Text('2. Escreve o código de 6 algarismos que a app mostra:'),
+                child: Text('2. Escreve o código de 6 algarismos que a app mostra:'.tr),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -218,7 +221,12 @@ class _SetupDialogState extends State<_SetupDialog> {
                 keyboardType: TextInputType.number,
                 autofillHints: const [AutofillHints.oneTimeCode],
                 maxLength: 7,
-                decoration: InputDecoration(labelText: 'Código', counterText: '', errorText: _error, errorMaxLines: 3),
+                decoration: InputDecoration(
+                  labelText: 'Código'.tr,
+                  counterText: '',
+                  errorText: _error,
+                  errorMaxLines: 3,
+                ),
                 onChanged: (_) => setState(() {}),
                 onSubmitted: (_) => _code.text.trim().length >= 6 ? _confirm() : null,
               ),
@@ -227,11 +235,8 @@ class _SetupDialogState extends State<_SetupDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancelar')),
-        FilledButton(
-          onPressed: _busy || _code.text.trim().length < 6 ? null : _confirm,
-          child: const Text('Confirmar'),
-        ),
+        TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: Text('Cancelar'.tr)),
+        FilledButton(onPressed: _busy || _code.text.trim().length < 6 ? null : _confirm, child: Text('Confirmar'.tr)),
       ],
     );
   }
@@ -247,16 +252,17 @@ class _RecoveryCodesDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('Guarda os códigos de recuperação'),
+      title: Text('Guarda os códigos de recuperação'.tr),
       content: SizedBox(
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Se perderes o telemóvel, entras com um destes códigos em vez do da app. Cada um serve uma vez. '
-              'Guarda-os num sítio seguro: não voltam a aparecer.',
+                      'Guarda-os num sítio seguro: não voltam a aparecer.'
+                  .tr,
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -274,12 +280,12 @@ class _RecoveryCodesDialog extends StatelessWidget {
         TextButton.icon(
           onPressed: () {
             Clipboard.setData(ClipboardData(text: codes.join('\n')));
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Códigos copiados.')));
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Códigos copiados.'.tr)));
           },
           icon: const Icon(Icons.copy, size: 18),
-          label: const Text('Copiar'),
+          label: Text('Copiar'.tr),
         ),
-        FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Já guardei')),
+        FilledButton(onPressed: () => Navigator.pop(context), child: Text('Já guardei'.tr)),
       ],
     );
   }
@@ -308,32 +314,32 @@ class _TurnOffDialogState extends State<_TurnOffDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Desligar a verificação em dois passos?'),
+    title: Text('Desligar a verificação em dois passos?'.tr),
     content: SizedBox(
       width: 400,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Para entrar passa a bastar a palavra-passe.'),
+          Text('Para entrar passa a bastar a palavra-passe.'.tr),
           const SizedBox(height: 12),
           TextField(
             controller: _password,
             autofocus: true,
             obscureText: true,
-            decoration: const InputDecoration(labelText: 'Palavra-passe'),
+            decoration: InputDecoration(labelText: 'Palavra-passe'.tr),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _code,
-            decoration: const InputDecoration(labelText: 'Código da app ou de recuperação'),
+            decoration: InputDecoration(labelText: 'Código da app ou de recuperação'.tr),
             onChanged: (_) => setState(() {}),
           ),
         ],
       ),
     ),
     actions: [
-      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+      TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
       FilledButton(
         onPressed: _ready
             ? () => Navigator.pop<({String password, String code})>(context, (
@@ -341,7 +347,7 @@ class _TurnOffDialogState extends State<_TurnOffDialog> {
                 code: _code.text.trim(),
               ))
             : null,
-        child: const Text('Desligar'),
+        child: Text('Desligar'.tr),
       ),
     ],
   );

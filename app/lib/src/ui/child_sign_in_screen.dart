@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'theme.dart';
 
@@ -44,7 +45,7 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
     final profiles = await context.read<ApiClient>().childProfiles(_code.text.trim());
     if (!mounted) return;
     if (profiles.isEmpty) {
-      showError(context, 'Esta casa ainda não tem perfis de criança. Pede a um adulto para criar o teu.');
+      showError(context, 'Esta casa ainda não tem perfis de criança. Pede a um adulto para criar o teu.'.tr);
       return;
     }
     setState(() => _profiles = profiles);
@@ -68,7 +69,7 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
     final profiles = _profiles;
     final chosen = _chosen;
     return Scaffold(
-      appBar: AppBar(title: const Text('Entrar como criança')),
+      appBar: AppBar(title: Text('Entrar como criança'.tr)),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -78,10 +79,14 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (profiles == null) ...[
-                  Text('Qual é o código da família?', style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
+                  Text(
+                    'Qual é o código da família?'.tr,
+                    style: theme.textTheme.titleLarge,
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 8),
                   Text(
-                    'Pede-o a um adulto da casa: está no ecrã dos membros.',
+                    'Pede-o a um adulto da casa: está no ecrã dos membros.'.tr,
                     style: theme.textTheme.bodyMedium,
                     textAlign: TextAlign.center,
                   ),
@@ -89,14 +94,14 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
                   TextField(
                     controller: _code,
                     autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Código da família'),
+                    decoration: InputDecoration(labelText: 'Código da família'.tr),
                     textCapitalization: TextCapitalization.characters,
                     onSubmitted: (_) => _findProfiles(),
                   ),
                   const SizedBox(height: 16),
-                  FilledButton(onPressed: _busy ? null : _findProfiles, child: const Text('Continuar')),
+                  FilledButton(onPressed: _busy ? null : _findProfiles, child: Text('Continuar'.tr)),
                 ] else if (chosen == null) ...[
-                  Text('Quem és tu?', style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
+                  Text('Quem és tu?'.tr, style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
                   const SizedBox(height: 16),
                   for (final p in profiles)
                     Card(
@@ -110,7 +115,7 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
                         onTap: () => setState(() => _chosen = p),
                       ),
                     ),
-                  TextButton(onPressed: () => setState(() => _profiles = null), child: const Text('Mudar o código')),
+                  TextButton(onPressed: () => setState(() => _profiles = null), child: Text('Mudar o código'.tr)),
                 ] else ...[
                   CircleAvatar(
                     radius: 32,
@@ -119,7 +124,11 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
                     child: Text(chosen.displayName.isEmpty ? '?' : chosen.displayName[0].toUpperCase()),
                   ),
                   const SizedBox(height: 12),
-                  Text('Olá, ${chosen.displayName}!', style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
+                  Text(
+                    'Olá, ${chosen.displayName}!'.tr,
+                    style: theme.textTheme.titleLarge,
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 24),
                   TextField(
                     controller: _pin,
@@ -132,13 +141,13 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
                     onSubmitted: (_) => _signIn(),
                   ),
                   const SizedBox(height: 8),
-                  FilledButton(onPressed: _busy ? null : _signIn, child: const Text('Entrar')),
+                  FilledButton(onPressed: _busy ? null : _signIn, child: Text('Entrar'.tr)),
                   TextButton(
                     onPressed: () => setState(() {
                       _chosen = null;
                       _pin.clear();
                     }),
-                    child: const Text('Não sou eu'),
+                    child: Text('Não sou eu'.tr),
                   ),
                 ],
               ],

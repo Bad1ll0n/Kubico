@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
 import '../shopping/shopping_repository.dart';
 import '../shopping/voice_input.dart';
@@ -131,8 +132,8 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
   static Future<String?> _scanWithCamera(BuildContext context) => Navigator.of(context).push<String>(
     MaterialPageRoute(
       builder: (_) => ScannerScreen<String>(
-        title: 'Ler código de barras',
-        hint: 'Aponta para o código de barras do produto',
+        title: 'Ler código de barras'.tr,
+        hint: 'Aponta para o código de barras do produto'.tr,
         accept: (raw) => isValidBarcode(raw.trim()) ? raw.trim() : null,
       ),
     ),
@@ -148,7 +149,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     if (barcode == null || !mounted) return;
     final already = _items?.values.where((i) => i.barcode == barcode && !i.isChecked).firstOrNull;
     if (already != null) {
-      _tell('«${already.name}» já está na lista.');
+      _tell('«${already.name}» já está na lista.'.tr);
       return;
     }
 
@@ -156,11 +157,13 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     String? problem;
     try {
       product = await _shopping.api.lookupProduct(_householdId, barcode);
-      if (product == null) problem = 'Não conhecemos este produto. Escreve o nome: fica guardado para a próxima vez.';
+      if (product == null) {
+        problem = 'Não conhecemos este produto. Escreve o nome: fica guardado para a próxima vez.'.tr;
+      }
     } on ApiException catch (e) {
       problem = e.message;
     } catch (_) {
-      problem = 'Sem ligação: escreve o nome do produto.';
+      problem = 'Sem ligação: escreve o nome do produto.'.tr;
     }
     if (!mounted) return;
 
@@ -187,7 +190,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
       added.add(name);
     }
     if (added.isNotEmpty) {
-      _tell(added.length == 1 ? 'Adicionado: ${added.single}.' : 'Adicionados ${added.length} artigos.');
+      _tell(added.length == 1 ? 'Adicionado: ${added.single}.'.tr : 'Adicionados ${added.length} artigos.'.tr);
     }
   }
 
@@ -219,7 +222,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(_error.toString()),
-                  TextButton(onPressed: _load, child: const Text('Tentar de novo')),
+                  TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
                 ],
               ),
       );
@@ -248,7 +251,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
               focusNode: _inputFocus,
               textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(
-                hintText: 'Adicionar artigo (ex.: 2 leite)',
+                hintText: 'Adicionar artigo (ex.: 2 leite)'.tr,
                 prefixIcon: const Icon(Icons.add),
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -256,11 +259,11 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
                     if (widget.scanBarcode != null || scannerAvailable)
                       IconButton(
                         icon: const Icon(Icons.qr_code_scanner),
-                        tooltip: 'Ler código de barras',
+                        tooltip: 'Ler código de barras'.tr,
                         onPressed: _scan,
                       ),
-                    IconButton(icon: const Icon(Icons.mic_none), tooltip: 'Ditar artigos', onPressed: _dictate),
-                    IconButton(icon: const Icon(Icons.send), tooltip: 'Adicionar', onPressed: _add),
+                    IconButton(icon: const Icon(Icons.mic_none), tooltip: 'Ditar artigos'.tr, onPressed: _dictate),
+                    IconButton(icon: const Icon(Icons.send), tooltip: 'Adicionar'.tr, onPressed: _add),
                   ],
                 ),
               ),
@@ -276,7 +279,11 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
                 if (pending.isEmpty && done.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(32),
-                    child: Text('A lista está vazia.', textAlign: TextAlign.center, style: theme.textTheme.bodyLarge),
+                    child: Text(
+                      'A lista está vazia.'.tr,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge,
+                    ),
                   ),
                 for (final item in pending) _itemTile(item),
                 if (done.isNotEmpty) ...[
@@ -284,12 +291,12 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
                     padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
                     child: Row(
                       children: [
-                        Expanded(child: Text('No carrinho (${done.length})', style: theme.textTheme.titleSmall)),
+                        Expanded(child: Text('No carrinho (${done.length})'.tr, style: theme.textTheme.titleSmall)),
                         if (widget.canEdit)
                           TextButton.icon(
                             onPressed: _clearChecked,
                             icon: const Icon(Icons.cleaning_services_outlined, size: 18),
-                            label: const Text('Limpar'),
+                            label: Text('Limpar'.tr),
                           ),
                       ],
                     ),
@@ -350,15 +357,15 @@ class _SyncBanner extends StatelessWidget {
     final theme = Theme.of(context);
     final waiting = switch (pending) {
       0 => '',
-      1 => ' 1 alteração por enviar.',
-      _ => ' $pending alterações por enviar.',
+      1 => ' 1 alteração por enviar.'.tr,
+      _ => ' $pending alterações por enviar.'.tr,
     };
     return Material(
       color: theme.colorScheme.secondaryContainer,
       child: ListTile(
         dense: true,
         leading: Icon(offline ? Icons.cloud_off : Icons.cloud_upload_outlined),
-        title: Text(offline ? 'Sem ligação: podes continuar a usar a lista.$waiting' : 'A enviar as alterações…'),
+        title: Text(offline ? 'Sem ligação: podes continuar a usar a lista.$waiting'.tr : 'A enviar as alterações…'.tr),
       ),
     );
   }

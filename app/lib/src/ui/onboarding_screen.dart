@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../households/invite_link.dart';
+import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'scanner_screen.dart';
 import 'theme.dart';
@@ -48,9 +49,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _scan() async {
     final code = await Navigator.of(context).push<String>(
       MaterialPageRoute(
-        builder: (_) => const ScannerScreen<String>(
-          title: 'Ler o convite',
-          hint: 'Aponta para o QR do convite, no telemóvel de quem já está na casa.',
+        builder: (_) => ScannerScreen<String>(
+          title: 'Ler o convite'.tr,
+          hint: 'Aponta para o QR do convite, no telemóvel de quem já está na casa.'.tr,
           accept: inviteCodeFrom,
         ),
       ),
@@ -84,10 +85,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.canGoBack ? 'Adicionar casa' : 'Olá, ${session.user?.displayName ?? ''}'),
+        title: Text(widget.canGoBack ? 'Adicionar casa'.tr : 'Olá, ${session.user?.displayName ?? ''}'.tr),
         actions: [
           if (!widget.canGoBack)
-            IconButton(tooltip: 'Sair', icon: const Icon(Icons.logout), onPressed: session.signOut),
+            IconButton(tooltip: 'Sair'.tr, icon: const Icon(Icons.logout), onPressed: session.signOut),
         ],
       ),
       body: Center(
@@ -104,22 +105,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('Criar uma casa', style: theme.textTheme.titleMedium),
+                        Text('Criar uma casa'.tr, style: theme.textTheme.titleMedium),
                         const SizedBox(height: 4),
                         Text(
                           'Ficas a administrar a casa e podes convidar a família. Escolhe um modelo para começar já '
-                          'com listas e tarefas (mudas tudo depois).',
+                                  'com listas e tarefas (mudas tudo depois).'
+                              .tr,
                           style: theme.textTheme.bodySmall,
                         ),
                         const SizedBox(height: 16),
                         TextField(
                           controller: _householdName,
-                          decoration: const InputDecoration(labelText: 'Nome', hintText: 'Ex.: Casa da Amora'),
+                          decoration: InputDecoration(labelText: 'Nome'.tr, hintText: 'Ex.: Casa da Amora'.tr),
                           textCapitalization: TextCapitalization.sentences,
                         ),
                         if (_templates.isNotEmpty) ...[
                           const SizedBox(height: 16),
-                          Text('Começar com', style: theme.textTheme.titleSmall),
+                          Text('Começar com'.tr, style: theme.textTheme.titleSmall),
                           const SizedBox(height: 8),
                           for (final template in _templates)
                             _TemplateTile(
@@ -141,7 +143,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                     ),
                                   );
                                 },
-                          child: const Text('Criar casa'),
+                          child: Text('Criar casa'.tr),
                         ),
                       ],
                     ),
@@ -154,18 +156,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('Entrar com um convite', style: theme.textTheme.titleMedium),
+                        Text('Entrar com um convite'.tr, style: theme.textTheme.titleMedium),
                         const SizedBox(height: 4),
-                        Text('Pede o código (ou o QR) a quem já está na casa.', style: theme.textTheme.bodySmall),
+                        Text('Pede o código (ou o QR) a quem já está na casa.'.tr, style: theme.textTheme.bodySmall),
                         const SizedBox(height: 16),
                         TextField(
                           controller: _inviteCode,
                           decoration: InputDecoration(
-                            labelText: 'Código',
-                            hintText: 'Ex.: K7M2QX9P',
+                            labelText: 'Código'.tr,
+                            hintText: 'Ex.: K7M2QX9P'.tr,
                             suffixIcon: scannerAvailable
                                 ? IconButton(
-                                    tooltip: 'Ler o QR do convite',
+                                    tooltip: 'Ler o QR do convite'.tr,
                                     icon: const Icon(Icons.qr_code_scanner),
                                     onPressed: _busy ? null : _scan,
                                   )
@@ -181,7 +183,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                   if (_inviteCode.text.trim().isEmpty) return;
                                   _run((s) => s.joinHousehold(_inviteCode.text));
                                 },
-                          child: const Text('Entrar na casa'),
+                          child: Text('Entrar na casa'.tr),
                         ),
                       ],
                     ),

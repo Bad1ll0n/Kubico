@@ -3,18 +3,19 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import 'dates_pt.dart';
 import 'theme.dart';
 
 /// Como mostrar cada tipo de dispositivo (vem da app, no cabeçalho X-Kubico-Device).
 String deviceLabel(String? kind) => switch (kind) {
-  'android' => 'Telemóvel ou tablet Android',
-  'ios' => 'iPhone ou iPad',
-  'windows' => 'Computador Windows',
+  'android' => 'Telemóvel ou tablet Android'.tr,
+  'ios' => 'iPhone ou iPad'.tr,
+  'windows' => 'Computador Windows'.tr,
   'macos' => 'Mac',
-  'linux' => 'Computador Linux',
+  'linux' => 'Computador Linux'.tr,
   'web' => 'Browser',
-  _ => 'Dispositivo desconhecido',
+  _ => 'Dispositivo desconhecido'.tr,
 };
 
 IconData _deviceIcon(String? kind) => switch (kind) {
@@ -63,7 +64,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
       await _api.endSession(session.id);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Sessão terminada: ${deviceLabel(session.device).toLowerCase()}.')));
+          .showSnackBar(SnackBar(content: Text('Sessão terminada: ${deviceLabel(session.device).toLowerCase()}.'.tr)));
       await _load();
     } catch (e) {
       if (mounted) showError(context, e);
@@ -75,7 +76,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     final theme = Theme.of(context);
     final sessions = _sessions;
     return Scaffold(
-      appBar: AppBar(title: const Text('Dispositivos com sessão iniciada')),
+      appBar: AppBar(title: Text('Dispositivos com sessão iniciada'.tr)),
       body: sessions == null
           ? Center(child: _error == null ? const CircularProgressIndicator() : Text(_error.toString()))
           : RefreshIndicator(
@@ -90,18 +91,20 @@ class _DevicesScreenState extends State<DevicesScreen> {
                         title: Text(deviceLabel(s.device)),
                         subtitle: Text(
                           'Usado a ${formatShortDate(s.lastActiveAt)} às ${formatTime(s.lastActiveAt)}'
-                          ' · desde ${formatShortDate(s.startedAt)}',
+                                  ' · desde ${formatShortDate(s.startedAt)}'
+                              .tr,
                         ),
                         trailing: s.isCurrent
-                            ? Text('Este dispositivo', style: TextStyle(color: theme.colorScheme.primary))
-                            : TextButton(onPressed: () => _end(s), child: const Text('Terminar')),
+                            ? Text('Este dispositivo'.tr, style: TextStyle(color: theme.colorScheme.primary))
+                            : TextButton(onPressed: () => _end(s), child: Text('Terminar'.tr)),
                       ),
                     ),
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text(
                       'Terminar a sessão num dispositivo obriga a entrar outra vez nesse dispositivo. Para sair de '
-                      'todos de uma vez, usa «Terminar sessão em todos os dispositivos» no menu.',
+                              'todos de uma vez, usa «Terminar sessão em todos os dispositivos» no menu.'
+                          .tr,
                       style: theme.textTheme.bodySmall,
                     ),
                   ),

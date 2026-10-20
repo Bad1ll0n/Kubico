@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
 import 'dates_pt.dart';
 
@@ -72,26 +73,31 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
   Future<void> _connect(CalendarProvider provider) => _run(provider, () async {
     final url = await _api.authorizeCalendarSync(widget.householdId, provider);
     final opened = await widget.openUrl(url);
-    _say(opened ? 'Autoriza o Kubico na página que abriu e depois volta aqui.' : 'Não foi possível abrir o navegador.');
+    _say(
+      opened
+          ? 'Autoriza o Kubico na página que abriu e depois volta aqui.'.tr
+          : 'Não foi possível abrir o navegador.'.tr,
+    );
   });
 
   Future<void> _sync(CalendarConnection connection) => _run(connection.provider, () async {
     final synced = await _api.syncCalendarConnection(widget.householdId, connection.id);
     await _load();
-    _say(synced.lastError ?? 'Sincronizado.');
+    _say(synced.lastError ?? 'Sincronizado.'.tr);
   });
 
   Future<void> _disconnect(CalendarConnection connection) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Desligar a ${connection.provider.account}?'),
+        title: Text('Desligar a ${connection.provider.account}?'.tr),
         content: Text(
-          'O calendário do Kubico é apagado da conta ${connection.accountEmail}. Os eventos da casa ficam no Kubico.',
+          'O calendário do Kubico é apagado da conta ${connection.accountEmail}. Os eventos da casa ficam no Kubico.'
+              .tr,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Desligar')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancelar'.tr)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text('Desligar'.tr)),
         ],
       ),
     );
@@ -99,7 +105,7 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
     await _run(connection.provider, () async {
       await _api.disconnectCalendar(widget.householdId, connection.id);
       await _load();
-      _say('${connection.provider.label} desligado.');
+      _say('${connection.provider.label} desligado.'.tr);
     });
   }
 
@@ -122,7 +128,7 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
   Widget build(BuildContext context) {
     final overview = _overview;
     return Scaffold(
-      appBar: AppBar(title: const Text('Google Calendar e Outlook')),
+      appBar: AppBar(title: Text('Google Calendar e Outlook'.tr)),
       body: overview == null
           ? Center(
               child: _error == null
@@ -131,7 +137,7 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(_error.toString()),
-                        TextButton(onPressed: _load, child: const Text('Tentar de novo')),
+                        TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
                       ],
                     ),
             )
@@ -140,10 +146,11 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  const Text(
+                  Text(
                     'Liga a tua conta e os eventos da casa aparecem lá num calendário próprio, «Kubico». '
-                    'O que mudares nesse calendário também muda no Kubico, ao fim de poucos minutos. '
-                    'Os teus outros calendários não são lidos nem alterados.',
+                            'O que mudares nesse calendário também muda no Kubico, ao fim de poucos minutos. '
+                            'Os teus outros calendários não são lidos nem alterados.'
+                        .tr,
                   ),
                   const SizedBox(height: 16),
                   for (final provider in CalendarProvider.values) _card(provider, overview),
@@ -165,36 +172,34 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
     if (connection != null) {
       lines.add(Text(connection.accountEmail));
       if (connection.needsReconnect) {
-        lines.add(Text('O acesso à conta expirou ou foi retirado. Volta a ligar a conta.', style: error));
+        lines.add(Text('O acesso à conta expirou ou foi retirado. Volta a ligar a conta.'.tr, style: error));
         if (overview.canConnect) {
           actions.add(
-            FilledButton(onPressed: busy ? null : () => _connect(provider), child: const Text('Voltar a ligar')),
+            FilledButton(onPressed: busy ? null : () => _connect(provider), child: Text('Voltar a ligar'.tr)),
           );
         }
       } else {
         lines.add(Text(_syncedText(connection.lastSyncedAt), style: small));
         if (connection.lastError case final problem?) lines.add(Text(problem, style: error));
-        actions.add(
-          TextButton(onPressed: busy ? null : () => _sync(connection), child: const Text('Sincronizar agora')),
-        );
+        actions.add(TextButton(onPressed: busy ? null : () => _sync(connection), child: Text('Sincronizar agora'.tr)));
       }
-      actions.add(TextButton(onPressed: busy ? null : () => _disconnect(connection), child: const Text('Desligar')));
+      actions.add(TextButton(onPressed: busy ? null : () => _disconnect(connection), child: Text('Desligar'.tr)));
     } else if (!overview.available.contains(provider)) {
-      lines.add(Text('Ainda não está disponível neste servidor.', style: small));
+      lines.add(Text('Ainda não está disponível neste servidor.'.tr, style: small));
     } else if (!overview.canConnect) {
-      lines.add(Text('Só os adultos da casa podem ligar contas.', style: small));
+      lines.add(Text('Só os adultos da casa podem ligar contas.'.tr, style: small));
     } else {
       actions.add(
         FilledButton.icon(
           onPressed: busy ? null : () => _connect(provider),
           icon: const Icon(Icons.link),
-          label: Text('Ligar a ${provider.account}'),
+          label: Text('Ligar a ${provider.account}'.tr),
         ),
       );
     }
 
     if (provider == CalendarProvider.microsoft && (connection != null || actions.isNotEmpty)) {
-      lines.add(Text('No Outlook, as alterações a um só dia de uma série não voltam ao Kubico.', style: small));
+      lines.add(Text('No Outlook, as alterações a um só dia de uma série não voltam ao Kubico.'.tr, style: small));
     }
 
     return Card(
@@ -222,9 +227,9 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
   }
 
   static String _syncedText(DateTime? at) {
-    if (at == null) return 'À espera da primeira sincronização.';
+    if (at == null) return 'À espera da primeira sincronização.'.tr;
     return DateUtils.isSameDay(at, DateTime.now())
-        ? 'Sincronizado hoje às ${formatTime(at)}.'
-        : 'Sincronizado a ${formatDayMonth(at)}, às ${formatTime(at)}.';
+        ? 'Sincronizado hoje às ${formatTime(at)}.'.tr
+        : 'Sincronizado a ${formatDayMonth(at)}, às ${formatTime(at)}.'.tr;
   }
 }

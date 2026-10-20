@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'auth_screen.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
 import 'theme.dart';
 
-/// A app fala português de Portugal: datas, horas (24 h) e semanas a começar à segunda-feira.
+/// A app fala português de Portugal (ou inglês, se a pessoa o escolher): datas, horas (24 h) e semanas a começar à
+/// segunda-feira.
 const kubicoLocale = Locale('pt', 'PT');
 
 class KubicoApp extends StatelessWidget {
@@ -16,15 +18,20 @@ class KubicoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Kubico',
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(Brightness.light),
-      darkTheme: buildTheme(Brightness.dark),
-      locale: kubicoLocale,
-      supportedLocales: const [kubicoLocale],
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      home: const _Root(),
+    // Mudar de língua desenha a app toda outra vez, a começar no ecrã inicial (os textos traduzem-se ao desenhar).
+    return ValueListenableBuilder<String>(
+      valueListenable: AppLanguage.current,
+      builder: (context, language, _) => MaterialApp(
+        key: ValueKey(language),
+        title: 'Kubico',
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(Brightness.light),
+        darkTheme: buildTheme(Brightness.dark),
+        locale: AppLanguage.locale,
+        supportedLocales: const [kubicoLocale, Locale('en', 'GB')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        home: const _Root(),
+      ),
     );
   }
 }

@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../l10n/strings.dart';
+
 /// Há câmara para ler códigos? (O leitor não funciona no Windows nem no Linux.)
 bool get scannerAvailable =>
     kIsWeb ||
@@ -53,8 +55,8 @@ class _ScannerScreenState<T extends Object> extends State<ScannerScreen<T>> {
                 padding: const EdgeInsets.all(24),
                 child: Text(
                   error.errorCode == MobileScannerErrorCode.permissionDenied
-                      ? 'O Kubico não tem autorização para usar a câmara. Dá-a nas definições do aparelho.'
-                      : 'Não foi possível usar a câmara.',
+                      ? 'O Kubico não tem autorização para usar a câmara. Dá-a nas definições do aparelho.'.tr
+                      : 'Não foi possível usar a câmara.'.tr,
                   textAlign: TextAlign.center,
                 ),
               ),

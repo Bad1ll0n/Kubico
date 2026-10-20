@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../shopping/voice_input.dart';
 
 /// O artigo a pôr na lista depois de ler um código de barras.
@@ -42,7 +43,7 @@ class _ScannedProductDialogState extends State<ScannedProductDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('Adicionar à lista'),
+      title: Text('Adicionar à lista'.tr),
       content: SizedBox(
         width: 400,
         child: Column(
@@ -54,7 +55,7 @@ class _ScannedProductDialogState extends State<ScannedProductDialog> {
               controller: _name,
               autofocus: widget.product == null,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Nome'),
+              decoration: InputDecoration(labelText: 'Nome'.tr),
               onChanged: (_) => setState(() {}),
               onSubmitted: (_) => _submit(),
             ),
@@ -62,17 +63,17 @@ class _ScannedProductDialogState extends State<ScannedProductDialog> {
             TextField(
               controller: _category,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Secção (opcional)', hintText: 'ex.: Laticínios'),
+              decoration: InputDecoration(labelText: 'Secção (opcional)'.tr, hintText: 'ex.: Laticínios'.tr),
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 12),
-            Text('Código ${widget.barcode}', style: theme.textTheme.bodySmall),
+            Text('Código ${widget.barcode}'.tr, style: theme.textTheme.bodySmall),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-        FilledButton(onPressed: _name.text.trim().isEmpty ? null : _submit, child: const Text('Adicionar')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
+        FilledButton(onPressed: _name.text.trim().isEmpty ? null : _submit, child: Text('Adicionar'.tr)),
       ],
     );
   }
@@ -150,7 +151,7 @@ class _DictationDialogState extends State<DictationDialog> {
     final theme = Theme.of(context);
     final items = parseSpokenItems(_text.text);
     return AlertDialog(
-      title: const Text('Ditar artigos'),
+      title: Text('Ditar artigos'.tr),
       content: SizedBox(
         width: 400,
         child: Column(
@@ -160,7 +161,7 @@ class _DictationDialogState extends State<DictationDialog> {
             Row(
               children: [
                 IconButton.filledTonal(
-                  tooltip: _listening ? 'A ouvir' : 'Ouvir outra vez',
+                  tooltip: _listening ? 'A ouvir'.tr : 'Ouvir outra vez'.tr,
                   isSelected: _listening,
                   onPressed: _listening || _unavailable ? null : _listen,
                   icon: const Icon(Icons.mic_none),
@@ -170,10 +171,10 @@ class _DictationDialogState extends State<DictationDialog> {
                 Expanded(
                   child: Text(
                     _unavailable
-                        ? 'O ditado não está disponível neste dispositivo. Escreve os artigos aqui em baixo.'
+                        ? 'O ditado não está disponível neste dispositivo. Escreve os artigos aqui em baixo.'.tr
                         : _listening
-                        ? 'A ouvir… Diz os artigos, por exemplo: «leite, pão e 2 iogurtes».'
-                        : _problem ?? 'Corrige o que for preciso e adiciona.',
+                        ? 'A ouvir… Diz os artigos, por exemplo: «leite, pão e 2 iogurtes».'.tr
+                        : _problem ?? 'Corrige o que for preciso e adiciona.'.tr,
                   ),
                 ),
               ],
@@ -184,7 +185,7 @@ class _DictationDialogState extends State<DictationDialog> {
               minLines: 2,
               maxLines: 4,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(hintText: 'leite, pão e 2 iogurtes'),
+              decoration: InputDecoration(hintText: 'leite, pão e 2 iogurtes'.tr),
               onChanged: (_) => setState(() => _edited = true),
             ),
             if (items.isNotEmpty) ...[
@@ -198,16 +199,16 @@ class _DictationDialogState extends State<DictationDialog> {
             if (items.isEmpty && !_listening && !_unavailable && _problem == null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text('Não se percebeu nenhum artigo.', style: theme.textTheme.bodySmall),
+                child: Text('Não se percebeu nenhum artigo.'.tr, style: theme.textTheme.bodySmall),
               ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
         FilledButton(
           onPressed: items.isEmpty ? null : _finish,
-          child: Text(items.length <= 1 ? 'Adicionar' : 'Adicionar ${items.length}'),
+          child: Text(items.length <= 1 ? 'Adicionar'.tr : 'Adicionar ${items.length}'.tr),
         ),
       ],
     );

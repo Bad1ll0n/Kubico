@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import 'dates_pt.dart';
 import 'theme.dart';
 
@@ -132,8 +133,8 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
       DateTime.utc(b.year, b.month, b.day).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
 
   String? get _dateError {
-    if (_allDay) return _end.isBefore(_start) ? 'O último dia não pode ser antes do primeiro.' : null;
-    return _end.isAfter(_start) ? null : 'O fim tem de ser depois do início.';
+    if (_allDay) return _end.isBefore(_start) ? 'O último dia não pode ser antes do primeiro.'.tr : null;
+    return _end.isAfter(_start) ? null : 'O fim tem de ser depois do início.'.tr;
   }
 
   Future<DateTime?> _pickDate(DateTime initial) => showDatePicker(
@@ -229,7 +230,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
       initialValue: widget.members.any((m) => m.userId == value) ? value : null,
       decoration: InputDecoration(labelText: label, prefixIcon: const Icon(Icons.directions_car_outlined)),
       items: [
-        const DropdownMenuItem<String?>(value: null, child: Text('Ninguém')),
+        DropdownMenuItem<String?>(value: null, child: Text('Ninguém'.tr)),
         for (final m in widget.members) DropdownMenuItem<String?>(value: m.userId, child: Text(m.displayName)),
       ],
       onChanged: onChanged,
@@ -248,22 +249,22 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_isNew ? 'Novo evento' : 'Editar evento', style: theme.textTheme.titleLarge),
+            Text(_isNew ? 'Novo evento'.tr : 'Editar evento'.tr, style: theme.textTheme.titleLarge),
             const SizedBox(height: 16),
             TextField(
               controller: _title,
               autofocus: _isNew,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'O que é?', hintText: 'Ex.: Natação da Rita'),
+              decoration: InputDecoration(labelText: 'O que é?'.tr, hintText: 'Ex.: Natação da Rita'.tr),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Todo o dia'),
+              title: Text('Todo o dia'.tr),
               value: _allDay,
               onChanged: _setAllDay,
             ),
             _DateTimeRow(
-              label: _allDay ? 'Primeiro dia' : 'Início',
+              label: _allDay ? 'Primeiro dia'.tr : 'Início'.tr,
               value: _start,
               showTime: !_allDay,
               onPickDate: () => _pickStart(time: false),
@@ -271,7 +272,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
             ),
             const SizedBox(height: 8),
             _DateTimeRow(
-              label: _allDay ? 'Último dia' : 'Fim',
+              label: _allDay ? 'Último dia'.tr : 'Fim'.tr,
               value: _end,
               showTime: !_allDay,
               onPickDate: () => _pickEnd(time: false),
@@ -286,15 +287,15 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
             TextField(
               controller: _location,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Local (opcional)'),
+              decoration: InputDecoration(labelText: 'Local (opcional)'.tr),
             ),
             if (_canRepeat) ...[
               const SizedBox(height: 12),
               DropdownButtonFormField<RecurrenceFrequency?>(
                 initialValue: _frequency,
-                decoration: const InputDecoration(labelText: 'Repetição'),
+                decoration: InputDecoration(labelText: 'Repetição'.tr),
                 items: [
-                  const DropdownMenuItem<RecurrenceFrequency?>(value: null, child: Text('Não se repete')),
+                  DropdownMenuItem<RecurrenceFrequency?>(value: null, child: Text('Não se repete'.tr)),
                   for (final f in RecurrenceFrequency.values) DropdownMenuItem(value: f, child: Text(f.label)),
                 ],
                 onChanged: _setFrequency,
@@ -324,19 +325,19 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
                     child: TextButton.icon(
                       onPressed: _pickUntil,
                       icon: const Icon(Icons.event_repeat),
-                      label: Text(_until == null ? 'Repete-se sem fim' : 'Até ${formatShortDate(_until!)}'),
+                      label: Text(_until == null ? 'Repete-se sem fim'.tr : 'Até ${formatShortDate(_until!)}'.tr),
                     ),
                   ),
                   if (_until != null)
                     IconButton(
-                      tooltip: 'Repetir sem fim',
+                      tooltip: 'Repetir sem fim'.tr,
                       onPressed: () => setState(() => _until = null),
                       icon: const Icon(Icons.close),
                     ),
                 ],
               ),
             const SizedBox(height: 16),
-            Text('Quem participa', style: theme.textTheme.titleSmall),
+            Text('Quem participa'.tr, style: theme.textTheme.titleSmall),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -355,15 +356,15 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
             ),
             if (!_allDay) ...[
               const SizedBox(height: 16),
-              _rideField('Quem leva', _dropOff, (value) => setState(() => _dropOff = value)),
+              _rideField('Quem leva'.tr, _dropOff, (value) => setState(() => _dropOff = value)),
               const SizedBox(height: 12),
-              _rideField('Quem vai buscar', _pickUp, (value) => setState(() => _pickUp = value)),
+              _rideField('Quem vai buscar'.tr, _pickUp, (value) => setState(() => _pickUp = value)),
             ],
             const SizedBox(height: 12),
             TextField(
               controller: _notes,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Notas (opcional)'),
+              decoration: InputDecoration(labelText: 'Notas (opcional)'.tr),
               maxLines: 2,
             ),
             const SizedBox(height: 16),
@@ -373,16 +374,16 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
                   TextButton.icon(
                     onPressed: () => Navigator.pop(context, const CalendarEventDeleteRequested()),
                     icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
-                    label: Text('Apagar', style: TextStyle(color: theme.colorScheme.error)),
+                    label: Text('Apagar'.tr, style: TextStyle(color: theme.colorScheme.error)),
                   ),
                 const Spacer(),
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+                TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
                 const SizedBox(width: 8),
                 ValueListenableBuilder(
                   valueListenable: _title,
                   builder: (context, value, _) => FilledButton(
                     onPressed: value.text.trim().isEmpty || _dateError != null ? null : _save,
-                    child: const Text('Guardar'),
+                    child: Text('Guardar'.tr),
                   ),
                 ),
               ],

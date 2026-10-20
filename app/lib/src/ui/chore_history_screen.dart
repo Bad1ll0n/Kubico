@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import 'dates_pt.dart';
 import 'theme.dart';
 
@@ -23,19 +24,19 @@ Future<PickedPhoto?> pickChorePhoto(BuildContext context) async {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
-            child: Text('Esta tarefa pede uma foto do trabalho feito.'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Text('Esta tarefa pede uma foto do trabalho feito.'.tr),
           ),
           if (camera)
             ListTile(
               leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Tirar foto'),
+              title: Text('Tirar foto'.tr),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
           ListTile(
             leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Escolher uma foto'),
+            title: Text('Escolher uma foto'.tr),
             onTap: () => Navigator.pop(context, ImageSource.gallery),
           ),
         ],
@@ -141,18 +142,19 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
   }
 
   Future<void> _reject(ChoreHistoryItem item) async {
-    final name = _details?.member(item.userId)?.displayName ?? 'Quem a fez';
+    final name = _details?.member(item.userId)?.displayName ?? 'Quem a fez'.tr;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Não aceitar «${item.choreTitle}»?'),
+        title: Text('Não aceitar «${item.choreTitle}»?'.tr),
         content: Text(
-          '${item.points > 0 ? 'Os ${item.points} pontos deixam de contar e a' : 'A'} tarefa volta para $name, '
-          'para hoje, com um aviso.',
+          '${item.points > 0 ? 'Os ${item.points} pontos deixam de contar e a'.tr : 'A'.tr} tarefa volta para $name, '
+                  'para hoje, com um aviso.'
+              .tr,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Não aceitar')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancelar'.tr)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text('Não aceitar'.tr)),
         ],
       ),
     );
@@ -179,7 +181,7 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
             top: 4,
             right: 4,
             child: IconButton.filledTonal(
-              tooltip: 'Fechar',
+              tooltip: 'Fechar'.tr,
               onPressed: () => Navigator.pop(context),
               icon: const Icon(Icons.close),
             ),
@@ -194,7 +196,7 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
     final items = _items;
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Histórico das tarefas')),
+      appBar: AppBar(title: Text('Histórico das tarefas'.tr)),
       body: items == null
           ? Center(
               child: _error == null
@@ -203,7 +205,7 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(_error.toString()),
-                        TextButton(onPressed: _load, child: const Text('Tentar de novo')),
+                        TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
                       ],
                     ),
             )
@@ -213,9 +215,9 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
                 children: [
                   if (items.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Text('Ainda ninguém fez tarefas nos últimos 30 dias.', textAlign: TextAlign.center),
+                    Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Text('Ainda ninguém fez tarefas nos últimos 30 dias.'.tr, textAlign: TextAlign.center),
                     ),
                   for (final (i, item) in items.indexed) ...[
                     if (i == 0 || !_sameDay(items[i - 1].completedAt, item.completedAt))
@@ -234,7 +236,7 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
   Widget _tile(ChoreHistoryItem item) {
     final theme = Theme.of(context);
     final member = _details?.member(item.userId);
-    final name = member?.displayName ?? 'Antigo membro';
+    final name = member?.displayName ?? 'Antigo membro'.tr;
     return Card(
       child: ListTile(
         leading: CircleAvatar(
@@ -253,7 +255,7 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
             name,
             formatTime(item.completedAt),
             if (item.points > 0) '${item.points} pts',
-            if (item.rejected) 'não aceite',
+            if (item.rejected) 'não aceite'.tr,
           ].join(' · '),
         ),
         trailing: Row(
@@ -270,9 +272,9 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
               ),
             if (_canReview && !item.rejected)
               PopupMenuButton<String>(
-                tooltip: 'Opções de ${item.choreTitle}',
+                tooltip: 'Opções de ${item.choreTitle}'.tr,
                 onSelected: (_) => _reject(item),
-                itemBuilder: (_) => const [PopupMenuItem(value: 'reject', child: Text('Não aceitar'))],
+                itemBuilder: (_) => [PopupMenuItem(value: 'reject', child: Text('Não aceitar'.tr))],
               ),
           ],
         ),

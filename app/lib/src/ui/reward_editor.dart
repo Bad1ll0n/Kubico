@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api/models.dart';
+import '../l10n/strings.dart';
 
 /// Resultado do editor: guardar (com os dados) ou apagar.
 sealed class RewardEditorResult {
@@ -60,7 +61,7 @@ class _RewardEditorState extends State<_RewardEditor> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: Text(_isNew ? 'Nova recompensa' : 'Editar recompensa'),
+      title: Text(_isNew ? 'Nova recompensa'.tr : 'Editar recompensa'.tr),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -70,13 +71,13 @@ class _RewardEditorState extends State<_RewardEditor> {
               controller: _title,
               autofocus: _isNew,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Recompensa', hintText: 'Ex.: Escolher o filme de sexta'),
+              decoration: InputDecoration(labelText: 'Recompensa'.tr, hintText: 'Ex.: Escolher o filme de sexta'.tr),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _description,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Descrição (opcional)'),
+              decoration: InputDecoration(labelText: 'Descrição (opcional)'.tr),
               maxLines: 2,
             ),
             const SizedBox(height: 12),
@@ -84,7 +85,7 @@ class _RewardEditorState extends State<_RewardEditor> {
               controller: _cost,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'Custo em pontos', suffixText: 'pts'),
+              decoration: InputDecoration(labelText: 'Custo em pontos'.tr, suffixText: 'pts'),
               onChanged: (_) => setState(() {}),
             ),
           ],
@@ -94,14 +95,14 @@ class _RewardEditorState extends State<_RewardEditor> {
         if (!_isNew)
           TextButton(
             onPressed: () => Navigator.pop(context, const RewardDeleteRequested()),
-            child: Text('Apagar', style: TextStyle(color: theme.colorScheme.error)),
+            child: Text('Apagar'.tr, style: TextStyle(color: theme.colorScheme.error)),
           ),
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
         ValueListenableBuilder(
           valueListenable: _title,
           builder: (context, value, _) => FilledButton(
             onPressed: value.text.trim().isEmpty || _costValue == null ? null : _save,
-            child: const Text('Guardar'),
+            child: Text('Guardar'.tr),
           ),
         ),
       ],

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import 'chore_editor.dart';
@@ -18,8 +19,10 @@ enum ChoreGroup {
   later('Mais tarde'),
   noDate('Sem prazo');
 
-  const ChoreGroup(this.label);
-  final String label;
+  const ChoreGroup(this._label);
+  final String _label;
+
+  String get label => _label.tr;
 }
 
 /// Em que secção da lista aparece uma tarefa, relativamente a [today].
@@ -155,8 +158,8 @@ class _ChoresViewState extends State<ChoresView> {
           SnackBar(
             content: Text(
               [
-                if (points > 0) '+$points pontos!' else 'Feito!',
-                if (next != null && updated.rotates) 'Agora é a vez de $next.',
+                if (points > 0) '+$points pontos!'.tr else 'Feito!'.tr,
+                if (next != null && updated.rotates) 'Agora é a vez de $next.'.tr,
               ].join(' '),
             ),
           ),
@@ -193,7 +196,9 @@ class _ChoresViewState extends State<ChoresView> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text(result.points > 0 ? '${chore.title}: +${result.points} pontos!' : '${chore.title}: feito!'),
+            content: Text(
+              result.points > 0 ? '${chore.title}: +${result.points} pontos!'.tr : '${chore.title}: feito!'.tr,
+            ),
           ),
         );
     } catch (e) {
@@ -235,7 +240,7 @@ class _ChoresViewState extends State<ChoresView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(_error.toString()),
-                  TextButton(onPressed: _load, child: const Text('Tentar de novo')),
+                  TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
                 ],
               ),
       );
@@ -257,11 +262,7 @@ class _ChoresViewState extends State<ChoresView> {
 
     return Scaffold(
       floatingActionButton: canManage
-          ? FloatingActionButton.extended(
-              onPressed: _edit,
-              icon: const Icon(Icons.add),
-              label: const Text('Nova tarefa'),
-            )
+          ? FloatingActionButton.extended(onPressed: _edit, icon: const Icon(Icons.add), label: Text('Nova tarefa'.tr))
           : null,
       body: RefreshIndicator(
         onRefresh: _load,
@@ -279,7 +280,7 @@ class _ChoresViewState extends State<ChoresView> {
               Padding(
                 padding: const EdgeInsets.all(32),
                 child: Text(
-                  canManage ? 'Sem tarefas por fazer. Cria a primeira!' : 'Sem tarefas por fazer.',
+                  canManage ? 'Sem tarefas por fazer. Cria a primeira!'.tr : 'Sem tarefas por fazer.'.tr,
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -340,19 +341,19 @@ class _ChoreTile extends StatelessWidget {
       if (chore.timeOfDay != ChoreTimeOfDay.any) chore.timeOfDay.label,
       if (chore.dueDate != null) localizations.formatShortMonthDay(chore.dueDate!),
       if (chore.recurrence != ChoreRecurrence.none) chore.recurrence.label.toLowerCase(),
-      if (chore.rotates) 'em rotação',
-      if (chore.isRoutine) '${chore.doneSteps.length}/${chore.steps.length} passos',
-      if (chore.requiresPhoto) 'com foto',
+      if (chore.rotates) 'em rotação'.tr,
+      if (chore.isRoutine) '${chore.doneSteps.length}/${chore.steps.length} passos'.tr,
+      if (chore.requiresPhoto) 'com foto'.tr,
     ].join(' · ');
 
     final tile = ListTile(
       onTap: onTap,
       leading: IconButton(
         tooltip: canComplete
-            ? 'Marcar como feita'
+            ? 'Marcar como feita'.tr
             : viewOnly
-            ? 'Só podes ver as tarefas'
-            : 'Atribuída a outra pessoa',
+            ? 'Só podes ver as tarefas'.tr
+            : 'Atribuída a outra pessoa'.tr,
         onPressed: canComplete ? onComplete : null,
         icon: Icon(switch (chore.timeOfDay) {
           ChoreTimeOfDay.morning when chore.isRoutine => Icons.wb_sunny_outlined,
@@ -375,7 +376,7 @@ class _ChoreTile extends StatelessWidget {
               ),
             ),
           Tooltip(
-            message: assignee?.displayName ?? 'Qualquer pessoa',
+            message: assignee?.displayName ?? 'Qualquer pessoa'.tr,
             child: CircleAvatar(
               radius: 14,
               backgroundColor: assignee == null
@@ -438,11 +439,11 @@ class _StatsCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text('Últimos 30 dias', style: theme.textTheme.titleSmall)),
+                Expanded(child: Text('Últimos 30 dias'.tr, style: theme.textTheme.titleSmall)),
                 TextButton.icon(
                   onPressed: onHistory,
                   icon: const Icon(Icons.history, size: 18),
-                  label: const Text('Quem fez o quê'),
+                  label: Text('Quem fez o quê'.tr),
                 ),
               ],
             ),
@@ -467,7 +468,7 @@ class _StatsCard extends StatelessWidget {
                     SizedBox(
                       width: 120,
                       child: Text(
-                        '${s.points} pts · ${s.completed} ${s.completed == 1 ? 'tarefa' : 'tarefas'}',
+                        '${s.points} pts · ${s.completed} ${s.completed == 1 ? 'tarefa'.tr : 'tarefas'.tr}',
                         textAlign: TextAlign.end,
                         style: theme.textTheme.bodySmall,
                       ),

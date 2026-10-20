@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../notifications/notification_center.dart';
 import '../notifications/push_registration.dart';
 import '../realtime/household_realtime.dart';
@@ -74,11 +75,11 @@ class _HomeScreenState extends State<HomeScreen> {
       final join = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Entrar em ${invite.householdName}?'),
-          content: Text('Recebeste um convite para esta casa, com o papel de ${invite.role.label}.'),
+          title: Text('Entrar em ${invite.householdName}?'.tr),
+          content: Text('Recebeste um convite para esta casa, com o papel de ${invite.role.label}.'.tr),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Agora não')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Entrar')),
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Agora não'.tr)),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text('Entrar'.tr)),
           ],
         ),
       );
@@ -100,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (event.removedUserId != null && event.removedUserId == session.user?.id) {
       final name = session.households.where((h) => h.id == event.householdId).firstOrNull?.name;
       if (name != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Já não estás em $name.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Já não estás em $name.'.tr)));
       }
     }
     session.memberChanged(event.householdId, member: event.member, removedUserId: event.removedUserId);
@@ -133,14 +134,15 @@ class _HomeScreenState extends State<HomeScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Terminar sessão em todos os dispositivos?'),
-          content: const Text(
+          title: Text('Terminar sessão em todos os dispositivos?'.tr),
+          content: Text(
             'Vais ter de entrar outra vez em todos os telemóveis e computadores. '
-            'Útil se perdeste um telemóvel ou entraste num computador que não é teu.',
+                    'Útil se perdeste um telemóvel ou entraste num computador que não é teu.'
+                .tr,
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Terminar sessões')),
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancelar'.tr)),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text('Terminar sessões'.tr)),
           ],
         ),
       );
@@ -261,7 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
             actions: [
               const NotificationsBell(),
               IconButton(
-                tooltip: 'Membros e convites',
+                tooltip: 'Membros e convites'.tr,
                 icon: const Icon(Icons.group_outlined),
                 onPressed: () =>
                     Navigator.of(context)
@@ -283,12 +285,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
                 itemBuilder: (_) => [
                   PopupMenuItem(enabled: false, child: Text(session.user?.email ?? session.user?.displayName ?? '')),
-                  const PopupMenuItem(value: 'activity', child: Text('Histórico de alterações')),
-                  const PopupMenuItem(value: 'account', child: Text('A minha conta')),
-                  const PopupMenuItem(value: 'devices', child: Text('Dispositivos com sessão iniciada')),
-                  const PopupMenuItem(value: 'help', child: Text('Ajuda e sugestões')),
-                  const PopupMenuItem(value: 'logout', child: Text('Terminar sessão')),
-                  const PopupMenuItem(value: 'logout-all', child: Text('Terminar sessão em todos os dispositivos')),
+                  PopupMenuItem(value: 'activity', child: Text('Histórico de alterações'.tr)),
+                  PopupMenuItem(value: 'account', child: Text('A minha conta'.tr)),
+                  PopupMenuItem(value: 'devices', child: Text('Dispositivos com sessão iniciada'.tr)),
+                  PopupMenuItem(value: 'help', child: Text('Ajuda e sugestões'.tr)),
+                  PopupMenuItem(value: 'logout', child: Text('Terminar sessão'.tr)),
+                  PopupMenuItem(value: 'logout-all', child: Text('Terminar sessão em todos os dispositivos'.tr)),
                 ],
               ),
             ],
@@ -343,7 +345,7 @@ class _HouseholdSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      tooltip: 'Mudar de casa',
+      tooltip: 'Mudar de casa'.tr,
       onSelected: (id) {
         if (id == '_add') {
           Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const OnboardingScreen(canGoBack: true)));
@@ -357,7 +359,7 @@ class _HouseholdSwitcher extends StatelessWidget {
         // Os perfis de criança só existem na sua casa.
         if (session.user?.isChildProfile != true) ...[
           const PopupMenuDivider(),
-          const PopupMenuItem(value: '_add', child: Text('Adicionar casa…')),
+          PopupMenuItem(value: '_add', child: Text('Adicionar casa…'.tr)),
         ],
       ],
       child: Row(
@@ -389,12 +391,12 @@ class _NoAreas extends StatelessWidget {
             Icon(Icons.lock_outline, size: 48, color: theme.colorScheme.outline),
             const SizedBox(height: 12),
             Text(
-              'Ainda não tens nada para ver nesta casa',
+              'Ainda não tens nada para ver nesta casa'.tr,
               style: theme.textTheme.titleMedium,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
-            const Text('Pede ao administrador da casa para te dar acesso.', textAlign: TextAlign.center),
+            Text('Pede ao administrador da casa para te dar acesso.'.tr, textAlign: TextAlign.center),
           ],
         ),
       ),
@@ -414,7 +416,7 @@ class _EmptyDetail extends StatelessWidget {
         children: [
           Icon(Icons.shopping_basket_outlined, size: 48, color: theme.colorScheme.outline),
           const SizedBox(height: 12),
-          Text('Escolhe uma lista', style: theme.textTheme.titleMedium),
+          Text('Escolhe uma lista'.tr, style: theme.textTheme.titleMedium),
         ],
       ),
     );

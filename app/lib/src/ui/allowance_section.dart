@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
 import 'dates_pt.dart';
 import 'theme.dart';
@@ -101,22 +102,23 @@ class _AllowanceSectionState extends State<AllowanceSection> {
   }
 
   Future<void> _pay(Allowance allowance, AllowancePeriodEntry period) async {
-    final name = _member(allowance.userId)?.displayName ?? 'esta pessoa';
+    final name = _member(allowance.userId)?.displayName ?? 'esta pessoa'.tr;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Pagar ${formatEuros(period.amountCents)} a $name?'),
+        title: Text('Pagar ${formatEuros(period.amountCents)} a $name?'.tr),
         content: Text(
           [
             '${capitalize(_periodLabel(allowance.period, period))}: ${_detail(period)}.',
             if (period.isCurrent)
-              'Ainda não acabou: as tarefas feitas depois de pagar já não contam para ${_periodLabel(allowance.period, period)}.',
-            'Fica marcado como pago e $name recebe um aviso.',
+              'Ainda não acabou: as tarefas feitas depois de pagar já não contam para ${_periodLabel(allowance.period, period)}.'
+                  .tr,
+            'Fica marcado como pago e $name recebe um aviso.'.tr,
           ].join(' '),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Pagar')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancelar'.tr)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text('Pagar'.tr)),
         ],
       ),
     );
@@ -125,7 +127,7 @@ class _AllowanceSectionState extends State<AllowanceSection> {
     if (mounted) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Mesada de $name marcada como paga.')));
+        ..showSnackBar(SnackBar(content: Text('Mesada de $name marcada como paga.'.tr)));
     }
   }
 
@@ -142,20 +144,18 @@ class _AllowanceSectionState extends State<AllowanceSection> {
           padding: const EdgeInsets.fromLTRB(8, 16, 0, 4),
           child: Row(
             children: [
-              Expanded(child: Text('Mesada', style: theme.textTheme.titleSmall)),
+              Expanded(child: Text('Mesada'.tr, style: theme.textTheme.titleSmall)),
               if (_canManage && someoneWithout)
-                TextButton.icon(
-                  onPressed: _edit,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Dar mesada'),
-                ),
+                TextButton.icon(onPressed: _edit, icon: const Icon(Icons.add, size: 18), label: Text('Dar mesada'.tr)),
             ],
           ),
         ),
         if (allowances.isEmpty)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(8, 0, 8, 8),
-            child: Text('Ninguém tem mesada. Podes dar um valor por semana ou por mês, com um extra por tarefa feita.'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Text(
+              'Ninguém tem mesada. Podes dar um valor por semana ou por mês, com um extra por tarefa feita.'.tr,
+            ),
           ),
         for (final allowance in allowances) _card(allowance),
       ],
@@ -165,7 +165,7 @@ class _AllowanceSectionState extends State<AllowanceSection> {
   Widget _card(Allowance allowance) {
     final theme = Theme.of(context);
     final member = _member(allowance.userId);
-    final name = member?.displayName ?? 'Antigo membro';
+    final name = member?.displayName ?? 'Antigo membro'.tr;
     // O período atual, os que estão por pagar e os últimos três pagos.
     final shown = [
       ...allowance.periods.where((p) => p.isCurrent || !p.isPaid),
@@ -197,7 +197,7 @@ class _AllowanceSectionState extends State<AllowanceSection> {
                 ),
                 if (_canManage)
                   IconButton(
-                    tooltip: 'Mudar a mesada de $name',
+                    tooltip: 'Mudar a mesada de $name'.tr,
                     onPressed: () => _edit(allowance),
                     icon: const Icon(Icons.edit_outlined),
                   ),
@@ -207,7 +207,7 @@ class _AllowanceSectionState extends State<AllowanceSection> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Por pagar: ${formatEuros(allowance.owedCents)}',
+                  'Por pagar: ${formatEuros(allowance.owedCents)}'.tr,
                   style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.primary),
                 ),
               ),
@@ -225,18 +225,16 @@ class _AllowanceSectionState extends State<AllowanceSection> {
                     if (period.isPaid)
                       _canManage
                           ? PopupMenuButton<String>(
-                              tooltip: 'Opções do pagamento',
+                              tooltip: 'Opções do pagamento'.tr,
                               onSelected: (_) => _run(
                                 () => _api.undoAllowancePayment(_householdId, allowance.userId, period.paymentId!),
                               ),
-                              itemBuilder: (_) => const [
-                                PopupMenuItem(value: 'undo', child: Text('Afinal não foi pago')),
-                              ],
-                              child: const Chip(label: Text('Pago'), visualDensity: VisualDensity.compact),
+                              itemBuilder: (_) => [PopupMenuItem(value: 'undo', child: Text('Afinal não foi pago'.tr))],
+                              child: Chip(label: Text('Pago'.tr), visualDensity: VisualDensity.compact),
                             )
-                          : const Chip(label: Text('Pago'), visualDensity: VisualDensity.compact)
+                          : Chip(label: Text('Pago'.tr), visualDensity: VisualDensity.compact)
                     else if (_canManage)
-                      FilledButton.tonal(onPressed: () => _pay(allowance, period), child: const Text('Pagar')),
+                      FilledButton.tonal(onPressed: () => _pay(allowance, period), child: Text('Pagar'.tr)),
                   ],
                 ),
               ),
@@ -248,18 +246,18 @@ class _AllowanceSectionState extends State<AllowanceSection> {
 
   static String _detail(AllowancePeriodEntry period) => [
     switch (period.choresDone) {
-      0 => 'nenhuma tarefa feita',
-      1 => '1 tarefa feita',
-      final n => '$n tarefas feitas',
+      0 => 'nenhuma tarefa feita'.tr,
+      1 => '1 tarefa feita'.tr,
+      final n => '$n tarefas feitas'.tr,
     },
-    if (period.isCurrent && !period.isPaid) 'ainda a decorrer',
+    if (period.isCurrent && !period.isPaid) 'ainda a decorrer'.tr,
   ].join(' · ');
 
   static String _periodLabel(AllowancePeriod kind, AllowancePeriodEntry period) => switch (kind) {
-    AllowancePeriod.weekly when period.isCurrent => 'esta semana',
-    AllowancePeriod.weekly => 'semana de ${formatDayMonthShort(period.start)} a ${formatDayMonthShort(period.end)}',
-    AllowancePeriod.monthly when period.isCurrent => 'este mês',
-    AllowancePeriod.monthly => '${monthName(period.start.month)} de ${period.start.year}',
+    AllowancePeriod.weekly when period.isCurrent => 'esta semana'.tr,
+    AllowancePeriod.weekly => 'semana de ${formatDayMonthShort(period.start)} a ${formatDayMonthShort(period.end)}'.tr,
+    AllowancePeriod.monthly when period.isCurrent => 'este mês'.tr,
+    AllowancePeriod.monthly => '${monthName(period.start.month)} de ${period.start.year}'.tr,
   };
 }
 
@@ -323,7 +321,7 @@ class _AllowanceDialogState extends State<_AllowanceDialog> {
   Widget build(BuildContext context) {
     final editing = widget.allowance != null;
     return AlertDialog(
-      title: Text(editing ? 'Mesada de ${widget.member?.displayName ?? ''}' : 'Dar mesada'),
+      title: Text(editing ? 'Mesada de ${widget.member?.displayName ?? ''}'.tr : 'Dar mesada'.tr),
       content: SizedBox(
         width: 400,
         child: SingleChildScrollView(
@@ -334,7 +332,7 @@ class _AllowanceDialogState extends State<_AllowanceDialog> {
               if (!editing)
                 DropdownButtonFormField<String>(
                   initialValue: _userId,
-                  decoration: const InputDecoration(labelText: 'A quem'),
+                  decoration: InputDecoration(labelText: 'A quem'.tr),
                   items: [
                     for (final m in widget.choices) DropdownMenuItem(value: m.userId, child: Text(m.displayName)),
                   ],
@@ -342,9 +340,9 @@ class _AllowanceDialogState extends State<_AllowanceDialog> {
                 ),
               const SizedBox(height: 12),
               SegmentedButton<AllowancePeriod>(
-                segments: const [
-                  ButtonSegment(value: AllowancePeriod.weekly, label: Text('Por semana')),
-                  ButtonSegment(value: AllowancePeriod.monthly, label: Text('Por mês')),
+                segments: [
+                  ButtonSegment(value: AllowancePeriod.weekly, label: Text('Por semana'.tr)),
+                  ButtonSegment(value: AllowancePeriod.monthly, label: Text('Por mês'.tr)),
                 ],
                 selected: {_period},
                 onSelectionChanged: (s) => setState(() => _period = s.single),
@@ -355,10 +353,10 @@ class _AllowanceDialogState extends State<_AllowanceDialog> {
                 autofocus: !editing,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
-                  labelText: 'Valor',
+                  labelText: 'Valor'.tr,
                   suffixText: '€',
-                  hintText: '5,00',
-                  errorText: _amount.text.trim().isNotEmpty && _amountCents == null ? 'Um valor até 1000 €.' : null,
+                  hintText: formatEuros(500, symbol: false),
+                  errorText: _amount.text.trim().isNotEmpty && _amountCents == null ? 'Um valor até 1000 €.'.tr : null,
                 ),
                 onChanged: (_) => setState(() {}),
               ),
@@ -367,17 +365,19 @@ class _AllowanceDialogState extends State<_AllowanceDialog> {
                 controller: _bonus,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
-                  labelText: 'Extra por tarefa feita (opcional)',
+                  labelText: 'Extra por tarefa feita (opcional)'.tr,
                   suffixText: '€',
-                  hintText: '0,50',
-                  errorText: _bonusCents == null ? 'Um valor até 100 €.' : null,
+                  hintText: formatEuros(50, symbol: false),
+                  errorText: _bonusCents == null ? 'Um valor até 100 €.'.tr : null,
                 ),
                 onChanged: (_) => setState(() {}),
               ),
               if (editing && widget.allowance!.period != _period)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text('Ao mudar de semanal para mensal (ou o contrário), começa a contar a partir de agora.'),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Ao mudar de semanal para mensal (ou o contrário), começa a contar a partir de agora.'.tr,
+                  ),
                 ),
             ],
           ),
@@ -388,10 +388,10 @@ class _AllowanceDialogState extends State<_AllowanceDialog> {
           TextButton(
             onPressed: () => _save(stop: true),
             style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('Deixar de dar'),
+            child: Text('Deixar de dar'.tr),
           ),
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-        FilledButton(onPressed: _valid ? _save : null, child: const Text('Guardar')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
+        FilledButton(onPressed: _valid ? _save : null, child: Text('Guardar'.tr)),
       ],
     );
   }

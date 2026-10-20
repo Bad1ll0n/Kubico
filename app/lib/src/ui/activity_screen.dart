@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
 import 'dates_pt.dart';
 import 'theme.dart';
@@ -69,20 +70,20 @@ class _ActivityScreenState extends State<ActivityScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('Desfeito.')));
+        ..showSnackBar(SnackBar(content: Text('Desfeito.'.tr)));
     } catch (e) {
       if (mounted) showError(context, e);
     }
   }
 
-  String _name(String? userId) => _details?.member(userId)?.displayName ?? 'Antigo membro';
+  String _name(String? userId) => _details?.member(userId)?.displayName ?? 'Antigo membro'.tr;
 
   @override
   Widget build(BuildContext context) {
     final items = _items;
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Histórico de alterações')),
+      appBar: AppBar(title: Text('Histórico de alterações'.tr)),
       body: items == null
           ? Center(
               child: _error == null
@@ -91,7 +92,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(_error.toString()),
-                        TextButton(onPressed: _load, child: const Text('Tentar de novo')),
+                        TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
                       ],
                     ),
             )
@@ -104,14 +105,15 @@ class _ActivityScreenState extends State<ActivityScreen> {
                     padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
                     child: Text(
                       'O que mudou nesta casa nos últimos 30 dias. Podes desfazer o que fizeste (e, se gerires a '
-                      'área, o que os outros fizeram), começando pelo mais recente.',
+                              'área, o que os outros fizeram), começando pelo mais recente.'
+                          .tr,
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
                   if (items.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Text('Ainda não há alterações.', textAlign: TextAlign.center),
+                    Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Text('Ainda não há alterações.'.tr, textAlign: TextAlign.center),
                     ),
                   for (final (i, item) in items.indexed) ...[
                     if (i == 0 || !_sameDay(items[i - 1].createdAt, item.createdAt))
@@ -147,10 +149,10 @@ class _ActivityScreenState extends State<ActivityScreen> {
           [
             formatTime(item.createdAt),
             if (item.module != null) item.module!.label,
-            if (undone) 'desfeito por ${_name(item.undoneByUserId)}',
+            if (undone) 'desfeito por ${_name(item.undoneByUserId)}'.tr,
           ].join(' · '),
         ),
-        trailing: item.canUndo ? TextButton(onPressed: () => _undo(item), child: const Text('Desfazer')) : null,
+        trailing: item.canUndo ? TextButton(onPressed: () => _undo(item), child: Text('Desfazer'.tr)) : null,
       ),
     );
   }

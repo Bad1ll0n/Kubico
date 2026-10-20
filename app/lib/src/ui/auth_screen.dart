@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
+import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'child_sign_in_screen.dart';
 import 'theme.dart';
@@ -43,7 +44,10 @@ class _AuthScreenState extends State<AuthScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       // O bilhete expirou: volta-se à palavra-passe.
-      if (e.statusCode == 401 && e.message.startsWith('Passou demasiado tempo')) _backToPassword();
+      if (e.statusCode == 401 &&
+          (e.message.startsWith('Passou demasiado tempo') || e.message.startsWith('Too much time has passed'))) {
+        _backToPassword();
+      }
       showError(context, e);
     } catch (e) {
       if (mounted) showError(context, e);
@@ -79,12 +83,12 @@ class _AuthScreenState extends State<AuthScreen> {
 
   /// O segundo passo: o código da app de autenticação, ou um de recuperação para quem perdeu o telemóvel.
   List<Widget> _codeStep(ThemeData theme) => [
-    Text('Verificação em dois passos', textAlign: TextAlign.center, style: theme.textTheme.titleMedium),
+    Text('Verificação em dois passos'.tr, textAlign: TextAlign.center, style: theme.textTheme.titleMedium),
     const SizedBox(height: 8),
     Text(
       _recovery
-          ? 'Escreve um dos teus códigos de recuperação (ex.: ABCD-EFGH).'
-          : 'Escreve o código de 6 algarismos da tua app de autenticação.',
+          ? 'Escreve um dos teus códigos de recuperação (ex.: ABCD-EFGH).'.tr
+          : 'Escreve o código de 6 algarismos da tua app de autenticação.'.tr,
       textAlign: TextAlign.center,
     ),
     const SizedBox(height: 16),
@@ -95,7 +99,7 @@ class _AuthScreenState extends State<AuthScreen> {
       keyboardType: _recovery ? TextInputType.text : TextInputType.number,
       textCapitalization: TextCapitalization.characters,
       autofillHints: const [AutofillHints.oneTimeCode],
-      decoration: InputDecoration(labelText: _recovery ? 'Código de recuperação' : 'Código'),
+      decoration: InputDecoration(labelText: _recovery ? 'Código de recuperação'.tr : 'Código'.tr),
       onSubmitted: (_) => _submitCode(),
     ),
     const SizedBox(height: 24),
@@ -105,7 +109,7 @@ class _AuthScreenState extends State<AuthScreen> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: _busy
             ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
-            : const Text('Entrar'),
+            : Text('Entrar'.tr),
       ),
     ),
     const SizedBox(height: 8),
@@ -116,9 +120,9 @@ class _AuthScreenState extends State<AuthScreen> {
               _recovery = !_recovery;
               _code.clear();
             }),
-      child: Text(_recovery ? 'Usar o código da app' : 'Perdi o telemóvel: usar um código de recuperação'),
+      child: Text(_recovery ? 'Usar o código da app'.tr : 'Perdi o telemóvel: usar um código de recuperação'.tr),
     ),
-    TextButton(onPressed: _busy ? null : _backToPassword, child: const Text('Voltar')),
+    TextButton(onPressed: _busy ? null : _backToPassword, child: Text('Voltar'.tr)),
   ];
 
   @override
@@ -136,12 +140,22 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Antes de entrar já se escolhe a língua (fica guardada no dispositivo).
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.language),
+                        label: Text(AppLanguage.isEnglish ? 'Português' : 'English'),
+                        onPressed: () =>
+                            AppLanguage.set(AppLanguage.isEnglish ? AppLanguage.portuguese : AppLanguage.english),
+                      ),
+                    ),
                     Icon(Icons.cottage_rounded, size: 56, color: theme.colorScheme.primary),
                     const SizedBox(height: 12),
                     Text('Kubico', textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
                     const SizedBox(height: 4),
                     Text(
-                      'A casa toda, organizada em conjunto.',
+                      'A casa toda, organizada em conjunto.'.tr,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
@@ -152,10 +166,10 @@ class _AuthScreenState extends State<AuthScreen> {
                       if (_isRegister) ...[
                         TextFormField(
                           controller: _name,
-                          decoration: const InputDecoration(labelText: 'Nome'),
+                          decoration: InputDecoration(labelText: 'Nome'.tr),
                           textCapitalization: TextCapitalization.words,
                           autofillHints: const [AutofillHints.name],
-                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Indica o teu nome.' : null,
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Indica o teu nome.'.tr : null,
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -164,18 +178,18 @@ class _AuthScreenState extends State<AuthScreen> {
                         decoration: const InputDecoration(labelText: 'Email'),
                         keyboardType: TextInputType.emailAddress,
                         autofillHints: const [AutofillHints.email],
-                        validator: (v) => (v == null || !v.contains('@')) ? 'Indica um email válido.' : null,
+                        validator: (v) => (v == null || !v.contains('@')) ? 'Indica um email válido.'.tr : null,
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _password,
-                        decoration: const InputDecoration(labelText: 'Palavra-passe'),
+                        decoration: InputDecoration(labelText: 'Palavra-passe'.tr),
                         obscureText: true,
                         autofillHints: [_isRegister ? AutofillHints.newPassword : AutofillHints.password],
                         onFieldSubmitted: (_) => _submit(),
                         validator: (v) => (_isRegister && (v == null || v.length < 8))
-                            ? 'Usa pelo menos 8 caracteres.'
-                            : (v == null || v.isEmpty ? 'Indica a palavra-passe.' : null),
+                            ? 'Usa pelo menos 8 caracteres.'.tr
+                            : (v == null || v.isEmpty ? 'Indica a palavra-passe.'.tr : null),
                       ),
                       const SizedBox(height: 24),
                       FilledButton(
@@ -184,13 +198,13 @@ class _AuthScreenState extends State<AuthScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           child: _busy
                               ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                              : Text(_isRegister ? 'Criar conta' : 'Entrar'),
+                              : Text(_isRegister ? 'Criar conta'.tr : 'Entrar'.tr),
                         ),
                       ),
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: _busy ? null : () => setState(() => _isRegister = !_isRegister),
-                        child: Text(_isRegister ? 'Já tenho conta' : 'Criar uma conta nova'),
+                        child: Text(_isRegister ? 'Já tenho conta'.tr : 'Criar uma conta nova'.tr),
                       ),
                       if (!_isRegister)
                         TextButton.icon(
@@ -200,7 +214,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                     Navigator.of(context)
                                         .push(MaterialPageRoute<void>(builder: (_) => const ChildSignInScreen())),
                           icon: const Icon(Icons.child_care),
-                          label: const Text('Entrar com perfil de criança'),
+                          label: Text('Entrar com perfil de criança'.tr),
                         ),
                     ],
                   ],

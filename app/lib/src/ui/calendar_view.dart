@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
 import 'calendar_event_editor.dart';
 import 'calendar_feed_dialog.dart';
@@ -16,8 +17,10 @@ enum CalendarMode {
   week('Semana'),
   month('Mês');
 
-  const CalendarMode(this.label);
-  final String label;
+  const CalendarMode(this._label);
+  final String _label;
+
+  String get label => _label.tr;
 }
 
 /// Primeiro e último dia (inclusive) de cada vista. As semanas começam à segunda-feira
@@ -50,7 +53,7 @@ String rangeTitle(CalendarMode mode, DateTime focused) {
     CalendarMode.day => formatLongDate(focused),
     CalendarMode.week when first.month == last.month => '${first.day} – ${formatDayMonth(last)}',
     CalendarMode.week => '${formatDayMonth(first)} – ${formatDayMonth(last)}',
-    CalendarMode.month => capitalize('${monthName(focused.month)} de ${focused.year}'),
+    CalendarMode.month => capitalize('${monthName(focused.month)} de ${focused.year}'.tr),
   };
 }
 
@@ -61,14 +64,14 @@ List<DateTime> daysIn(DateTime first, DateTime last) {
 
 /// Texto curto da repetição, ex.: "Todas as semanas (ter, qui) até 31/12/2026".
 String describeRecurrence(Recurrence r) {
-  final base = r.interval == 1 ? r.frequency.label : 'De ${r.interval} em ${r.interval} ${r.frequency.unit}';
+  final base = r.interval == 1 ? r.frequency.label : 'De ${r.interval} em ${r.interval} ${r.frequency.unit}'.tr;
   final text = StringBuffer(base);
   if (r.frequency == RecurrenceFrequency.weekly && r.weekdays.isNotEmpty) {
     final days = [...r.weekdays]..sort();
     text.write(' (${days.map((d) => weekdayShortNames[d - 1]).join(', ')})');
   }
-  if (r.until != null) text.write(' até ${formatShortDate(r.until!)}');
-  if (r.count != null) text.write(', ${r.count} vezes');
+  if (r.until != null) text.write(' até ${formatShortDate(r.until!)}'.tr);
+  if (r.count != null) text.write(', ${r.count} vezes'.tr);
   return text.toString();
 }
 
@@ -80,8 +83,10 @@ enum RecurringScope {
   following('Este e os seguintes'),
   all('Todos os eventos');
 
-  const RecurringScope(this.label);
-  final String label;
+  const RecurringScope(this._label);
+  final String _label;
+
+  String get label => _label.tr;
 }
 
 int _daysBetween(DateTime a, DateTime b) =>
@@ -210,9 +215,9 @@ class _CalendarViewState extends State<CalendarView> {
 
   /// Ex.: "Ana e Rui têm outro compromisso a essa hora".
   String _unavailable(Iterable<String> userIds) {
-    final names = [for (final id in userIds) _details?.member(id)?.displayName ?? 'Alguém'];
-    final who = names.length == 1 ? names.single : '${names.take(names.length - 1).join(', ')} e ${names.last}';
-    return '$who ${names.length == 1 ? 'tem' : 'têm'} outro compromisso a essa hora';
+    final names = [for (final id in userIds) _details?.member(id)?.displayName ?? 'Alguém'.tr];
+    final who = names.length == 1 ? names.single : '${names.take(names.length - 1).join(', ')} e ${names.last}'.tr;
+    return '$who ${names.length == 1 ? 'tem'.tr : 'têm'.tr} outro compromisso a essa hora'.tr;
   }
 
   Future<void> _edit([CalendarEvent? event, CalendarOccurrence? occurrence]) async {
@@ -260,7 +265,7 @@ class _CalendarViewState extends State<CalendarView> {
     return showDialog<RecurringScope>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: Text(deleting ? 'Apagar evento que se repete' : 'Alterar evento que se repete'),
+        title: Text(deleting ? 'Apagar evento que se repete'.tr : 'Alterar evento que se repete'.tr),
         children: [
           for (final scope in RecurringScope.values)
             SimpleDialogOption(onPressed: () => Navigator.pop(context, scope), child: Text(scope.label)),
@@ -278,7 +283,7 @@ class _CalendarViewState extends State<CalendarView> {
     if (busy.isEmpty) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('Atenção: ${_unavailable(busy)}.')));
+      ..showSnackBar(SnackBar(content: Text('Atenção: ${_unavailable(busy)}.'.tr)));
   }
 
   @override
@@ -288,11 +293,7 @@ class _CalendarViewState extends State<CalendarView> {
 
     return Scaffold(
       floatingActionButton: canManage
-          ? FloatingActionButton.extended(
-              onPressed: _edit,
-              icon: const Icon(Icons.add),
-              label: const Text('Novo evento'),
-            )
+          ? FloatingActionButton.extended(onPressed: _edit, icon: const Icon(Icons.add), label: Text('Novo evento'.tr))
           : null,
       body: Column(
         children: [
@@ -317,7 +318,7 @@ class _CalendarViewState extends State<CalendarView> {
           Row(
             children: [
               IconButton(
-                tooltip: 'Anterior',
+                tooltip: 'Anterior'.tr,
                 onPressed: () => _go(shiftFocus(_mode, _selected, -1)),
                 icon: const Icon(Icons.chevron_left),
               ),
@@ -329,13 +330,13 @@ class _CalendarViewState extends State<CalendarView> {
                 ),
               ),
               IconButton(
-                tooltip: 'Seguinte',
+                tooltip: 'Seguinte'.tr,
                 onPressed: () => _go(shiftFocus(_mode, _selected, 1)),
                 icon: const Icon(Icons.chevron_right),
               ),
-              TextButton(onPressed: () => _go(DateTime.now()), child: const Text('Hoje')),
+              TextButton(onPressed: () => _go(DateTime.now()), child: Text('Hoje'.tr)),
               IconButton(
-                tooltip: 'Ver noutros calendários',
+                tooltip: 'Ver noutros calendários'.tr,
                 onPressed: () => showCalendarFeedDialog(context, householdId: _householdId),
                 icon: const Icon(Icons.share_outlined),
               ),
@@ -354,7 +355,7 @@ class _CalendarViewState extends State<CalendarView> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(_error.toString()),
-                TextButton(onPressed: _load, child: const Text('Tentar de novo')),
+                TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
               ],
             ),
     );
@@ -398,7 +399,7 @@ class _CalendarViewState extends State<CalendarView> {
       if (occurrences.isEmpty)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Text('Sem eventos.', style: TextStyle(color: theme.colorScheme.outline)),
+          child: Text('Sem eventos.'.tr, style: TextStyle(color: theme.colorScheme.outline)),
         ),
       for (final o in occurrences) _tile(o, calendar.events[o.eventId]!, day),
     ];
@@ -575,7 +576,7 @@ class _OccurrenceTile extends StatelessWidget {
 
   /// Hora de início e de fim neste dia; "…" quando o evento começa ou acaba noutro dia.
   (String, String?) _times() {
-    if (occurrence.isAllDay) return ('Todo o dia', null);
+    if (occurrence.isAllDay) return ('Todo o dia'.tr, null);
     final start = occurrence.startsAt!;
     final end = occurrence.endsAt!;
     final nextDay = DateTime(day.year, day.month, day.day + 1);
@@ -593,8 +594,8 @@ class _OccurrenceTile extends StatelessWidget {
     final subtitle = [
       if (event.location != null) event.location!,
       if (recurrence != null) describeRecurrence(recurrence),
-      if (event.dropOffUserId != null) 'Leva: ${_name(event.dropOffUserId)}',
-      if (event.pickUpUserId != null) 'Vai buscar: ${_name(event.pickUpUserId)}',
+      if (event.dropOffUserId != null) 'Leva: ${_name(event.dropOffUserId)}'.tr,
+      if (event.pickUpUserId != null) 'Vai buscar: ${_name(event.pickUpUserId)}'.tr,
     ].join(' · ');
     final participants = [for (final id in event.participantUserIds) details?.member(id)].whereType<Member>();
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
+import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'theme.dart';
 import 'two_factor_section.dart';
@@ -42,7 +43,9 @@ class _AccountScreenState extends State<AccountScreen> {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
-            SnackBar(content: Text(kIsWeb ? 'Os teus dados foram descarregados.' : 'Os teus dados foram guardados.')),
+            SnackBar(
+              content: Text(kIsWeb ? 'Os teus dados foram descarregados.'.tr : 'Os teus dados foram guardados.'.tr),
+            ),
           );
       }
     } catch (e) {
@@ -76,7 +79,7 @@ class _AccountScreenState extends State<AccountScreen> {
     await session.forgetDeletedAccount();
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('A tua conta foi apagada.')));
+      ..showSnackBar(SnackBar(content: Text('A tua conta foi apagada.'.tr)));
   }
 
   @override
@@ -85,7 +88,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final user = context.watch<SessionController>().user;
     final child = user?.isChildProfile ?? false;
     return Scaffold(
-      appBar: AppBar(title: const Text('A minha conta')),
+      appBar: AppBar(title: Text('A minha conta'.tr)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
         children: [
@@ -93,9 +96,11 @@ class _AccountScreenState extends State<AccountScreen> {
             child: ListTile(
               leading: const Icon(Icons.person_outline),
               title: Text(user?.displayName ?? ''),
-              subtitle: Text(user?.email ?? 'Perfil de criança (entra com o código da família e o PIN)'),
+              subtitle: Text(user?.email ?? 'Perfil de criança (entra com o código da família e o PIN)'.tr),
             ),
           ),
+          const SizedBox(height: 12),
+          const LanguageCard(),
           if (!child) ...[const SizedBox(height: 12), const TwoFactorSection()],
           const SizedBox(height: 12),
           Card(
@@ -104,17 +109,18 @@ class _AccountScreenState extends State<AccountScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Os teus dados', style: theme.textTheme.titleMedium),
+                  Text('Os teus dados'.tr, style: theme.textTheme.titleMedium),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'Um ficheiro com tudo o que o Kubico guarda sobre ti: a conta, as casas, as sessões, os avisos e o '
-                    'que fizeste em cada casa (tarefas, compras, eventos, pedidos de recompensa, mesada).',
+                            'que fizeste em cada casa (tarefas, compras, eventos, pedidos de recompensa, mesada).'
+                        .tr,
                   ),
                   const SizedBox(height: 12),
                   FilledButton.tonalIcon(
                     onPressed: _busy ? null : _export,
                     icon: const Icon(Icons.download_outlined),
-                    label: const Text('Descarregar os meus dados'),
+                    label: Text('Descarregar os meus dados'.tr),
                   ),
                 ],
               ),
@@ -127,18 +133,18 @@ class _AccountScreenState extends State<AccountScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Apagar a conta', style: theme.textTheme.titleMedium),
+                  Text('Apagar a conta'.tr, style: theme.textTheme.titleMedium),
                   const SizedBox(height: 4),
                   if (child)
-                    const Text('O teu perfil é gerido pelos adultos da casa: pede-lhes para o apagar.')
+                    Text('O teu perfil é gerido pelos adultos da casa: pede-lhes para o apagar.'.tr)
                   else ...[
-                    const Text('Sais de todas as casas e a tua conta deixa de existir. Não se pode desfazer.'),
+                    Text('Sais de todas as casas e a tua conta deixa de existir. Não se pode desfazer.'.tr),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: _busy ? null : _delete,
                       style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
                       icon: const Icon(Icons.delete_forever_outlined),
-                      label: const Text('Apagar a minha conta'),
+                      label: Text('Apagar a minha conta'.tr),
                     ),
                   ],
                 ],
@@ -172,39 +178,71 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
   Widget build(BuildContext context) {
     final error = Theme.of(context).colorScheme.error;
     return AlertDialog(
-      title: const Text('Apagar a tua conta?'),
+      title: Text('Apagar a tua conta?'.tr),
       content: SizedBox(
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               '• Sais de todas as casas. As casas onde mais ninguém tem conta são apagadas, com tudo o que têm '
-              '(incluindo os perfis de criança).\n'
-              '• Onde és a única pessoa a administrar, a administração passa para outra pessoa da casa.\n'
-              '• O que fizeste nas casas (tarefas feitas, artigos, eventos) fica para os outros, sem o teu nome.\n'
-              '• Não se pode desfazer. Se quiseres, descarrega antes os teus dados.',
+                      '(incluindo os perfis de criança).\n'
+                      '• Onde és a única pessoa a administrar, a administração passa para outra pessoa da casa.\n'
+                      '• O que fizeste nas casas (tarefas feitas, artigos, eventos) fica para os outros, sem o teu nome.\n'
+                      '• Não se pode desfazer. Se quiseres, descarrega antes os teus dados.'
+                  .tr,
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _password,
               autofocus: true,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Palavra-passe', helperText: 'Para confirmar que és tu.'),
+              decoration: InputDecoration(labelText: 'Palavra-passe'.tr, helperText: 'Para confirmar que és tu.'.tr),
               onChanged: (_) => setState(() {}),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: error),
           onPressed: _password.text.isEmpty ? null : () => Navigator.pop(context, _password.text),
-          child: const Text('Apagar a conta'),
+          child: Text('Apagar a conta'.tr),
         ),
       ],
+    );
+  }
+}
+
+/// A língua da app e dos avisos. Ao mudar, a app desenha-se outra vez já na língua nova.
+class LanguageCard extends StatelessWidget {
+  const LanguageCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Idioma'.tr, style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text('O idioma da app e dos avisos que recebes.'.tr, style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 12),
+            SegmentedButton<String>(
+              segments: [
+                for (final code in AppLanguage.all) ButtonSegment(value: code, label: Text(AppLanguage.names[code]!)),
+              ],
+              selected: {AppLanguage.code},
+              onSelectionChanged: (selected) => context.read<SessionController>().setLanguage(selected.single),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

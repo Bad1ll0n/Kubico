@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../l10n/strings.dart';
 import 'models.dart';
 
 /// Um ficheiro a enviar num pedido multipart.
@@ -16,7 +17,7 @@ class TwoFactorRequired implements Exception {
   final String challengeToken;
 
   @override
-  String toString() => 'Falta o código da verificação em dois passos.';
+  String toString() => 'Falta o código da verificação em dois passos.'.tr;
 }
 
 /// Erro devolvido pela API, já com uma mensagem pronta a mostrar ao utilizador.
@@ -134,6 +135,10 @@ class ApiClient {
   /// Cria a casa; com [template], já vem com as listas, tarefas e recompensas desse modelo.
   Future<HouseholdSummary> createHousehold(String name, {String? template}) async =>
       HouseholdSummary.fromJson(await _send('POST', '/api/households', body: {'name': name, 'template': ?template}));
+
+  /// A língua da conta: os avisos (na app e no telemóvel) passam a chegar nela.
+  Future<User> setLanguage(String language) async =>
+      User.fromJson(await _send('PUT', '/api/account/language', body: {'language': language}));
 
   Future<List<HouseholdTemplate>> getHouseholdTemplates() async => [
     for (final t in await _send('GET', '/api/household-templates') as List)
@@ -591,6 +596,7 @@ class ApiClient {
       request = plain;
     }
     request.headers['Accept'] = 'application/json';
+    request.headers['Accept-Language'] = AppLanguage.acceptLanguage;
     if (accessToken != null) request.headers['Authorization'] = 'Bearer $accessToken';
     if (deviceKind != null) request.headers['X-Kubico-Device'] = deviceKind!;
 
@@ -598,7 +604,7 @@ class ApiClient {
     try {
       response = await http.Response.fromStream(await _http.send(request));
     } on Exception {
-      throw const ApiException(0, 'Sem ligação ao servidor. Verifica a tua internet.');
+      throw ApiException(0, 'Sem ligação ao servidor. Verifica a tua internet.'.tr);
     }
     if (response.statusCode >= 200 && response.statusCode < 300) return response;
 
@@ -642,11 +648,11 @@ class ApiClient {
       if (title is String && title.isNotEmpty && !_genericTitles.contains(title)) return title;
     }
     return switch (status) {
-      400 => 'Verifica os dados introduzidos.',
-      401 => 'A tua sessão expirou. Entra novamente.',
-      403 => 'Não tens permissão para fazer isto.',
-      404 => 'Não encontrado.',
-      _ => 'Ocorreu um erro inesperado ($status).',
+      400 => 'Verifica os dados introduzidos.'.tr,
+      401 => 'A tua sessão expirou. Entra novamente.'.tr,
+      403 => 'Não tens permissão para fazer isto.'.tr,
+      404 => 'Não encontrado.'.tr,
+      _ => 'Ocorreu um erro inesperado ($status).'.tr,
     };
   }
 }

@@ -3,54 +3,62 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'dates_pt.dart';
 import 'theme.dart';
 
 /// Perguntas frequentes e, para o que lá não estiver, "Reportar um problema" ou "Sugerir uma ideia".
-const helpTopics = [
+List<(String, String)> get helpTopics => [
   (
-    'Como convido alguém para a casa?',
+    'Como convido alguém para a casa?'.tr,
     'Abre os membros (o ícone das pessoas, no topo) e carrega em Convidar. Escolhe o papel e partilha o código ou o '
-        'link. Quem recebe escolhe "Entrar com um convite" e escreve o código.',
+            'link. Quem recebe escolhe "Entrar com um convite" e escreve o código.'
+        .tr,
   ),
   (
-    'As crianças precisam de email?',
+    'As crianças precisam de email?'.tr,
     'Não. Nos membros, carrega em "Criar perfil de criança" e escolhe um PIN. No telemóvel ou tablet da criança, '
-        'escolhe "Entrar com perfil de criança", escreve o código da família, o nome e o PIN.',
+            'escolhe "Entrar com perfil de criança", escreve o código da família, o nome e o PIN.'
+        .tr,
   ),
   (
-    'O que acontece quando alguém vai de férias?',
+    'O que acontece quando alguém vai de férias?'.tr,
     'Marca a ausência no menu ao lado do nome. Enquanto estiver fora, as rotações saltam essa pessoa e as tarefas '
-        'que lhe cabiam passam a quem vem a seguir.',
+            'que lhe cabiam passam a quem vem a seguir.'
+        .tr,
   ),
   (
-    'A lista de compras funciona sem rede?',
-    'Sim. As alterações ficam guardadas no telemóvel e são enviadas quando a rede voltar, sem repetir artigos.',
+    'A lista de compras funciona sem rede?'.tr,
+    'Sim. As alterações ficam guardadas no telemóvel e são enviadas quando a rede voltar, sem repetir artigos.'.tr,
   ),
   (
-    'Como funcionam os pontos e as recompensas?',
+    'Como funcionam os pontos e as recompensas?'.tr,
     'Cada tarefa feita dá os pontos que tiver. Em Recompensas, os pontos trocam-se pelos prémios que os adultos '
-        'definirem; os pedidos das crianças esperam pela aprovação de um adulto.',
+            'definirem; os pedidos das crianças esperam pela aprovação de um adulto.'
+        .tr,
   ),
   (
-    'Posso ver o calendário da casa no Google ou no Outlook?',
+    'Posso ver o calendário da casa no Google ou no Outlook?'.tr,
     'Sim. No Calendário, carrega em "Ver noutros calendários": podes ligar a tua conta Google ou Microsoft (o que '
-        'mudares lá também muda aqui) ou subscrever um endereço só para ver.',
+            'mudares lá também muda aqui) ou subscrever um endereço só para ver.'
+        .tr,
   ),
   (
-    'Como recebo avisos no telemóvel?',
+    'Como recebo avisos no telemóvel?'.tr,
     'A app pede autorização para notificações quando entras. No sino, em Preferências, escolhes se queres os avisos '
-        'logo, num resumo diário ou só na app, e as horas de silêncio.',
+            'logo, num resumo diário ou só na app, e as horas de silêncio.'
+        .tr,
   ),
   (
-    'Como saio de uma casa?',
+    'Como saio de uma casa?'.tr,
     'Nos membros, carrega em "Sair desta casa". Se fores o único administrador, passa primeiro a administração a '
-        'outra pessoa, no menu ao lado do nome dela.',
+            'outra pessoa, no menu ao lado do nome dela.'
+        .tr,
   ),
   (
-    'Perdi o telemóvel. Como termino a sessão nele?',
-    'No menu ⋮, abre "Dispositivos com sessão iniciada" e termina a sessão desse aparelho (ou em todos).',
+    'Perdi o telemóvel. Como termino a sessão nele?'.tr,
+    'No menu ⋮, abre "Dispositivos com sessão iniciada" e termina a sessão desse aparelho (ou em todos).'.tr,
   ),
 ];
 
@@ -69,7 +77,7 @@ class HelpScreen extends StatelessWidget {
     try {
       await context.read<ApiClient>().sendFeedback(kind, message, householdId: householdId);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Obrigado! A mensagem foi enviada.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Obrigado! A mensagem foi enviada.'.tr)));
       }
     } catch (e) {
       if (context.mounted) showError(context, e);
@@ -81,11 +89,11 @@ class HelpScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final isSupport = context.watch<SessionController>().isSupport;
     return Scaffold(
-      appBar: AppBar(title: const Text('Ajuda e sugestões')),
+      appBar: AppBar(title: Text('Ajuda e sugestões'.tr)),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Text('Perguntas frequentes', style: theme.textTheme.titleMedium),
+          Text('Perguntas frequentes'.tr, style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           Card(
             child: Column(
@@ -101,21 +109,21 @@ class HelpScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          Text('Não encontraste o que procuravas?', style: theme.textTheme.titleMedium),
+          Text('Não encontraste o que procuravas?'.tr, style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           Card(
             child: Column(
               children: [
                 ListTile(
                   leading: const Icon(Icons.bug_report_outlined),
-                  title: const Text('Reportar um problema'),
-                  subtitle: const Text('Alguma coisa não funciona como devia.'),
+                  title: Text('Reportar um problema'.tr),
+                  subtitle: Text('Alguma coisa não funciona como devia.'.tr),
                   onTap: () => _send(context, FeedbackKind.problem),
                 ),
                 ListTile(
                   leading: const Icon(Icons.lightbulb_outline),
-                  title: const Text('Sugerir uma ideia'),
-                  subtitle: const Text('O que faria o Kubico mais útil para a tua casa.'),
+                  title: Text('Sugerir uma ideia'.tr),
+                  subtitle: Text('O que faria o Kubico mais útil para a tua casa.'.tr),
                   onTap: () => _send(context, FeedbackKind.idea),
                 ),
               ],
@@ -126,8 +134,8 @@ class HelpScreen extends StatelessWidget {
             Card(
               child: ListTile(
                 leading: const Icon(Icons.inbox_outlined),
-                title: const Text('Mensagens recebidas'),
-                subtitle: const Text('Os problemas e as ideias que os utilizadores enviaram.'),
+                title: Text('Mensagens recebidas'.tr),
+                subtitle: Text('Os problemas e as ideias que os utilizadores enviaram.'.tr),
                 onTap: () =>
                     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const FeedbackInboxScreen())),
               ),
@@ -162,7 +170,7 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
   Widget build(BuildContext context) {
     final problem = widget.kind == FeedbackKind.problem;
     return AlertDialog(
-      title: Text(problem ? 'Reportar um problema' : 'Sugerir uma ideia'),
+      title: Text(problem ? 'Reportar um problema'.tr : 'Sugerir uma ideia'.tr),
       content: Form(
         key: _form,
         child: SizedBox(
@@ -174,21 +182,21 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
             maxLines: 8,
             maxLength: 2000,
             decoration: InputDecoration(
-              labelText: problem ? 'O que aconteceu?' : 'Qual é a ideia?',
-              hintText: problem ? 'O que estavas a fazer e o que viste no ecrã.' : null,
+              labelText: problem ? 'O que aconteceu?'.tr : 'Qual é a ideia?'.tr,
+              hintText: problem ? 'O que estavas a fazer e o que viste no ecrã.'.tr : null,
               alignLabelWithHint: true,
             ),
-            validator: (v) => (v == null || v.trim().length < 5) ? 'Escreve um pouco mais.' : null,
+            validator: (v) => (v == null || v.trim().length < 5) ? 'Escreve um pouco mais.'.tr : null,
           ),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
         FilledButton(
           onPressed: () {
             if (_form.currentState!.validate()) Navigator.pop(context, _message.text.trim());
           },
-          child: const Text('Enviar'),
+          child: Text('Enviar'.tr),
         ),
       ],
     );
@@ -226,11 +234,11 @@ class _FeedbackInboxScreenState extends State<FeedbackInboxScreen> {
   Widget build(BuildContext context) {
     final items = _items;
     return Scaffold(
-      appBar: AppBar(title: const Text('Mensagens recebidas')),
+      appBar: AppBar(title: Text('Mensagens recebidas'.tr)),
       body: items == null
           ? Center(child: _error == null ? const CircularProgressIndicator() : Text(_error.toString()))
           : items.isEmpty
-          ? const Center(child: Text('Ainda não chegou nenhuma mensagem.'))
+          ? Center(child: Text('Ainda não chegou nenhuma mensagem.'.tr))
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView.separated(

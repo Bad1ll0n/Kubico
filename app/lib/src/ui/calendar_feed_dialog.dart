@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import 'calendar_sync_screen.dart';
 
 /// Mostra o endereço pessoal para subscrever o calendário da casa no Google Calendar, no Outlook ou no iPhone.
@@ -56,7 +57,7 @@ class _CalendarFeedDialogState extends State<_CalendarFeedDialog> {
 
   void _copy(String url) {
     Clipboard.setData(ClipboardData(text: url));
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Endereço copiado.')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Endereço copiado.'.tr)));
   }
 
   @override
@@ -64,7 +65,7 @@ class _CalendarFeedDialogState extends State<_CalendarFeedDialog> {
     final theme = Theme.of(context);
     final feed = _feed;
     return AlertDialog(
-      title: const Text('Ver noutros calendários'),
+      title: Text('Ver noutros calendários'.tr),
       scrollable: true,
       content: SizedBox(
         width: 480,
@@ -72,24 +73,26 @@ class _CalendarFeedDialogState extends State<_CalendarFeedDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Nos dois sentidos', style: theme.textTheme.titleSmall),
+            Text('Nos dois sentidos'.tr, style: theme.textTheme.titleSmall),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Liga a tua conta Google ou Microsoft: os eventos da casa aparecem lá e o que mudares lá também muda '
-              'no Kubico.',
+                      'no Kubico.'
+                  .tr,
             ),
             const SizedBox(height: 8),
             FilledButton.tonalIcon(
               onPressed: _openSync,
               icon: const Icon(Icons.sync),
-              label: const Text('Ligar ao Google Calendar ou ao Outlook'),
+              label: Text('Ligar ao Google Calendar ou ao Outlook'.tr),
             ),
             const Divider(height: 32),
-            Text('Só para ver', style: theme.textTheme.titleSmall),
+            Text('Só para ver'.tr, style: theme.textTheme.titleSmall),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Subscreve este endereço no Google Calendar, no Outlook ou no iPhone para veres os eventos da casa '
-              'junto dos teus. As alterações aparecem lá ao fim de algum tempo (no Google, até umas horas).',
+                      'junto dos teus. As alterações aparecem lá ao fim de algum tempo (no Google, até umas horas).'
+                  .tr,
             ),
             const SizedBox(height: 16),
             if (feed != null)
@@ -106,27 +109,27 @@ class _CalendarFeedDialogState extends State<_CalendarFeedDialog> {
             else
               const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 16),
-            Text('Como subscrever', style: theme.textTheme.titleSmall),
+            Text('Como subscrever'.tr, style: theme.textTheme.titleSmall),
             const SizedBox(height: 4),
-            const Text('Google Calendar (no computador): Outros calendários → + → A partir do URL.'),
-            const Text('Outlook: Adicionar calendário → Subscrever a partir da Web.'),
-            const Text('iPhone: Definições → Calendário → Contas → Adicionar conta → Outra → Calendário subscrito.'),
+            Text('Google Calendar (no computador): Outros calendários → + → A partir do URL.'.tr),
+            Text('Outlook: Adicionar calendário → Subscrever a partir da Web.'.tr),
+            Text('iPhone: Definições → Calendário → Contas → Adicionar conta → Outra → Calendário subscrito.'.tr),
             const SizedBox(height: 12),
             Text(
-              'O endereço é só teu: quem o tiver vê os eventos da casa. Se o partilhares por engano, gera um novo.',
+              'O endereço é só teu: quem o tiver vê os eventos da casa. Se o partilhares por engano, gera um novo.'.tr,
               style: theme.textTheme.bodySmall,
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: _busy ? null : _renew, child: const Text('Gerar novo endereço')),
+        TextButton(onPressed: _busy ? null : _renew, child: Text('Gerar novo endereço'.tr)),
         TextButton.icon(
           onPressed: feed == null ? null : () => _copy(feed.url),
           icon: const Icon(Icons.copy),
-          label: const Text('Copiar'),
+          label: Text('Copiar'.tr),
         ),
-        FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Feito')),
+        FilledButton(onPressed: () => Navigator.pop(context), child: Text('Feito'.tr)),
       ],
     );
   }

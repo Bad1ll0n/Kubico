@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import 'token_store.dart';
 
 enum SessionStatus { loading, signedOut, signedIn }
@@ -175,6 +178,23 @@ class SessionController extends ChangeNotifier {
     isSupport = me.isSupport;
     status = SessionStatus.signedIn;
     notifyListeners();
+    // Os avisos chegam na língua da conta: acerta-a com a que a app está a usar.
+    if (me.user.language != AppLanguage.code) unawaited(_saveLanguage(AppLanguage.code));
+  }
+
+  /// Muda a língua da app (fica guardada no dispositivo) e a da conta, para os avisos.
+  Future<void> setLanguage(String language) async {
+    await AppLanguage.set(language);
+    if (user != null) await _saveLanguage(AppLanguage.code);
+  }
+
+  Future<void> _saveLanguage(String language) async {
+    try {
+      user = await api.setLanguage(language);
+      notifyListeners();
+    } catch (_) {
+      // Sem rede: fica para a próxima vez que a sessão abrir.
+    }
   }
 
   Future<void> selectHousehold(String householdId) async {

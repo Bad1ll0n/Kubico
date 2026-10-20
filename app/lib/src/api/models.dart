@@ -1,16 +1,20 @@
 /// Modelos que espelham os DTOs da API (backend/src/Kubico.Api).
 library;
 
+import '../l10n/strings.dart';
+
 enum HouseholdRole {
   admin('Admin', 'Administrador'),
   adult('Adult', 'Adulto'),
   child('Child', 'Criança'),
   guest('Guest', 'Convidado');
 
-  const HouseholdRole(this.apiValue, this.label);
+  const HouseholdRole(this.apiValue, this._label);
 
   final String apiValue;
-  final String label;
+  final String _label;
+
+  String get label => _label.tr;
 
   bool get canManageContent => this == admin || this == adult;
   bool get canManageMembers => this == admin;
@@ -25,13 +29,17 @@ enum HouseholdModule {
   calendar('Calendar', 'Calendário', null),
   rewards('Rewards', 'Recompensas', 'pede recompensas');
 
-  const HouseholdModule(this.apiValue, this.label, this.participateMeans);
+  const HouseholdModule(this.apiValue, this._label, this._participateMeans);
 
   final String apiValue;
-  final String label;
+  final String _label;
+
+  String get label => _label.tr;
+
+  final String? _participateMeans;
 
   /// O que "usa" quer dizer nesta área. No calendário não há meio-termo: ou só se vê, ou gere-se.
-  final String? participateMeans;
+  String? get participateMeans => _participateMeans?.tr;
 
   List<ModuleAccess> get levels => [
     for (final a in ModuleAccess.values)
@@ -48,10 +56,12 @@ enum ModuleAccess {
   participate('Participate', 'Usa'),
   manage('Manage', 'Gere tudo');
 
-  const ModuleAccess(this.apiValue, this.label);
+  const ModuleAccess(this.apiValue, this._label);
 
   final String apiValue;
-  final String label;
+  final String _label;
+
+  String get label => _label.tr;
 
   bool get canView => index >= view.index;
   bool get canParticipate => index >= participate.index;
@@ -80,18 +90,28 @@ enum ModuleAccess {
 
 /// Quem está a usar a app. Um perfil de criança não tem email: entra com o código da família e um PIN.
 class User {
-  const User({required this.id, required this.email, required this.displayName, this.isChildProfile = false});
+  const User({
+    required this.id,
+    required this.email,
+    required this.displayName,
+    this.isChildProfile = false,
+    this.language = 'pt',
+  });
 
   final String id;
   final String? email;
   final String displayName;
   final bool isChildProfile;
 
+  /// A língua em que recebe os avisos ("pt" ou "en").
+  final String language;
+
   factory User.fromJson(Map<String, dynamic> json) => User(
     id: json['id'] as String,
     email: json['email'] as String?,
     displayName: json['displayName'] as String,
     isChildProfile: json['isChildProfile'] as bool? ?? false,
+    language: json['language'] as String? ?? 'pt',
   );
 }
 
@@ -228,9 +248,9 @@ class HouseholdTemplate {
 
   /// "2 listas · 5 tarefas · 3 recompensas"
   String get contents => [
-    if (lists.isNotEmpty) '${lists.length} ${lists.length == 1 ? 'lista' : 'listas'}',
-    if (chores.isNotEmpty) '${chores.length} ${chores.length == 1 ? 'tarefa' : 'tarefas'}',
-    if (rewards.isNotEmpty) '${rewards.length} ${rewards.length == 1 ? 'recompensa' : 'recompensas'}',
+    if (lists.isNotEmpty) '${lists.length} ${lists.length == 1 ? 'lista'.tr : 'listas'.tr}',
+    if (chores.isNotEmpty) '${chores.length} ${chores.length == 1 ? 'tarefa'.tr : 'tarefas'.tr}',
+    if (rewards.isNotEmpty) '${rewards.length} ${rewards.length == 1 ? 'recompensa'.tr : 'recompensas'.tr}',
   ].join(' · ');
 
   factory HouseholdTemplate.fromJson(Map<String, dynamic> json) => HouseholdTemplate(
@@ -615,10 +635,12 @@ enum ChoreRecurrence {
   weekly('Weekly', 'Todas as semanas'),
   monthly('Monthly', 'Todos os meses');
 
-  const ChoreRecurrence(this.apiValue, this.label);
+  const ChoreRecurrence(this.apiValue, this._label);
 
   final String apiValue;
-  final String label;
+  final String _label;
+
+  String get label => _label.tr;
 
   static ChoreRecurrence fromApi(String value) => values.firstWhere((r) => r.apiValue == value, orElse: () => none);
 }
@@ -751,10 +773,12 @@ enum ChoreTimeOfDay {
   any('Any', 'Qualquer altura'),
   evening('Evening', 'Noite');
 
-  const ChoreTimeOfDay(this.apiValue, this.label);
+  const ChoreTimeOfDay(this.apiValue, this._label);
 
   final String apiValue;
-  final String label;
+  final String _label;
+
+  String get label => _label.tr;
 
   static ChoreTimeOfDay fromApi(String? value) => values.firstWhere((t) => t.apiValue == value, orElse: () => any);
 }
@@ -1082,13 +1106,17 @@ enum CalendarProvider {
   google('Google', 'Google Calendar', 'conta Google'),
   microsoft('Microsoft', 'Outlook', 'conta Microsoft');
 
-  const CalendarProvider(this.apiValue, this.label, this.account);
+  const CalendarProvider(this.apiValue, this._label, this._account);
 
   final String apiValue;
-  final String label;
+  final String _label;
+
+  String get label => _label.tr;
+
+  final String _account;
 
   /// Como se chama a conta ("Ligar a conta Google").
-  final String account;
+  String get account => _account.tr;
 
   static CalendarProvider? fromApi(String value) => values.where((p) => p.apiValue == value).firstOrNull;
 }
@@ -1153,11 +1181,15 @@ enum RecurrenceFrequency {
   monthly('MONTHLY', 'Todos os meses', 'meses'),
   yearly('YEARLY', 'Todos os anos', 'anos');
 
-  const RecurrenceFrequency(this.apiValue, this.label, this.unit);
+  const RecurrenceFrequency(this.apiValue, this._label, this._unit);
 
   final String apiValue;
-  final String label;
-  final String unit;
+  final String _label;
+
+  String get label => _label.tr;
+  final String _unit;
+
+  String get unit => _unit.tr;
 }
 
 /// Repetição de um evento: o subconjunto de RRULE (RFC 5545) que a API aceita.
@@ -1228,10 +1260,12 @@ enum RedemptionStatus {
   approved('Approved', 'Aprovado'),
   rejected('Rejected', 'Recusado');
 
-  const RedemptionStatus(this.apiValue, this.label);
+  const RedemptionStatus(this.apiValue, this._label);
 
   final String apiValue;
-  final String label;
+  final String _label;
+
+  String get label => _label.tr;
 
   static RedemptionStatus fromApi(String value) => values.firstWhere((s) => s.apiValue == value, orElse: () => pending);
 }
@@ -1317,15 +1351,20 @@ class RewardRedemption {
 }
 
 /// Saldo de um membro: ganhos nas tarefas, já trocados, reservados (pedidos à espera) e disponíveis.
-/// Euros como se escrevem em Portugal: "6,20 €" (ou "6,20", sem o símbolo).
+/// Euros como se escrevem em Portugal, "6,20 €" (ou "6,20", sem o símbolo); em inglês, "€6.20" (ou "6.20").
 String formatEuros(int cents, {bool symbol = true}) {
-  final text = '${cents ~/ 100},${(cents % 100).toString().padLeft(2, '0')}';
-  return symbol ? '$text €' : text;
+  final english = AppLanguage.isEnglish;
+  final text = '${cents ~/ 100}${english ? '.' : ','}${(cents % 100).toString().padLeft(2, '0')}';
+  return !symbol
+      ? text
+      : english
+      ? '€$text'
+      : '$text €';
 }
 
-/// "5", "5,5", "5,50" ou "5.50" → cêntimos; null se não for um valor válido.
+/// "5", "5,5", "5,50", "5.50" ou "€5.50" → cêntimos; null se não for um valor válido.
 int? parseEuros(String text) {
-  final match = RegExp(r'^\s*(\d{1,4})(?:[.,](\d{1,2}))?\s*€?\s*$').firstMatch(text);
+  final match = RegExp(r'^\s*€?\s*(\d{1,4})(?:[.,](\d{1,2}))?\s*€?\s*$').firstMatch(text);
   if (match == null) return null;
   final cents = (match.group(2) ?? '0').padRight(2, '0');
   return int.parse(match.group(1)!) * 100 + int.parse(cents);
@@ -1335,10 +1374,12 @@ enum AllowancePeriod {
   weekly('Weekly', 'por semana'),
   monthly('Monthly', 'por mês');
 
-  const AllowancePeriod(this.apiValue, this.label);
+  const AllowancePeriod(this.apiValue, this._label);
 
   final String apiValue;
-  final String label;
+  final String _label;
+
+  String get label => _label.tr;
 
   static AllowancePeriod fromApi(String value) => values.firstWhere((p) => p.apiValue == value, orElse: () => weekly);
 }
@@ -1401,7 +1442,7 @@ class Allowance {
   /// "5,00 € por semana + 0,50 € por tarefa feita"
   String describe() => [
     '${formatEuros(amountCents)} ${period.label}',
-    if (bonusPerChoreCents > 0) '+ ${formatEuros(bonusPerChoreCents)} por tarefa feita',
+    if (bonusPerChoreCents > 0) '+ ${formatEuros(bonusPerChoreCents)} por tarefa feita'.tr,
   ].join(' ');
 
   factory Allowance.fromJson(Map<String, dynamic> json) => Allowance(
@@ -1523,10 +1564,12 @@ enum NotificationDelivery {
   dailyDigest('DailyDigest', 'Um resumo por dia'),
   inAppOnly('InAppOnly', 'Só aqui na app');
 
-  const NotificationDelivery(this.apiValue, this.label);
+  const NotificationDelivery(this.apiValue, this._label);
 
   final String apiValue;
-  final String label;
+  final String _label;
+
+  String get label => _label.tr;
 
   static NotificationDelivery fromApi(String value) =>
       values.firstWhere((d) => d.apiValue == value, orElse: () => immediate);
