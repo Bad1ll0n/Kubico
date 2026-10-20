@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Security.Claims;
+using Kubico.Api.Activity;
 using Kubico.Api.Common;
 using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
@@ -119,6 +120,7 @@ public static class ChoreEndpoints
         SaveChoreRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
@@ -149,6 +151,7 @@ public static class ChoreEndpoints
         Apply(chore, request, now);
 
         db.Chores.Add(chore);
+        activity.Capture(householdId, userId, HouseholdModule.Chores, $"criou a tarefa «{chore.Title}»");
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(chore);
@@ -163,6 +166,7 @@ public static class ChoreEndpoints
         SaveChoreRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
@@ -189,6 +193,7 @@ public static class ChoreEndpoints
 
         var previousAssignee = chore.AssigneeUserId;
         Apply(chore, request, clock.GetUtcNow());
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Chores, $"mudou a tarefa «{chore.Title}»");
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(chore);
@@ -203,6 +208,7 @@ public static class ChoreEndpoints
         Guid choreId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
@@ -220,7 +226,10 @@ public static class ChoreEndpoints
             return Results.NotFound();
         }
 
+        // O histórico da tarefa (quem a fez) vai com ela: carrega-se para se poder repor.
+        await db.ChoreCompletions.Where(c => c.ChoreId == choreId).LoadAsync(ct);
         db.Chores.Remove(chore);
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Chores, $"apagou a tarefa «{chore.Title}»");
         await db.SaveChangesAsync(ct);
         await notifier.ChoreDeleted(householdId, choreId, ct);
         return Results.NoContent();
@@ -232,6 +241,7 @@ public static class ChoreEndpoints
         CompleteChoreRequest? request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
@@ -274,7 +284,7 @@ public static class ChoreEndpoints
             return Results.Problem(title: "Esta foto não serve: envia outra.", statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var completion = await CompleteAsync(db, notifier, notifications, chore, userId, clock.GetUtcNow(), ct, photoId);
+        var completion = await CompleteAsync(db, activity, notifier, notifications, chore, userId, clock.GetUtcNow(), ct, photoId);
         if (photoId is not null)
         {
             // Quem gere as tarefas é avisado para ver a foto.
@@ -296,6 +306,7 @@ public static class ChoreEndpoints
         SetChoreStepRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
@@ -332,7 +343,7 @@ public static class ChoreEndpoints
         // Com foto de prova, o último passo não conclui: falta enviar a foto.
         if (chore.AllStepsDone && !chore.RequiresPhoto)
         {
-            var completion = await CompleteAsync(db, notifier, notifications, chore, userId, now, ct);
+            var completion = await CompleteAsync(db, activity, notifier, notifications, chore, userId, now, ct);
             return Results.Ok(new ChoreStepResultDto(ToDto(chore), true, completion.Points));
         }
 
@@ -364,6 +375,7 @@ public static class ChoreEndpoints
     /// <summary>Conclui a tarefa (a rotação salta quem está fora), grava e avisa a casa e o próximo responsável.</summary>
     private static async Task<ChoreCompletion> CompleteAsync(
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdNotifier notifier,
         NotificationService notifications,
         Chore chore,
@@ -382,6 +394,7 @@ public static class ChoreEndpoints
 
         // O Id já vem preenchido; sem Add explícito o EF trataria o registo como existente (UPDATE).
         db.ChoreCompletions.Add(completion);
+        activity.Capture(chore.HouseholdId, userId, HouseholdModule.Chores, $"fez «{chore.Title}»");
         await db.SaveChangesAsync(ct);
 
         await notifier.ChoreUpserted(chore.HouseholdId, ToDto(chore), ct);

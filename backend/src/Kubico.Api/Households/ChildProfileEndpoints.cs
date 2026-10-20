@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
+using Kubico.Api.Activity;
 using Kubico.Api.Common;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Households;
@@ -50,6 +51,7 @@ public static class ChildProfileEndpoints
         CreateChildProfileRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         IPasswordHasher<User> hasher,
         HouseholdNotifier notifier,
@@ -88,6 +90,7 @@ public static class ChildProfileEndpoints
         };
         db.Users.Add(child);
         db.Memberships.Add(membership);
+        activity.Capture(householdId, principal.GetUserId(), null, $"criou o perfil de criança de {membership.User.DisplayName}", undoable: false);
         await db.SaveChangesAsync(ct);
 
         var dto = MemberEndpoints.ToDto(membership);

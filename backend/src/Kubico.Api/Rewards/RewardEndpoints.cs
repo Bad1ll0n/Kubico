@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
+using Kubico.Api.Activity;
 using Kubico.Api.Common;
 using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
@@ -109,6 +110,7 @@ public static class RewardEndpoints
         SaveRewardRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
@@ -133,6 +135,7 @@ public static class RewardEndpoints
         Apply(reward, request, now);
 
         db.Rewards.Add(reward);
+        activity.Capture(householdId, userId, HouseholdModule.Rewards, $"criou a recompensa «{reward.Title}»");
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(reward);
@@ -146,6 +149,7 @@ public static class RewardEndpoints
         SaveRewardRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
@@ -166,6 +170,7 @@ public static class RewardEndpoints
 
         // Os pedidos já feitos mantêm o nome e o custo de quando foram feitos.
         Apply(reward, request, clock.GetUtcNow());
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Rewards, $"mudou a recompensa «{reward.Title}»");
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(reward);
@@ -178,6 +183,7 @@ public static class RewardEndpoints
         Guid rewardId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
@@ -196,6 +202,7 @@ public static class RewardEndpoints
         }
 
         db.Rewards.Remove(reward);
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Rewards, $"apagou a recompensa «{reward.Title}»");
         await db.SaveChangesAsync(ct);
         await notifier.RewardDeleted(householdId, rewardId, ct);
         return Results.NoContent();
@@ -447,7 +454,7 @@ public static class RewardEndpoints
         reward.UpdatedAt = now;
     }
 
-    private static RewardDto ToDto(Reward r) => new(r.Id, r.HouseholdId, r.Title, r.Description, r.Cost, r.UpdatedAt);
+    internal static RewardDto ToDto(Reward r) => new(r.Id, r.HouseholdId, r.Title, r.Description, r.Cost, r.UpdatedAt);
 
     private static RedemptionDto ToDto(RewardRedemption r) => new(
         r.Id, r.HouseholdId, r.RewardId, r.UserId, r.RewardTitle, r.Points, r.Status, r.RequestedAt,

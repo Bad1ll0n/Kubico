@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Kubico.Api.Activity;
 using Kubico.Api.Common;
 using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
@@ -135,6 +136,7 @@ public static class ChoreHistoryEndpoints
         Guid completionId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
@@ -167,6 +169,8 @@ public static class ChoreHistoryEndpoints
         completion.RejectedAt = now;
         completion.RejectedByUserId = userId;
         chore.Reopen(completion.UserId, chore.Household.Today(now), now);
+        var doer = await db.Users.Where(u => u.Id == completion.UserId).Select(u => u.DisplayName).SingleOrDefaultAsync(ct) ?? "antigo membro";
+        activity.Capture(householdId, userId, HouseholdModule.Chores, $"não aceitou «{chore.Title}», feita por {doer}");
         await db.SaveChangesAsync(ct);
 
         await notifier.ChoreUpserted(householdId, ChoreEndpoints.ToDto(chore), ct);

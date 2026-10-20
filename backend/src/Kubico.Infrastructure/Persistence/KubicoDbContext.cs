@@ -1,3 +1,4 @@
+using Kubico.Domain.Activity;
 using Kubico.Domain.Calendar;
 using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
@@ -22,6 +23,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
     public DbSet<ShoppingItem> ShoppingItems => Set<ShoppingItem>();
     public DbSet<ChorePhoto> ChorePhotos => Set<ChorePhoto>();
+    public DbSet<ActivityEntry> ActivityEntries => Set<ActivityEntry>();
     public DbSet<Allowance> Allowances => Set<Allowance>();
     public DbSet<AllowancePayment> AllowancePayments => Set<AllowancePayment>();
     public DbSet<ProductInfo> ProductInfos => Set<ProductInfo>();
@@ -130,6 +132,16 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         {
             e.HasIndex(p => new { p.HouseholdId, p.UserId, p.PeriodStart }).IsUnique();
             e.HasOne<Household>().WithMany().HasForeignKey(p => p.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ActivityEntry>(e =>
+        {
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).ValueGeneratedOnAdd();
+            e.Property(a => a.Module).HasConversion<string>().HasMaxLength(20);
+            e.Property(a => a.Summary).HasMaxLength(300);
+            e.HasIndex(a => new { a.HouseholdId, a.Id });
+            e.HasOne<Household>().WithMany().HasForeignKey(a => a.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ChorePhoto>(e =>

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
+using Kubico.Api.Activity;
 using Kubico.Api.Common;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Households;
@@ -92,6 +93,7 @@ public static class ShoppingEndpoints
         CreateShoppingListRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
@@ -111,6 +113,7 @@ public static class ShoppingEndpoints
             CreatedAt = clock.GetUtcNow(),
         };
         db.ShoppingLists.Add(list);
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Shopping, $"criou a lista «{list.Name}»");
         await db.SaveChangesAsync(ct);
 
         var dto = new ShoppingListDto(list.Id, householdId, list.Name, 0, 0);
@@ -124,6 +127,7 @@ public static class ShoppingEndpoints
         Guid listId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
@@ -141,7 +145,10 @@ public static class ShoppingEndpoints
             return Results.NotFound();
         }
 
+        // Os artigos vão com a lista: carregam-se para o histórico os poder repor.
+        await db.ShoppingItems.Where(i => i.ListId == listId).LoadAsync(ct);
         db.ShoppingLists.Remove(list);
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Shopping, $"apagou a lista «{list.Name}»");
         await db.SaveChangesAsync(ct);
         await notifier.ShoppingListDeleted(householdId, listId, ct);
 
@@ -184,6 +191,7 @@ public static class ShoppingEndpoints
         AddShoppingItemRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
@@ -235,6 +243,7 @@ public static class ShoppingEndpoints
             await ProductEndpoints.RememberAsync(db, householdId, barcode, item.Name, item.Category, now, ct);
         }
 
+        activity.Capture(householdId, userId, HouseholdModule.Shopping, $"pôs «{item.Name}» na lista «{await ListName(db, listId, ct)}»");
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(item);
@@ -250,6 +259,7 @@ public static class ShoppingEndpoints
         UpdateShoppingItemRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
@@ -297,6 +307,12 @@ public static class ShoppingEndpoints
             await ProductEndpoints.RememberAsync(db, householdId, item.Barcode, item.Name, item.Category, item.UpdatedAt, ct);
         }
 
+        activity.Capture(householdId, userId, HouseholdModule.Shopping, request.IsChecked switch
+        {
+            true => $"marcou «{item.Name}» como comprado",
+            false => $"desmarcou «{item.Name}»",
+            _ => $"mudou «{item.Name}»",
+        });
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(item);
@@ -311,6 +327,7 @@ public static class ShoppingEndpoints
         Guid itemId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
@@ -328,6 +345,7 @@ public static class ShoppingEndpoints
             return Results.NotFound();
         }
 
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Shopping, $"tirou «{item.Name}» da lista «{await ListName(db, listId, ct)}»");
         db.ShoppingItems.Remove(item);
         await db.SaveChangesAsync(ct);
         await notifier.ShoppingItemDeleted(householdId, listId, itemId, ct);
@@ -340,6 +358,7 @@ public static class ShoppingEndpoints
         Guid listId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
@@ -358,6 +377,11 @@ public static class ShoppingEndpoints
 
         var checkedItems = await db.ShoppingItems.Where(i => i.ListId == listId && i.IsChecked).ToListAsync(ct);
         db.ShoppingItems.RemoveRange(checkedItems);
+        if (checkedItems.Count > 0)
+        {
+            activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Shopping,
+                $"limpou {checkedItems.Count} {(checkedItems.Count == 1 ? "artigo comprado" : "artigos comprados")} da lista «{await ListName(db, listId, ct)}»");
+        }
         await db.SaveChangesAsync(ct);
 
         foreach (var item in checkedItems)
@@ -367,6 +391,9 @@ public static class ShoppingEndpoints
 
         return Results.Ok(new { Removed = checkedItems.Count });
     }
+
+    private static Task<string> ListName(KubicoDbContext db, Guid listId, CancellationToken ct) =>
+        db.ShoppingLists.Where(l => l.Id == listId).Select(l => l.Name).SingleAsync(ct);
 
     private static Task<bool> ListBelongsTo(KubicoDbContext db, Guid listId, Guid householdId, CancellationToken ct) =>
         db.ShoppingLists.AnyAsync(l => l.Id == listId && l.HouseholdId == householdId, ct);
@@ -379,7 +406,7 @@ public static class ShoppingEndpoints
     private static string? Clean(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static ShoppingItemDto ToDto(ShoppingItem i) => new(
+    internal static ShoppingItemDto ToDto(ShoppingItem i) => new(
         i.Id, i.ListId, i.Name, i.Quantity, i.Category, i.IsChecked,
         i.AddedByUserId, i.CheckedByUserId, i.CreatedAt, i.UpdatedAt, i.Barcode);
 }

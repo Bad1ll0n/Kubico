@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Kubico.Api.Auth;
+using Kubico.Api.Activity;
 using Kubico.Api.Common;
 using Kubico.Api.Realtime;
 using Kubico.Api.Support;
@@ -221,6 +222,7 @@ public static class HouseholdEndpoints
         string code,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
@@ -265,6 +267,7 @@ public static class HouseholdEndpoints
             JoinedAt = now,
         };
         db.Memberships.Add(membership);
+        activity.Capture(invite.HouseholdId, userId, null, "entrou na casa", undoable: false);
         await db.SaveChangesAsync(ct);
 
         // Quem já está na casa vê o novo membro aparecer.

@@ -162,6 +162,49 @@ class HouseholdSummary {
   }
 }
 
+/// Uma alteração no histórico da casa. [canUndo]: quem está a usar a app pode desfazê-la agora.
+class ActivityItem {
+  const ActivityItem({
+    required this.id,
+    required this.userId,
+    required this.summary,
+    required this.createdAt,
+    this.module,
+    this.canUndo = false,
+    this.undoneAt,
+    this.undoneByUserId,
+    this.isUndo = false,
+  });
+
+  final int id;
+  final String userId;
+
+  /// A área; null nas alterações à casa e aos membros.
+  final HouseholdModule? module;
+
+  /// O que aconteceu, para pôr depois do nome: "pôs «Leite» na lista «Supermercado»".
+  final String summary;
+  final DateTime createdAt;
+  final bool canUndo;
+  final DateTime? undoneAt;
+  final String? undoneByUserId;
+
+  /// Esta entrada é o desfazer de outra.
+  final bool isUndo;
+
+  factory ActivityItem.fromJson(Map<String, dynamic> json) => ActivityItem(
+    id: json['id'] as int,
+    userId: json['userId'] as String,
+    module: json['module'] == null ? null : HouseholdModule.fromApi(json['module'] as String),
+    summary: json['summary'] as String,
+    createdAt: DateTime.parse(json['createdAt'] as String).toLocal(),
+    canUndo: json['canUndo'] as bool? ?? false,
+    undoneAt: json['undoneAt'] == null ? null : DateTime.parse(json['undoneAt'] as String).toLocal(),
+    undoneByUserId: json['undoneByUserId'] as String?,
+    isUndo: json['isUndo'] as bool? ?? false,
+  );
+}
+
 /// O acesso de um papel a cada área.
 class RolePermissions {
   const RolePermissions({required this.role, required this.access});

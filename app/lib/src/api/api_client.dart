@@ -382,6 +382,17 @@ class ApiClient {
     return (json['members'] as List).map((m) => MemberChoreStats.fromJson(m as Map<String, dynamic>)).toList();
   }
 
+  // --- Histórico ---
+
+  Future<List<ActivityItem>> getActivity(String householdId) async => [
+    for (final a in await _send('GET', '/api/households/$householdId/activity') as List)
+      ActivityItem.fromJson(a as Map<String, dynamic>),
+  ];
+
+  /// Desfaz uma alteração (o que foi criado sai, o que mudou ou foi apagado volta ao que era).
+  Future<void> undoActivity(String householdId, int entryId) =>
+      _send('POST', '/api/households/$householdId/activity/$entryId/undo');
+
   // --- Mesada ---
 
   Future<List<Allowance>> getAllowances(String householdId) async => [

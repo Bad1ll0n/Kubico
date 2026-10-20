@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Kubico.Api.Activity;
 using Kubico.Api.Common;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Households;
@@ -37,6 +38,7 @@ public static class MemberEndpoints
         UpdateMemberRoleRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
@@ -66,6 +68,7 @@ public static class MemberEndpoints
         }
 
         membership.Role = request.Role;
+        activity.Capture(householdId, principal.GetUserId(), null, $"mudou o papel de {membership.User.DisplayName} para {RoleLabel(request.Role)}", undoable: false);
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(membership);
@@ -79,6 +82,7 @@ public static class MemberEndpoints
         Guid userId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         MembershipService memberships,
         CancellationToken ct)
@@ -101,6 +105,7 @@ public static class MemberEndpoints
             return Results.NotFound();
         }
 
+        activity.Capture(householdId, principal.GetUserId(), null, $"tirou {membership.User.DisplayName} da casa", undoable: false);
         await memberships.RemoveAsync(membership, ct);
         return Results.NoContent();
     }
@@ -113,6 +118,7 @@ public static class MemberEndpoints
         Guid householdId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         MembershipService memberships,
         CancellationToken ct)
@@ -146,6 +152,7 @@ public static class MemberEndpoints
             return Problem("Antes de saíres, passa a administração da casa a outra pessoa.", StatusCodes.Status409Conflict);
         }
 
+        activity.Capture(householdId, me, null, "saiu da casa", undoable: false);
         await memberships.RemoveAsync(membership, ct);
         return Results.NoContent();
     }
@@ -156,6 +163,7 @@ public static class MemberEndpoints
         TransferAdminRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
@@ -181,12 +189,21 @@ public static class MemberEndpoints
         var mine = (await FindMember(db, householdId, me, ct))!;
         target.Role = HouseholdRole.Admin;
         mine.Role = HouseholdRole.Adult;
+        activity.Capture(householdId, me, null, $"passou a administração a {target.User.DisplayName}", undoable: false);
         await db.SaveChangesAsync(ct);
 
         await notifier.MemberUpserted(householdId, ToDto(target), ct);
         await notifier.MemberUpserted(householdId, ToDto(mine), ct);
         return Results.NoContent();
     }
+
+    internal static string RoleLabel(HouseholdRole role) => role switch
+    {
+        HouseholdRole.Admin => "Administrador",
+        HouseholdRole.Adult => "Adulto",
+        HouseholdRole.Child => "Criança",
+        _ => "Convidado",
+    };
 
     private static Task<Membership?> FindMember(KubicoDbContext db, Guid householdId, Guid userId, CancellationToken ct) =>
         db.Memberships.Include(m => m.User).SingleOrDefaultAsync(m => m.HouseholdId == householdId && m.UserId == userId, ct);

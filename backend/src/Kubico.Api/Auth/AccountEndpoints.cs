@@ -137,6 +137,11 @@ public static class AccountEndpoints
                 .ToListAsync(ct),
             CalendariosLigados = (await db.CalendarConnections.AsNoTracking().Where(c => c.UserId == userId).ToListAsync(ct))
                 .Select(c => new { Casa = Casa(c.HouseholdId), Servico = c.Provider.ToString(), Conta = c.AccountEmail, LigadoEm = c.CreatedAt }),
+            Historico = (await db.ActivityEntries.AsNoTracking()
+                .Where(a => a.UserId == userId)
+                .Select(a => new { a.HouseholdId, a.Summary, a.CreatedAt, a.UndoneAt })
+                .ToListAsync(ct))
+                .Select(a => new { Casa = Casa(a.HouseholdId), OQueFez = a.Summary, Quando = a.CreatedAt, DesfeitoEm = a.UndoneAt }),
             FotosDeProva = await db.ChorePhotos.AsNoTracking()
                 .Where(p => p.UploadedByUserId == userId)
                 .Select(p => new { p.Id, EnviadaEm = p.CreatedAt, Tipo = p.ContentType })

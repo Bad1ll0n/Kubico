@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Security.Claims;
+using Kubico.Api.Activity;
 using Kubico.Api.Common;
 using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
@@ -161,6 +162,7 @@ public static class CalendarEndpoints
         SaveEventRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
@@ -191,6 +193,7 @@ public static class CalendarEndpoints
         Apply(calendarEvent, request, now);
 
         db.CalendarEvents.Add(calendarEvent);
+        activity.Capture(householdId, userId, HouseholdModule.Calendar, $"criou o evento «{calendarEvent.Title}»");
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(calendarEvent);
@@ -205,6 +208,7 @@ public static class CalendarEndpoints
         SaveEventRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
@@ -239,6 +243,7 @@ public static class CalendarEndpoints
 
         var before = Involved(calendarEvent);
         var removed = await UpdateSeries(db, calendarEvent, request, clock.GetUtcNow(), ct);
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Calendar, $"mudou o evento «{calendarEvent.Title}»");
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(calendarEvent);
@@ -253,6 +258,7 @@ public static class CalendarEndpoints
         Guid eventId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
@@ -272,6 +278,7 @@ public static class CalendarEndpoints
 
         var removed = await RemoveExceptions(db, calendarEvent.Id, _ => true, ct);
         db.CalendarEvents.Remove(calendarEvent);
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Calendar, $"apagou o evento «{calendarEvent.Title}»");
         await db.SaveChangesAsync(ct);
         await NotifyDeleted(notifier, householdId, [.. removed, eventId], ct);
         return Results.NoContent();
@@ -289,6 +296,7 @@ public static class CalendarEndpoints
         SaveEventRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
@@ -325,6 +333,7 @@ public static class CalendarEndpoints
         {
             // É a primeira ocorrência: "esta e as seguintes" é a série toda.
             var removedAll = await UpdateSeries(db, series, request, now, ct);
+            activity.Capture(householdId, userId, HouseholdModule.Calendar, $"mudou «{series.Title}» a partir de {date:dd/MM}");
             await db.SaveChangesAsync(ct);
             var seriesDto = ToDto(series);
             await notifier.CalendarEventUpserted(householdId, seriesDto, ct);
@@ -373,6 +382,7 @@ public static class CalendarEndpoints
             db.CalendarEvents.Add(changed);
         }
 
+        activity.Capture(householdId, userId, HouseholdModule.Calendar, following ? $"mudou «{series.Title}» a partir de {date:dd/MM}" : $"mudou «{series.Title}» no dia {date:dd/MM}");
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(changed);
@@ -391,6 +401,7 @@ public static class CalendarEndpoints
         string? scope,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
@@ -419,6 +430,7 @@ public static class CalendarEndpoints
             // Desde a primeira ocorrência: não sobra nada da série.
             var removedAll = await RemoveExceptions(db, series.Id, _ => true, ct);
             db.CalendarEvents.Remove(series);
+            activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Calendar, $"apagou «{series.Title}» a partir de {date:dd/MM}");
             await db.SaveChangesAsync(ct);
             await NotifyDeleted(notifier, householdId, [.. removedAll, series.Id], ct);
             return Results.NoContent();
@@ -431,6 +443,7 @@ public static class CalendarEndpoints
 
         var removed = await RemoveExceptions(db, series.Id, d => following ? d >= date : d == date, ct);
         series.UpdatedAt = clock.GetUtcNow();
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Calendar, following ? $"apagou «{series.Title}» a partir de {date:dd/MM}" : $"apagou «{series.Title}» no dia {date:dd/MM}");
         await db.SaveChangesAsync(ct);
         await notifier.CalendarEventUpserted(householdId, ToDto(series), ct);
         await NotifyDeleted(notifier, householdId, removed, ct);

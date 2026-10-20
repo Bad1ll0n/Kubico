@@ -10,6 +10,7 @@ import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import '../shopping/shopping_repository.dart';
 import 'account_screen.dart';
+import 'activity_screen.dart';
 import 'calendar_view.dart';
 import 'chores_view.dart';
 import 'devices_screen.dart';
@@ -272,6 +273,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     context,
                   ).push(MaterialPageRoute<void>(builder: (_) => const DevicesScreen())),
                   'account' => _openAccount(),
+                  'activity' => Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute<void>(builder: (_) => ActivityScreen(household: household))),
                   'help' => Navigator.of(
                     context,
                   ).push(MaterialPageRoute<void>(builder: (_) => HelpScreen(householdId: household.id))),
@@ -279,6 +283,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
                 itemBuilder: (_) => [
                   PopupMenuItem(enabled: false, child: Text(session.user?.email ?? session.user?.displayName ?? '')),
+                  const PopupMenuItem(value: 'activity', child: Text('Histórico de alterações')),
                   const PopupMenuItem(value: 'account', child: Text('A minha conta')),
                   const PopupMenuItem(value: 'devices', child: Text('Dispositivos com sessão iniciada')),
                   const PopupMenuItem(value: 'help', child: Text('Ajuda e sugestões')),
