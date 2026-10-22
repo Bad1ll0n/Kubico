@@ -1,6 +1,6 @@
-using Kubico.Api.Common;
 using System.Globalization;
 using System.Text;
+using Kubico.Api.Common;
 using Kubico.Domain.Calendar;
 using Kubico.Domain.Households;
 

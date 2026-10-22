@@ -19,7 +19,11 @@ Map<String, dynamic> _connection(String provider, {String status = 'Active', Str
   'id': 'c-$provider',
   'householdId': 'h1',
   'provider': provider,
-  'accountEmail': provider == 'Google' ? 'mae@gmail.com' : 'mae@outlook.com',
+  'accountEmail': switch (provider) {
+    'Google' => 'mae@gmail.com',
+    'Apple' => 'mae@icloud.com',
+    _ => 'mae@outlook.com',
+  },
   'status': status,
   'lastSyncedAt': DateTime.now().toUtc().toIso8601String(),
   'lastError': lastError,
@@ -29,7 +33,7 @@ Map<String, dynamic> _connection(String provider, {String status = 'Active', Str
 class _FakeApi {
   _FakeApi({
     this.canConnect = true,
-    this.available = const ['Google', 'Microsoft'],
+    this.available = const ['Google', 'Microsoft', 'Apple'],
     List<Map<String, dynamic>>? connections,
   }) : connections = connections ?? [];
 
@@ -37,6 +41,7 @@ class _FakeApi {
   final List<String> available;
   final List<Map<String, dynamic>> connections;
   final requests = <String>[];
+  final bodies = <Map<String, dynamic>>[];
 
   late final client = MockClient((request) async {
     final path = request.url.path;
@@ -45,10 +50,19 @@ class _FakeApi {
       return _json({
         'canConnect': canConnect,
         'providers': [
-          for (final p in ['Google', 'Microsoft']) {'provider': p, 'available': available.contains(p)},
+          for (final p in ['Google', 'Microsoft', 'Apple']) {'provider': p, 'available': available.contains(p)},
         ],
         'connections': connections,
       });
+    }
+    if (path == '/api/households/h1/calendar-sync/apple') {
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      bodies.add(body);
+      if (body['appPassword'] != 'abcd-efgh-ijkl-mnop') {
+        return _json({'title': 'O Apple ID ou a palavra-passe da app não estão certos.'}, 400);
+      }
+      connections.add(_connection('Apple'));
+      return _json(connections.last);
     }
     if (path.endsWith('/authorize')) {
       return _json({'url': 'https://accounts.google.com/o/oauth2/v2/auth?state=abc'});
@@ -146,7 +160,7 @@ void main() {
     await _pump(tester, api);
 
     expect(find.text('Só os adultos da casa podem ligar contas.'), findsOneWidget);
-    expect(find.text('Ainda não está disponível neste servidor.'), findsOneWidget);
+    expect(find.text('Ainda não está disponível neste servidor.'), findsNWidgets(2));
     expect(find.byType(FilledButton), findsNothing);
   });
 
@@ -160,5 +174,41 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('mae@gmail.com'), findsOneWidget);
+  });
+
+  testWidgets('o iCloud liga-se com o Apple ID e uma palavra-passe da app, e uma errada é explicada', (tester) async {
+    final api = _FakeApi();
+    final (_, opened) = await _pump(tester, api);
+
+    await tester.tap(find.text('Ligar a conta Apple'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ligar o iCloud'), findsOneWidget);
+    await tester.tap(find.text('Ligar a conta'));
+    await tester.pumpAndSettle();
+    expect(find.text('Indica o Apple ID e a palavra-passe da app.'), findsNWidgets(2));
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Apple ID'), 'mae@icloud.com');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Palavra-passe específica da app'), 'errada');
+    await tester.tap(find.text('Ligar a conta'));
+    await tester.pumpAndSettle();
+    expect(find.text('O Apple ID ou a palavra-passe da app não estão certos.'), findsOneWidget);
+
+    // O aviso sai ao fim de uns segundos (estava por cima do botão).
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ligar a conta Apple'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Apple ID'), ' mae@icloud.com ');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Palavra-passe específica da app'),
+      'abcd-efgh-ijkl-mnop',
+    );
+    await tester.tap(find.text('Ligar a conta'));
+    await tester.pumpAndSettle();
+
+    expect(api.bodies.last, {'appleId': 'mae@icloud.com', 'appPassword': 'abcd-efgh-ijkl-mnop'});
+    expect(opened, isEmpty);
+    expect(find.text('Calendário ligado.'), findsOneWidget);
+    expect(find.text('mae@icloud.com'), findsOneWidget);
   });
 }

@@ -76,15 +76,15 @@ class _CalendarFeedDialogState extends State<_CalendarFeedDialog> {
             Text('Nos dois sentidos'.tr, style: theme.textTheme.titleSmall),
             const SizedBox(height: 4),
             Text(
-              'Liga a tua conta Google ou Microsoft: os eventos da casa aparecem lá e o que mudares lá também muda '
-                      'no Kubico.'
+              'Liga a tua conta Google, Microsoft ou Apple (iCloud): os eventos da casa aparecem lá e o que mudares lá '
+                      'também muda no Kubico.'
                   .tr,
             ),
             const SizedBox(height: 8),
             FilledButton.tonalIcon(
               onPressed: _openSync,
               icon: const Icon(Icons.sync),
-              label: Text('Ligar ao Google Calendar ou ao Outlook'.tr),
+              label: Text('Ligar ao Google Calendar, ao Outlook ou ao iCloud'.tr),
             ),
             const Divider(height: 32),
             Text('Só para ver'.tr, style: theme.textTheme.titleSmall),

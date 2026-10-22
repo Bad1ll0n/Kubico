@@ -282,6 +282,11 @@ public static partial class Texts
         ["O {0} recusou a autorização ({1})."] = "{0} refused the authorisation ({1}).",
         ["O {0} recusou o pedido de token ({1} {2})."] = "{0} refused the token request ({1} {2}).",
         ["O {0} não devolveu um token de acesso."] = "{0} didn't return an access token.",
+        ["A ligação ao iCloud ainda não está configurada neste servidor."] = "The iCloud connection isn't set up on this server yet.",
+        ["O Apple ID ou a palavra-passe da app não estão certos. Confirma que usas uma palavra-passe específica da app."] =
+            "The Apple ID or the app password isn't right. Make sure you're using an app-specific password.",
+        ["Não foi possível ligar ao iCloud agora. Tenta outra vez daqui a pouco."] =
+            "Couldn't connect to iCloud right now. Try again shortly.",
 
         // Tarefas
         ["criou a tarefa «{0}»"] = "created the chore “{0}”",

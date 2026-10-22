@@ -13,7 +13,7 @@ import 'dates_pt.dart';
 /// Abre a página de autorização do Google ou da Microsoft no navegador do sistema.
 Future<bool> openInBrowser(Uri url) => launchUrl(url, mode: LaunchMode.externalApplication);
 
-/// Ligar o calendário da casa ao Google Calendar ou ao Outlook de quem usa a app, nos dois sentidos.
+/// Ligar o calendário da casa ao Google Calendar, ao Outlook ou ao iCloud de quem usa a app, nos dois sentidos.
 class CalendarSyncScreen extends StatefulWidget {
   const CalendarSyncScreen({super.key, required this.householdId, this.openUrl = openInBrowser});
 
@@ -70,15 +70,29 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
     }
   }
 
-  Future<void> _connect(CalendarProvider provider) => _run(provider, () async {
-    final url = await _api.authorizeCalendarSync(widget.householdId, provider);
-    final opened = await widget.openUrl(url);
-    _say(
-      opened
-          ? 'Autoriza o Kubico na página que abriu e depois volta aqui.'.tr
-          : 'Não foi possível abrir o navegador.'.tr,
-    );
-  });
+  Future<void> _connect(CalendarProvider provider) async {
+    if (provider == CalendarProvider.apple) return _connectApple();
+    await _run(provider, () async {
+      final url = await _api.authorizeCalendarSync(widget.householdId, provider);
+      final opened = await widget.openUrl(url);
+      _say(
+        opened
+            ? 'Autoriza o Kubico na página que abriu e depois volta aqui.'.tr
+            : 'Não foi possível abrir o navegador.'.tr,
+      );
+    });
+  }
+
+  /// O iCloud: pede-se o Apple ID e uma palavra-passe específica da app, que o servidor guarda cifrada.
+  Future<void> _connectApple() async {
+    final credentials = await showDialog<(String, String)>(context: context, builder: (_) => const AppleSignInDialog());
+    if (credentials == null) return;
+    await _run(CalendarProvider.apple, () async {
+      await _api.connectApple(widget.householdId, credentials.$1, credentials.$2);
+      await _load();
+      _say('Calendário ligado.'.tr);
+    });
+  }
 
   Future<void> _sync(CalendarConnection connection) => _run(connection.provider, () async {
     final synced = await _api.syncCalendarConnection(widget.householdId, connection.id);
@@ -128,7 +142,7 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
   Widget build(BuildContext context) {
     final overview = _overview;
     return Scaffold(
-      appBar: AppBar(title: Text('Google Calendar e Outlook'.tr)),
+      appBar: AppBar(title: Text('Google Calendar, Outlook e iCloud'.tr)),
       body: overview == null
           ? Center(
               child: _error == null
@@ -231,5 +245,85 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
     return DateUtils.isSameDay(at, DateTime.now())
         ? 'Sincronizado hoje às ${formatTime(at)}.'.tr
         : 'Sincronizado a ${formatDayMonth(at)}, às ${formatTime(at)}.'.tr;
+  }
+}
+
+/// Os dados para ligar o iCloud: o Apple ID e uma palavra-passe específica da app (a normal não serve).
+class AppleSignInDialog extends StatefulWidget {
+  const AppleSignInDialog({super.key});
+
+  @override
+  State<AppleSignInDialog> createState() => _AppleSignInDialogState();
+}
+
+class _AppleSignInDialogState extends State<AppleSignInDialog> {
+  final _form = GlobalKey<FormState>();
+  final _appleId = TextEditingController();
+  final _password = TextEditingController();
+
+  @override
+  void dispose() {
+    _appleId.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_form.currentState!.validate()) Navigator.pop(context, (_appleId.text.trim(), _password.text.trim()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    String? required(String? value) =>
+        value == null || value.trim().isEmpty ? 'Indica o Apple ID e a palavra-passe da app.'.tr : null;
+    return AlertDialog(
+      title: Text('Ligar o iCloud'.tr),
+      content: SizedBox(
+        width: 400,
+        child: Form(
+          key: _form,
+          child: AutofillGroup(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Cria uma palavra-passe para o Kubico em appleid.apple.com → Iniciar sessão e segurança → '
+                          'Palavras-passe específicas da app. A palavra-passe normal do Apple ID não serve.'
+                      .tr,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _appleId,
+                  decoration: const InputDecoration(labelText: 'Apple ID', border: OutlineInputBorder()),
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.username],
+                  validator: required,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _password,
+                  decoration: InputDecoration(
+                    labelText: 'Palavra-passe específica da app'.tr,
+                    hintText: 'xxxx-xxxx-xxxx-xxxx',
+                    border: const OutlineInputBorder(),
+                  ),
+                  obscureText: true,
+                  autofillHints: const [AutofillHints.password],
+                  validator: required,
+                  onFieldSubmitted: (_) => _submit(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
+        FilledButton(onPressed: _submit, child: Text('Ligar a conta'.tr)),
+      ],
+    );
   }
 }

@@ -24,6 +24,7 @@ public class CalendarSyncOptions
 
     public OAuthClientOptions Google { get; set; } = new();
     public MicrosoftClientOptions Microsoft { get; set; } = new();
+    public AppleCalendarOptions Apple { get; set; } = new();
 
     /// <summary>De quanto em quanto tempo se vão buscar as alterações feitas nos calendários externos.</summary>
     public int IntervalMinutes { get; set; } = 5;
@@ -90,7 +91,7 @@ public sealed record ExternalChanges(IReadOnlyList<ExternalEvent> Events, bool I
 /// <summary>A cópia de um evento no calendário externo e a sua versão.</summary>
 public sealed record ExternalRef(string Id, string? Version);
 
-/// <summary>Um serviço de calendário (Google Calendar ou Outlook) visto pelo sincronizador.</summary>
+/// <summary>Um serviço de calendário (Google Calendar, Outlook ou iCloud) visto pelo sincronizador.</summary>
 public interface ICalendarProvider
 {
     CalendarProvider Kind { get; }

@@ -483,7 +483,7 @@ class ApiClient {
     return getCalendarFeed(householdId);
   }
 
-  // --- Google Calendar e Outlook ---
+  // --- Google Calendar, Outlook e iCloud ---
 
   Future<CalendarSyncOverview> getCalendarSync(String householdId) async => CalendarSyncOverview.fromJson(
     await _send('GET', '/api/households/$householdId/calendar-sync') as Map<String, dynamic>,
@@ -501,6 +501,16 @@ class ApiClient {
       );
 
   /// Desliga a conta: o calendário do Kubico é apagado lá; os eventos ficam no Kubico.
+  /// Liga o iCloud com o Apple ID e uma palavra-passe específica da app (a Apple não tem página de autorização).
+  Future<CalendarConnection> connectApple(String householdId, String appleId, String appPassword) async =>
+      CalendarConnection.fromJson(
+        await _send(
+          'POST',
+          '/api/households/$householdId/calendar-sync/apple',
+          body: {'appleId': appleId, 'appPassword': appPassword},
+        ) as Map<String, dynamic>,
+      );
+
   Future<void> disconnectCalendar(String householdId, String connectionId) =>
       _send('DELETE', '/api/households/$householdId/calendar-sync/$connectionId');
 

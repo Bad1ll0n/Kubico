@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -30,6 +31,11 @@ public record CalendarSyncDto(
 /// <summary>A página onde a pessoa autoriza o Kubico; a app abre-a no navegador.</summary>
 public record CalendarAuthorizationDto(string Url);
 
+/// <summary>Ligar o iCloud: o Apple ID e uma palavra-passe específica da app (criada em appleid.apple.com).</summary>
+public record AppleSignInRequest(
+    [property: Required, StringLength(256)] string AppleId,
+    [property: Required, StringLength(64)] string AppPassword);
+
 /// <summary>
 /// Ligar o calendário da casa ao Google Calendar ou ao Outlook de cada membro, nos dois sentidos. A ligação é
 /// pessoal: cada um liga a sua conta e só vê as suas ligações.
@@ -47,6 +53,7 @@ public static class CalendarSyncEndpoints
 
         sync.MapGet("/", GetOverview);
         sync.MapPost("/{provider}/authorize", Authorize);
+        sync.MapPost("/apple", ConnectApple);
         sync.MapPost("/{connectionId:guid}/sync", SyncNow);
         sync.MapDelete("/{connectionId:guid}", Disconnect);
 
@@ -107,7 +114,8 @@ public static class CalendarSyncEndpoints
             return error;
         }
 
-        if (ParseProvider(provider) is not { } kind || sync.Provider(kind) is not { } service)
+        if (ParseProvider(provider) is not { } kind || sync.Provider(kind) is not { } service
+            || service is IPasswordCalendarProvider)
         {
             return Results.NotFound();
         }
@@ -192,36 +200,8 @@ public static class CalendarSyncEndpoints
             }
 
             email = tokens.Email ?? "(conta sem email)";
-            connection = await db.CalendarConnections.SingleOrDefaultAsync(
-                c => c.HouseholdId == request.HouseholdId && c.UserId == request.UserId && c.Provider == kind, ct);
-            if (connection is null || !string.Equals(connection.AccountEmail, email, StringComparison.OrdinalIgnoreCase))
-            {
-                // Conta nova (ou outra conta): um calendário novo, copiado do zero.
-                var calendarId = await service.CreateCalendarAsync(tokens.AccessToken, name, household.TimeZone, ct);
-                if (connection is null)
-                {
-                    connection = new CalendarConnection
-                    {
-                        HouseholdId = request.HouseholdId,
-                        UserId = request.UserId,
-                        Provider = kind,
-                        AccountEmail = email,
-                        ExternalCalendarId = calendarId,
-                        ProtectedRefreshToken = "",
-                        CreatedAt = now,
-                    };
-                    db.CalendarConnections.Add(connection);
-                }
-                else
-                {
-                    connection.ExternalCalendarId = calendarId;
-                    connection.SyncCursor = null;
-                    await db.CalendarEventLinks.Where(l => l.ConnectionId == connection.Id).ExecuteDeleteAsync(ct);
-                }
-            }
-
-            connection.AccountEmail = email;
-            connection.ProtectedRefreshToken = secrets.ProtectToken(tokens.RefreshToken);
+            connection = await SaveConnectionAsync(
+                db, service, secrets, request.HouseholdId, request.UserId, household, tokens with { Email = email }, now, ct);
         }
         catch (Exception e) when (e is CalendarAuthException or CalendarProviderException or HttpRequestException)
         {
@@ -229,14 +209,125 @@ public static class CalendarSyncEndpoints
             return Page(language, "Não foi possível ligar", $"O {ServiceName(kind)} não confirmou a autorização. Tenta outra vez.", 502);
         }
 
-        connection.Status = CalendarConnectionStatus.Active;
-        connection.LastError = null;
         await db.SaveChangesAsync(ct);
-
         trigger.Request(request.HouseholdId);
         await notifier.CalendarConnectionUpserted(request.UserId, ToDto(connection, language), ct);
         return Page(language, "Calendário ligado",
             $"Os eventos da casa vão aparecer no calendário «{name}» da conta {email}. Já podes voltar ao Kubico.", 200);
+    }
+
+    /// <summary>
+    /// Liga o iCloud com o Apple ID e uma palavra-passe da app (não há OAuth para calendários na Apple). As
+    /// credenciais ficam cifradas, como os refresh tokens; o resto é igual às outras contas.
+    /// </summary>
+    private static async Task<IResult> ConnectApple(
+        Guid householdId,
+        AppleSignInRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        CalendarSyncService sync,
+        CalendarSecrets secrets,
+        CalendarSyncTrigger trigger,
+        HouseholdNotifier notifier,
+        TimeProvider clock,
+        ILoggerFactory loggers,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Calendar, ModuleAccess.Manage, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        if (sync.Provider(CalendarProvider.Apple) is not IPasswordCalendarProvider { IsConfigured: true } service)
+        {
+            return Results.Problem(
+                title: "A ligação ao iCloud ainda não está configurada neste servidor.",
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var household = await db.Households.AsNoTracking().SingleAsync(h => h.Id == householdId, ct);
+        CalendarConnection connection;
+        try
+        {
+            var tokens = await service.SignInAsync(request.AppleId, request.AppPassword, ct);
+            connection = await SaveConnectionAsync(db, service, secrets, householdId, userId, household, tokens, clock.GetUtcNow(), ct);
+        }
+        catch (CalendarAuthException)
+        {
+            return Results.Problem(
+                title: "O Apple ID ou a palavra-passe da app não estão certos. Confirma que usas uma palavra-passe específica da app.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+        catch (Exception e) when (e is CalendarProviderException or HttpRequestException or TaskCanceledException
+            or System.Xml.XmlException)
+        {
+            loggers.CreateLogger(typeof(CalendarSyncEndpoints)).LogWarning(e, "Falha a ligar uma conta {Provider}.", CalendarProvider.Apple);
+            return Results.Problem(
+                title: "Não foi possível ligar ao iCloud agora. Tenta outra vez daqui a pouco.",
+                statusCode: StatusCodes.Status502BadGateway);
+        }
+
+        await db.SaveChangesAsync(ct);
+        trigger.Request(householdId);
+        var dto = ToDto(connection, Texts.LanguageOf(http));
+        await notifier.CalendarConnectionUpserted(userId, dto, ct);
+        return Results.Ok(dto);
+    }
+
+    /// <summary>
+    /// A ligação de quem ligou a conta: numa conta nova (ou noutra conta), um calendário novo do Kubico, copiado do
+    /// zero; na mesma conta, reaproveita-se o calendário. Grava-se com o resto do pedido.
+    /// </summary>
+    private static async Task<CalendarConnection> SaveConnectionAsync(
+        KubicoDbContext db,
+        ICalendarProvider service,
+        CalendarSecrets secrets,
+        Guid householdId,
+        Guid userId,
+        Household household,
+        OAuthTokens tokens,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var email = tokens.Email ?? "";
+        var connection = await db.CalendarConnections.SingleOrDefaultAsync(
+            c => c.HouseholdId == householdId && c.UserId == userId && c.Provider == service.Kind, ct);
+        if (connection is null || !string.Equals(connection.AccountEmail, email, StringComparison.OrdinalIgnoreCase))
+        {
+            var calendarId = await service.CreateCalendarAsync(
+                tokens.AccessToken, CalendarSyncService.CalendarName(household.Name), household.TimeZone, ct);
+            if (connection is null)
+            {
+                connection = new CalendarConnection
+                {
+                    HouseholdId = householdId,
+                    UserId = userId,
+                    Provider = service.Kind,
+                    AccountEmail = email,
+                    ExternalCalendarId = calendarId,
+                    ProtectedRefreshToken = "",
+                    CreatedAt = now,
+                };
+                db.CalendarConnections.Add(connection);
+            }
+            else
+            {
+                connection.ExternalCalendarId = calendarId;
+                connection.SyncCursor = null;
+                await db.CalendarEventLinks.Where(l => l.ConnectionId == connection.Id).ExecuteDeleteAsync(ct);
+            }
+        }
+
+        connection.AccountEmail = email;
+        connection.ProtectedRefreshToken = secrets.ProtectToken(tokens.RefreshToken!);
+        connection.Status = CalendarConnectionStatus.Active;
+        connection.LastError = null;
+        return connection;
     }
 
     private static async Task<IResult> SyncNow(
@@ -335,11 +426,16 @@ public static class CalendarSyncEndpoints
     {
         "google" => CalendarProvider.Google,
         "microsoft" => CalendarProvider.Microsoft,
+        "apple" => CalendarProvider.Apple,
         _ => null,
     };
 
-    private static string ServiceName(CalendarProvider kind) =>
-        kind == CalendarProvider.Google ? "Google Calendar" : "Outlook";
+    private static string ServiceName(CalendarProvider kind) => kind switch
+    {
+        CalendarProvider.Google => "Google Calendar",
+        CalendarProvider.Microsoft => "Outlook",
+        _ => "iCloud",
+    };
 
     /// <summary>Uma página simples para o navegador, em vez de JSON.</summary>
     private static IResult Page(string language, string title, string message, int statusCode)

@@ -392,9 +392,9 @@ void main() {
     expect(find.text('https://api.kubico.test/api/calendar-feeds/segredo-1.ics'), findsNothing);
 
     // Daqui também se chega às contas ligadas (nos dois sentidos).
-    await tester.tap(find.text('Ligar ao Google Calendar ou ao Outlook'));
+    await tester.tap(find.text('Ligar ao Google Calendar, ao Outlook ou ao iCloud'));
     await tester.pumpAndSettle();
-    expect(find.text('Google Calendar e Outlook'), findsOneWidget);
+    expect(find.text('Google Calendar, Outlook e iCloud'), findsOneWidget);
     expect(find.text('Só os adultos da casa podem ligar contas.'), findsOneWidget);
   });
 

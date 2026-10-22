@@ -39,9 +39,9 @@ List<(String, String)> get helpTopics => [
         .tr,
   ),
   (
-    'Posso ver o calendário da casa no Google ou no Outlook?'.tr,
-    'Sim. No Calendário, carrega em "Ver noutros calendários": podes ligar a tua conta Google ou Microsoft (o que '
-            'mudares lá também muda aqui) ou subscrever um endereço só para ver.'
+    'Posso ver o calendário da casa no Google, no Outlook ou no iPhone?'.tr,
+    'Sim. No Calendário, carrega em "Ver noutros calendários": podes ligar a tua conta Google, Microsoft ou Apple '
+            '(iCloud), e o que mudares lá também muda aqui, ou subscrever um endereço só para ver.'
         .tr,
   ),
   (

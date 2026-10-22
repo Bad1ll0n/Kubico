@@ -1102,9 +1102,11 @@ class CalendarFeed {
 }
 
 /// Um serviço de calendário com que o Kubico sincroniza nos dois sentidos. [name] é o que vai no endereço da API.
+/// O Google e a Microsoft ligam-se por uma página de autorização; o iCloud com o Apple ID e uma palavra-passe da app.
 enum CalendarProvider {
   google('Google', 'Google Calendar', 'conta Google'),
-  microsoft('Microsoft', 'Outlook', 'conta Microsoft');
+  microsoft('Microsoft', 'Outlook', 'conta Microsoft'),
+  apple('Apple', 'iCloud', 'conta Apple');
 
   const CalendarProvider(this.apiValue, this._label, this._account);
 

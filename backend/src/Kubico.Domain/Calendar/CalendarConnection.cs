@@ -4,6 +4,9 @@ public enum CalendarProvider
 {
     Google,
     Microsoft,
+
+    /// <summary>iCloud (CalDAV), com o Apple ID e uma palavra-passe específica da app.</summary>
+    Apple,
 }
 
 public enum CalendarConnectionStatus

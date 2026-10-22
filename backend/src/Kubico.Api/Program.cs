@@ -71,6 +71,12 @@ builder.Services.AddHttpClient<GoogleCalendarProvider>();
 builder.Services.AddHttpClient<MicrosoftCalendarProvider>();
 builder.Services.AddTransient<ICalendarProvider>(sp => sp.GetRequiredService<GoogleCalendarProvider>());
 builder.Services.AddTransient<ICalendarProvider>(sp => sp.GetRequiredService<MicrosoftCalendarProvider>());
+builder.Services.AddHttpClient<AppleCalendarProvider>(http =>
+{
+    http.DefaultRequestHeaders.UserAgent.ParseAdd("Kubico/1.0");
+    http.Timeout = TimeSpan.FromSeconds(30);
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddTransient<ICalendarProvider>(sp => sp.GetRequiredService<AppleCalendarProvider>());
 builder.Services.AddSingleton<CalendarSecrets>();
 builder.Services.AddSingleton<TwoFactorService>();
 builder.Services.AddSingleton<CalendarSyncLocks>();
