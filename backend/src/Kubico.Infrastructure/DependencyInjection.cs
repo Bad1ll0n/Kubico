@@ -17,7 +17,8 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("Kubico")
             ?? throw new InvalidOperationException("Falta a connection string 'Kubico'.");
 
-        services.AddDbContext<KubicoDbContext>(options =>
+        // Em pool: os DbContext reaproveitam-se entre pedidos, em vez de se criar um novo em cada um.
+        services.AddDbContextPool<KubicoDbContext>(options =>
         {
             if (provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
             {

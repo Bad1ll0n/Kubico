@@ -18,7 +18,16 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+
+  <!--
+    Content Security Policy: só corre o código da própria app (e o CanvasKit e o Firebase do gstatic, e o leitor de
+    códigos de barras do jsdelivr). Os quatro hashes são os pequenos scripts com que o firebase_core e o
+    firebase_messaging carregam o Firebase JS 13.0.0 (com e sem Trusted Types): se o Firebase for atualizado, a
+    consola do browser diz o hash novo. connect-src deixa falar com a API: em produção, troca "https: wss:" pelo
+    endereço real da API (ex.: https://api.kubico.pt wss://api.kubico.pt) — ver CLAUDE.md, "Produção".
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://cdn.jsdelivr.net 'sha256-8c/WNoEw1nr7G8Z0vl3LfbVXE+6ihJRtsJUSyJDxXI8=' 'sha256-aY2JLKFsJmMJL1EncC8tO+bblNU58sIPRs9DXmKKbxA=' 'sha256-qmhsWjBdPDUIUZaJGmHgZAcbtmicSEoUx2HOuWsG41Q=' 'sha256-FyxZLmxkYMwaZEpIx8WQLqw5Ve8JtjBlqw+Ud/2PdA4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*; media-src 'self' blob: mediastream:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="description" content="Kubico: a casa toda, organizada em conjunto.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -31,8 +40,35 @@
 
   <title>Kubico</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Indicador de carregamento (P8): aparece logo, enquanto se descarregam o main.dart.js e o CanvasKit, e sai quando a
+    app desenha o primeiro ecrã (flutter_bootstrap.js, evento "flutter-first-frame"). Só HTML e CSS (a CSP não deixa
+    scripts no meio da página).
+  -->
+  <style>
+    #kubico-loading {
+      position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 20px; background: #fff8f6; color: #8f3a26; font: 600 22px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    #kubico-loading .bar { width: 160px; height: 4px; border-radius: 2px; background: #f5d9d2; overflow: hidden; }
+    #kubico-loading .bar::after {
+      content: ""; display: block; width: 40%; height: 100%; border-radius: 2px; background: #c8553d;
+      animation: kubico-loading 1.1s ease-in-out infinite;
+    }
+    @keyframes kubico-loading { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+    @media (prefers-color-scheme: dark) {
+      #kubico-loading { background: #1a110f; color: #ffb4a3; }
+      #kubico-loading .bar { background: #3d2621; }
+    }
+    @media (prefers-reduced-motion: reduce) { #kubico-loading .bar::after { animation: none; width: 100%; } }
+  </style>
 </head>
 <body>
+  <div id="kubico-loading" role="progressbar" aria-label="A carregar o Kubico">
+    <span>Kubico</span>
+    <div class="bar"></div>
+  </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
