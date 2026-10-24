@@ -50,6 +50,9 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
   Map<String, ShoppingItem>? _items;
   Object? _error;
 
+  /// Os artigos por comprar e no carrinho, já ordenados; voltam a ordenar-se só quando os artigos mudam (P10).
+  (List<ShoppingItem>, List<ShoppingItem>)? _sorted;
+
   late final ShoppingRepository _shopping;
   String get _householdId => widget.householdId;
   String get _listId => widget.list.id;
@@ -84,6 +87,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
       if (mounted) {
         setState(() {
           _items = {for (final i in items) i.id: i};
+          _sorted = null;
           _error = null;
         });
       }
@@ -107,7 +111,16 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
       case ShoppingItemUpserted(:final item) when item.listId == widget.list.id:
         _upsert(item);
       case ShoppingItemDeleted(:final listId, :final itemId) when listId == widget.list.id:
-        setState(() => _items?.remove(itemId));
+        setState(() {
+          _items?.remove(itemId);
+          _sorted = null;
+        });
+      case ShoppingItemsDeleted(:final listId, :final itemIds) when listId == widget.list.id:
+        final gone = itemIds.toSet();
+        setState(() {
+          _items?.removeWhere((id, _) => gone.contains(id));
+          _sorted = null;
+        });
       default:
         break;
     }
@@ -117,7 +130,10 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
   void _upsert(ShoppingItem item) {
     final current = _items?[item.id];
     if (current != null && current.updatedAt.isAfter(item.updatedAt)) return;
-    setState(() => (_items ??= {})[item.id] = item);
+    setState(() {
+      (_items ??= {})[item.id] = item;
+      _sorted = null;
+    });
   }
 
   // As alterações aparecem logo; o repositório envia-as (já, ou quando a rede voltar).
@@ -196,17 +212,26 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
   }
 
   void _toggle(ShoppingItem item) {
-    setState(() => _items![item.id] = item.copyWith(isChecked: !item.isChecked));
+    setState(() {
+      _items![item.id] = item.copyWith(isChecked: !item.isChecked);
+      _sorted = null;
+    });
     _shopping.setChecked(_householdId, _listId, item.id, !item.isChecked);
   }
 
   void _delete(ShoppingItem item) {
-    setState(() => _items!.remove(item.id));
+    setState(() {
+      _items!.remove(item.id);
+      _sorted = null;
+    });
     _shopping.deleteItem(_householdId, _listId, item.id);
   }
 
   void _clearChecked() {
-    setState(() => _items!.removeWhere((_, i) => i.isChecked));
+    setState(() {
+      _items!.removeWhere((_, i) => i.isChecked);
+      _sorted = null;
+    });
     _shopping.clearChecked(_householdId, _listId);
   }
 
@@ -229,8 +254,15 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
       );
     }
 
-    final pending = items.values.where((i) => !i.isChecked).toList()..sort(_byCategoryThenDate);
-    final done = items.values.where((i) => i.isChecked).toList()..sort(_byCategoryThenDate);
+    final (pending, done) = _sorted ??= (
+      items.values.where((i) => !i.isChecked).toList()..sort(_byCategoryThenDate),
+      items.values.where((i) => i.isChecked).toList()..sort(_byCategoryThenDate),
+    );
+
+    // Uma lista plana de linhas (artigos por comprar, o cabeçalho do carrinho e os artigos comprados), construída só
+    // à medida que aparecem no ecrã: o custo de um toque deixa de depender do tamanho da lista (P10).
+    final empty = pending.isEmpty && done.isEmpty;
+    final rowCount = empty ? 1 : pending.length + (done.isEmpty ? 0 : 1 + done.length);
 
     return Column(
       children: [
@@ -274,37 +306,38 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
         Expanded(
           child: RefreshIndicator(
             onRefresh: _load,
-            child: ListView(
+            child: ListView.builder(
               padding: const EdgeInsets.only(bottom: 24),
-              children: [
-                if (pending.isEmpty && done.isEmpty)
-                  Padding(
+              itemCount: rowCount,
+              itemBuilder: (context, index) {
+                if (empty) {
+                  return Padding(
                     padding: const EdgeInsets.all(32),
                     child: Text(
                       'A lista está vazia.'.tr,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyLarge,
                     ),
+                  );
+                }
+                if (index < pending.length) return _itemTile(pending[index]);
+                if (index > pending.length) return _itemTile(done[index - pending.length - 1]);
+                return Padding(
+                  key: const ValueKey('carrinho'),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text('No carrinho (${done.length})'.tr, style: theme.textTheme.titleSmall)),
+                      if (widget.canEdit)
+                        TextButton.icon(
+                          onPressed: _clearChecked,
+                          icon: const Icon(Icons.cleaning_services_outlined, size: 18),
+                          label: Text('Limpar'.tr),
+                        ),
+                    ],
                   ),
-                for (final item in pending) _itemTile(item),
-                if (done.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
-                    child: Row(
-                      children: [
-                        Expanded(child: Text('No carrinho (${done.length})'.tr, style: theme.textTheme.titleSmall)),
-                        if (widget.canEdit)
-                          TextButton.icon(
-                            onPressed: _clearChecked,
-                            icon: const Icon(Icons.cleaning_services_outlined, size: 18),
-                            label: Text('Limpar'.tr),
-                          ),
-                      ],
-                    ),
-                  ),
-                  for (final item in done) _itemTile(item),
-                ],
-              ],
+                );
+              },
             ),
           ),
         ),

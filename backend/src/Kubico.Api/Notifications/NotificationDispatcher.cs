@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Kubico.Api.Common;
 using Kubico.Domain.Notifications;
 using Kubico.Infrastructure.Persistence;
@@ -8,27 +9,79 @@ namespace Kubico.Api.Notifications;
 /// <summary>
 /// Leva para os telemóveis os avisos por enviar, segundo as preferências de cada membro: já, num resumo diário,
 /// ou nunca (só na app); nunca durante as horas de silêncio. Os avisos já lidos na app não se enviam.
+/// <para>
+/// Trabalha por lotes de pessoas (<see cref="BatchSize"/>): as preferências, as línguas e os telemóveis de um lote
+/// leem-se com uma consulta cada, os envios correm em paralelo (no máximo <see cref="Parallelism"/> ao mesmo tempo) e
+/// grava-se uma vez por lote. Quem está em horas de silêncio ou à espera do resumo fica com
+/// <see cref="NotificationPreferences.NextPushAt"/> e só volta a ser lido a essa hora (antes era lido e saltado a cada
+/// minuto, com uma consulta por pessoa).
+/// </para>
 /// </summary>
 public class NotificationDispatcher(KubicoDbContext db, IPushSender sender, TimeProvider clock)
 {
     /// <summary>Quantos títulos entram no texto do resumo.</summary>
     private const int DigestTitles = 3;
 
+    /// <summary>Pessoas por lote.</summary>
+    public const int BatchSize = 500;
+
+    /// <summary>Envios ao mesmo tempo (o FCM demora ~100 ms por mensagem).</summary>
+    public const int Parallelism = 8;
+
+    /// <summary>Lotes por volta: o resto fica para o minuto seguinte.</summary>
+    private const int MaxBatches = 20;
+
     /// <summary>Trata os avisos por enviar; devolve quantas mensagens saíram.</summary>
     public async Task<int> DispatchAsync(CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        var pending = await db.Notifications
-            .Where(n => n.PushedAt == null)
-            .OrderBy(n => n.CreatedAt)
-            .ToListAsync(ct);
-
         var sent = 0;
-        foreach (var group in pending.GroupBy(n => n.UserId))
+        var seen = new HashSet<Guid>();
+        for (var batch = 0; batch < MaxBatches; batch++)
         {
-            var userId = group.Key;
-            var preferences = await db.NotificationPreferences.FindAsync([userId], ct);
-            if (preferences is null)
+            // Quem tem avisos por enviar e não está à espera (silêncio, resumo).
+            var users = await db.Notifications.AsNoTracking()
+                .Where(n => n.PushedAt == null)
+                .Where(n => !db.NotificationPreferences.Any(p => p.UserId == n.UserId && p.NextPushAt > now))
+                .Select(n => n.UserId)
+                .Distinct()
+                .Where(id => !seen.Contains(id))
+                .Take(BatchSize)
+                .ToListAsync(ct);
+            if (users.Count == 0)
+            {
+                break;
+            }
+
+            seen.UnionWith(users);
+            sent += await DispatchBatchAsync(users, now, ct);
+            db.ChangeTracker.Clear();
+        }
+
+        return sent;
+    }
+
+    private async Task<int> DispatchBatchAsync(List<Guid> users, DateTimeOffset now, CancellationToken ct)
+    {
+        var pending = (await db.Notifications
+                .Where(n => n.PushedAt == null && users.Contains(n.UserId))
+                .OrderBy(n => n.CreatedAt)
+                .ToListAsync(ct))
+            .ToLookup(n => n.UserId);
+        var preferencesOf = await db.NotificationPreferences.Where(p => users.Contains(p.UserId)).ToDictionaryAsync(p => p.UserId, ct);
+        var languages = await db.Users.Where(u => users.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Language, ct);
+        var devicesOf = (await db.PushDevices.Where(d => users.Contains(d.UserId)).ToListAsync(ct)).ToLookup(d => d.UserId);
+
+        var jobs = new List<Job>();
+        foreach (var userId in users)
+        {
+            var group = pending[userId].ToList();
+            if (group.Count == 0)
+            {
+                continue;
+            }
+
+            if (!preferencesOf.TryGetValue(userId, out var preferences))
             {
                 preferences = new NotificationPreferences { UserId = userId };
                 db.NotificationPreferences.Add(preferences);
@@ -37,57 +90,58 @@ public class NotificationDispatcher(KubicoDbContext db, IPushSender sender, Time
             var unread = group.Where(n => n.ReadAt is null).ToList();
             if (preferences.Delivery != NotificationDelivery.InAppOnly && unread.Count > 0 && !preferences.ShouldPushNow(now))
             {
-                continue; // Horas de silêncio, ou ainda não é a hora do resumo.
+                // Horas de silêncio, ou ainda não é a hora do resumo: até lá, esta pessoa não volta a ser lida.
+                preferences.NextPushAt = preferences.NextPushAfter(now);
+                continue;
             }
 
-            var language = await db.Users.Where(u => u.Id == userId).Select(u => u.Language).SingleOrDefaultAsync(ct);
-            var messages = preferences.Delivery switch
+            preferences.NextPushAt = null;
+            List<PushMessage> messages = preferences.Delivery switch
             {
                 NotificationDelivery.InAppOnly => [],
-                NotificationDelivery.DailyDigest when unread.Count > 0 => [Digest(unread, Texts.Normalize(language))],
-                _ => unread.Select(ToMessage).ToList(),
+                NotificationDelivery.DailyDigest when unread.Count > 0 =>
+                    [Digest(unread, Texts.Normalize(languages.GetValueOrDefault(userId)))],
+                _ => [.. unread.Select(ToMessage)],
             };
-
-            var devices = await db.PushDevices.Where(d => d.UserId == userId).ToListAsync(ct);
-            var failed = false;
-            foreach (var device in devices)
-            {
-                foreach (var message in messages)
-                {
-                    switch (await sender.SendAsync(device.Token, message, ct))
-                    {
-                        case PushResult.Sent:
-                            sent++;
-                            break;
-                        case PushResult.InvalidToken:
-                            db.PushDevices.Remove(device);
-                            break;
-                        case PushResult.Failed:
-                            failed = true;
-                            break;
-                    }
-                }
-            }
-
-            // Falhas passageiras ficam para a próxima volta; o resto fica tratado (mesmo sem telemóveis).
-            if (!failed)
-            {
-                foreach (var notification in group)
-                {
-                    notification.PushedAt = now;
-                }
-
-                if (preferences.Delivery == NotificationDelivery.DailyDigest && messages.Count > 0)
-                {
-                    preferences.LastDigestAt = now;
-                }
-            }
-
-            await db.SaveChangesAsync(ct);
+            jobs.Add(new Job(group, preferences, [.. devicesOf[userId]], messages));
         }
 
+        // Os envios em paralelo (com limite); o resultado de cada um aplica-se depois, já fora do paralelo, porque o
+        // DbContext não pode ser usado por várias threads.
+        var results = new ConcurrentBag<(Job Job, PushDevice Device, PushResult Result)>();
+        await Parallel.ForEachAsync(
+            jobs.SelectMany(job => job.Devices.SelectMany(device => job.Messages.Select(message => (job, device, message)))),
+            new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = ct },
+            async (send, token) => results.Add((send.job, send.device, await sender.SendAsync(send.device.Token, send.message, token))));
+
+        var sent = results.Count(r => r.Result == PushResult.Sent);
+        foreach (var device in results.Where(r => r.Result == PushResult.InvalidToken).Select(r => r.Device).Distinct())
+        {
+            db.PushDevices.Remove(device);
+        }
+
+        var failed = results.Where(r => r.Result == PushResult.Failed).Select(r => r.Job).ToHashSet();
+        foreach (var job in jobs.Where(j => !failed.Contains(j)))
+        {
+            // Falhas passageiras ficam para a próxima volta; o resto fica tratado (mesmo sem telemóveis).
+            foreach (var notification in job.Notifications)
+            {
+                notification.PushedAt = now;
+            }
+
+            if (job.Preferences.Delivery == NotificationDelivery.DailyDigest && job.Messages.Count > 0)
+            {
+                job.Preferences.LastDigestAt = now;
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
         return sent;
     }
+
+    private sealed record Job(
+        IReadOnlyList<Notification> Notifications, NotificationPreferences Preferences, IReadOnlyList<PushDevice> Devices,
+        IReadOnlyList<PushMessage> Messages);
 
     private static PushMessage ToMessage(Notification n) => new(n.Title, n.Body, Data(n));
 

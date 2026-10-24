@@ -45,6 +45,12 @@ builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddKubicoRateLimits(builder.Configuration);
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<NotificationDispatcher>();
+builder.Services.AddScoped<MaintenanceService>();
+if (builder.Configuration.GetValue("Maintenance:Enabled", true))
+{
+    // Limpezas diárias (histórico, avisos, sessões expiradas, fotos): ver MaintenanceService.
+    builder.Services.AddHostedService<MaintenanceWorker>();
+}
 
 // Avisos no telemóvel: Firebase Cloud Messaging quando há conta de serviço (Push:Fcm:ServiceAccountJson);
 // sem ela, os avisos ficam só na app.
@@ -87,6 +93,7 @@ builder.Services.AddTransient<ICalendarProvider>(sp => sp.GetRequiredService<App
 builder.Services.AddSingleton<CalendarSecrets>();
 builder.Services.AddSingleton<TwoFactorService>();
 builder.Services.AddSingleton<CalendarSyncLocks>();
+builder.Services.AddSingleton<CalendarAccessTokens>();
 builder.Services.AddSingleton<CalendarSyncTrigger>();
 builder.Services.AddScoped<CalendarSyncService>();
 if (builder.Configuration.GetValue("CalendarSync:Enabled", true))
@@ -158,7 +165,15 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
 {
     policy.SetIsOriginAllowed(origin => CorsOrigins.IsAllowed(origin, allowedOrigins));
     policy.AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+
+    // O browser guarda a resposta ao "preflight" (OPTIONS) durante 2 horas (o máximo do Chrome), em vez de 5 s:
+    // menos uma ida e volta na primeira ação depois de cada pausa.
+    policy.SetPreflightMaxAge(TimeSpan.FromHours(2));
 }));
+
+// Respostas comprimidas (Brotli ou gzip, conforme o Accept-Encoding): o JSON e o calendário subscrito ficam 8 a 15
+// vezes mais pequenos. Ver ResponseCompressionSetup.
+builder.Services.AddKubicoResponseCompression();
 
 // Atrás de um proxy (TLS no proxy): o IP e o esquema verdadeiros vêm dos cabeçalhos X-Forwarded-*, mas só dos
 // proxies em ForwardedHeaders:KnownProxies (por omissão, só o próprio servidor).
@@ -188,6 +203,7 @@ if (app.Environment.IsProduction() && app.Configuration.GetValue("Https:Enforce"
 }
 
 app.UseSecurityHeaders();
+app.UseKubicoResponseCompression();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();

@@ -80,6 +80,47 @@ public class NotificationPreferences
 
     public DateTimeOffset? LastDigestAt { get; set; }
 
+    /// <summary>
+    /// Antes deste instante não vale a pena voltar a olhar para os avisos por enviar desta pessoa (horas de silêncio,
+    /// ou ainda não é a hora do resumo). O envio filtra por ele na própria consulta, em vez de ler e saltar estas
+    /// pessoas a cada minuto. Null = sem espera. Volta a null quando as preferências mudam.
+    /// </summary>
+    public DateTimeOffset? NextPushAt { get; set; }
+
+    /// <summary>
+    /// O primeiro instante depois de <paramref name="now"/> em que <see cref="ShouldPushNow"/> pode passar a ser
+    /// verdade: só muda no fim do silêncio, à hora do resumo e à meia-noite local (o resumo do dia seguinte). Numa
+    /// hora que não existe ou que se repete (mudança de hora) usa-se uma hora antes: mais vale olhar cedo do que tarde.
+    /// Null = nunca (só na app).
+    /// </summary>
+    public DateTimeOffset? NextPushAfter(DateTimeOffset now)
+    {
+        if (Delivery == NotificationDelivery.InAppOnly)
+        {
+            return null;
+        }
+
+        var zone = TimeZoneInfo.TryFindSystemTimeZoneById(TimeZoneId, out var found) ? found : TimeZoneInfo.Utc;
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime);
+        var times = new[] { QuietUntil, DigestAt, TimeOnly.MinValue }.OfType<TimeOnly>().ToList();
+        var candidates = Enumerable.Range(0, 3)
+            .SelectMany(d => times.Select(t => today.AddDays(d).ToDateTime(t)))
+            .Select(local => (Local: local, Instant: Calendar.ZonedTime.ToInstant(local, zone)))
+            .Where(c => c.Instant > now)
+            .OrderBy(c => c.Instant);
+        foreach (var (local, instant) in candidates)
+        {
+            if (ShouldPushNow(instant))
+            {
+                var early = zone.IsInvalidTime(local) || zone.IsAmbiguousTime(local) ? instant.AddHours(-1) : instant;
+                return early > now ? early : now.AddMinutes(1);
+            }
+        }
+
+        // Não devia acontecer (há sempre um fim de silêncio ou um resumo em 3 dias); volta-se a ver daqui a uma hora.
+        return now.AddHours(1);
+    }
+
     public bool IsQuiet(TimeOnly local) => (QuietFrom, QuietUntil) switch
     {
         ({ } from, { } until) when from < until => local >= from && local < until,

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
+import '../realtime/coalesced_reload.dart';
 import '../realtime/household_realtime.dart';
 import 'dates_pt.dart';
 import 'theme.dart';
@@ -27,6 +28,7 @@ class AllowanceSection extends StatefulWidget {
 class _AllowanceSectionState extends State<AllowanceSection> {
   final _subscriptions = <StreamSubscription<Object?>>[];
   List<Allowance>? _allowances;
+  late final _reload = CoalescedReload(_load);
 
   ApiClient get _api => context.read<ApiClient>();
   String get _householdId => widget.household.id;
@@ -39,8 +41,11 @@ class _AllowanceSectionState extends State<AllowanceSection> {
     _subscriptions
       ..add(
         realtime.events.listen((event) {
-          // Uma tarefa feita (ou não aceite) muda quanto se ganha neste período.
-          if (event is AllowanceChanged || event is ChoreUpserted) _load();
+          // Uma tarefa feita (ou não aceite) muda quanto se ganha neste período: chega como PointsChanged (e não a
+          // cada ChoreUpserted); várias seguidas dão uma só recarga.
+          if (event is AllowanceChanged || (event is PointsChanged && event.householdId == _householdId)) {
+            _reload.request();
+          }
         }),
       )
       ..add(realtime.reconnected.listen((_) => _load()));
@@ -52,6 +57,7 @@ class _AllowanceSectionState extends State<AllowanceSection> {
     for (final s in _subscriptions) {
       s.cancel();
     }
+    _reload.dispose();
     super.dispose();
   }
 

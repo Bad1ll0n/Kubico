@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
+import '../realtime/coalesced_reload.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import 'allowance_section.dart';
@@ -29,6 +30,9 @@ class _RewardsViewState extends State<RewardsView> {
   RewardsOverview? _overview;
   Object? _error;
 
+  /// Os pedidos e os pontos que mudam em rajada (uma criança faz três tarefas seguidas) dão uma só recarga.
+  late final _reload = CoalescedReload(_load);
+
   ApiClient get _api => context.read<ApiClient>();
   String get _householdId => widget.household.id;
   String? get _myUserId => context.read<SessionController>().user?.id;
@@ -50,6 +54,7 @@ class _RewardsViewState extends State<RewardsView> {
     for (final s in _subscriptions) {
       s.cancel();
     }
+    _reload.dispose();
     super.dispose();
   }
 
@@ -70,10 +75,10 @@ class _RewardsViewState extends State<RewardsView> {
   void _onEvent(HouseholdEvent event) {
     switch (event) {
       case RewardsChanged():
-        _load();
-      // Concluir uma tarefa dá pontos.
-      case ChoreUpserted(:final chore) when chore.householdId == _householdId:
-        _load();
+        _reload.request();
+      // Os pontos mudam com as tarefas feitas (não com qualquer mudança a uma tarefa, como o título).
+      case PointsChanged(:final householdId) when householdId == _householdId:
+        _reload.request();
       default:
         break;
     }

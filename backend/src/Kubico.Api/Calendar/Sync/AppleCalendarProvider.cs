@@ -34,6 +34,7 @@ public sealed class AppleCalendarProvider(HttpClient http, IOptions<CalendarSync
 {
     private static readonly XNamespace Dav = "DAV:";
     private static readonly XNamespace CalDav = "urn:ietf:params:xml:ns:caldav";
+    private static readonly XNamespace CalendarServer = "http://calendarserver.org/ns/";
 
     public CalendarProvider Kind => CalendarProvider.Apple;
 
@@ -79,9 +80,20 @@ public sealed class AppleCalendarProvider(HttpClient http, IOptions<CalendarSync
         using var _ = await SendAsync(accessToken, "DELETE", new Uri(calendarId), null, ct, allowMissing: true);
     }
 
+    /// <summary>
+    /// A lista completa dos eventos, com os .ics todos. Antes, pergunta o "ctag" do calendário (muda sempre que algum
+    /// evento muda, cá ou lá): se for o mesmo da última vez (<paramref name="cursor"/>), não houve alterações e não se
+    /// descarrega nada (antes eram ~0,5 MB a cada 5 minutos numa casa com 500 eventos).
+    /// </summary>
     public async Task<ExternalChanges> ListChangesAsync(ExternalCalendar calendar, string? cursor, CancellationToken ct)
     {
         var url = new Uri(calendar.CalendarId);
+        var ctag = await CTagAsync(calendar, url, ct);
+        if (ctag is not null && ctag == cursor)
+        {
+            return new ExternalChanges([], IsFullListing: false, Cursor: cursor);
+        }
+
         var body = new XElement(CalDav + "calendar-query",
             new XAttribute(XNamespace.Xmlns + "d", Dav.NamespaceName),
             new XAttribute(XNamespace.Xmlns + "c", CalDav.NamespaceName),
@@ -106,7 +118,31 @@ public sealed class AppleCalendarProvider(HttpClient http, IOptions<CalendarSync
             }
         }
 
-        return new ExternalChanges(events, IsFullListing: true, Cursor: null);
+        return new ExternalChanges(events, IsFullListing: true, Cursor: ctag);
+    }
+
+    /// <summary>O ctag do calendário, ou null se o servidor não o der (aí faz-se sempre a lista completa).</summary>
+    private async Task<string?> CTagAsync(ExternalCalendar calendar, Uri url, CancellationToken ct)
+    {
+        var body = new XElement(Dav + "propfind",
+            new XAttribute(XNamespace.Xmlns + "d", Dav.NamespaceName),
+            new XAttribute(XNamespace.Xmlns + "cs", CalendarServer.NamespaceName),
+            new XElement(Dav + "prop", new XElement(CalendarServer + "getctag")));
+        try
+        {
+            using var response = await SendAsync(calendar.AccessToken, "PROPFIND", url, Xml(body), ct, depth: 0, allowMissing: true);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null; // Sem o calendário, o REPORT a seguir diz que foi apagado.
+            }
+
+            var document = XDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            return document.Descendants(CalendarServer + "getctag").FirstOrDefault()?.Value.Trim() is { Length: > 0 } tag ? tag : null;
+        }
+        catch (Exception e) when (e is CalendarProviderException or System.Xml.XmlException)
+        {
+            return null;
+        }
     }
 
     public async Task<ExternalRef> CreateEventAsync(ExternalCalendar calendar, ExternalEventData data, CancellationToken ct)

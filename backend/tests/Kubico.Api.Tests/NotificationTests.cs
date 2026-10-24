@@ -198,6 +198,32 @@ public class NotificationDispatchTests
     }
 
     [Fact]
+    public async Task Whoever_waits_for_quiet_hours_or_the_digest_is_left_alone_until_then_and_changing_the_preferences_resets_it()
+    {
+        using var setup = await Setup.CreateAsync();
+        await setup.SavePreferences(NotificationDelivery.Immediate, quietFrom: new TimeOnly(22, 0), quietUntil: new TimeOnly(8, 0));
+        await setup.AssignChore("Lixo");
+
+        var atMidnight = await setup.Dispatch();
+        var waitUntil = await setup.Query(db => db.NotificationPreferences.Single().NextPushAt);
+        setup.Clock.Advance(TimeSpan.FromHours(7));
+        var atSeven = await setup.Dispatch();
+        await setup.SavePreferences(NotificationDelivery.DailyDigest, digestAt: new TimeOnly(9, 30));
+        var afterChange = await setup.Query(db => db.NotificationPreferences.Single().NextPushAt);
+        var stillSeven = await setup.Dispatch();
+        var digestAt = await setup.Query(db => db.NotificationPreferences.Single().NextPushAt);
+        setup.Clock.Advance(TimeSpan.FromHours(2.5));
+        var atHalfNine = await setup.Dispatch();
+
+        var midnight = setup.Clock.GetUtcNow().AddHours(-9.5);
+        Assert.Equal((0, 0, 0, 1), (atMidnight, atSeven, stillSeven, atHalfNine));
+        Assert.Equal(midnight.AddHours(8), waitUntil);
+        Assert.Null(afterChange);
+        Assert.Equal(midnight.AddHours(9.5), digestAt);
+        Assert.Equal(0, await setup.Count(db => db.Notifications.Count(n => n.PushedAt == null)));
+    }
+
+    [Fact]
     public async Task Daily_digest_sends_one_message_at_the_chosen_time()
     {
         using var setup = await Setup.CreateAsync();
@@ -296,7 +322,9 @@ public class NotificationDispatchTests
             return await scope.ServiceProvider.GetRequiredService<NotificationDispatcher>().DispatchAsync(default);
         }
 
-        public async Task<int> Count(Func<Kubico.Infrastructure.Persistence.KubicoDbContext, int> query)
+        public Task<int> Count(Func<Kubico.Infrastructure.Persistence.KubicoDbContext, int> query) => Query(query);
+
+        public async Task<T> Query<T>(Func<Kubico.Infrastructure.Persistence.KubicoDbContext, T> query)
         {
             await using var scope = _app.Services.CreateAsyncScope();
             return query(scope.ServiceProvider.GetRequiredService<Kubico.Infrastructure.Persistence.KubicoDbContext>());
@@ -325,15 +353,19 @@ public sealed class RecordingPushSender : IPushSender
     public List<(string Token, PushMessage Message)> Sent { get; } = [];
     public HashSet<string> InvalidTokens { get; } = [];
 
+    /// <summary>Os envios correm em paralelo (NotificationDispatcher.Parallelism).</summary>
     public Task<PushResult> SendAsync(string deviceToken, PushMessage message, CancellationToken ct)
     {
-        if (InvalidTokens.Contains(deviceToken))
+        lock (Sent)
         {
-            return Task.FromResult(PushResult.InvalidToken);
-        }
+            if (InvalidTokens.Contains(deviceToken))
+            {
+                return Task.FromResult(PushResult.InvalidToken);
+            }
 
-        Sent.Add((deviceToken, message));
-        return Task.FromResult(PushResult.Sent);
+            Sent.Add((deviceToken, message));
+            return Task.FromResult(PushResult.Sent);
+        }
     }
 }
 

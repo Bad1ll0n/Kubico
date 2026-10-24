@@ -244,6 +244,7 @@ public static class ChoreEndpoints
         activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Chores, $"apagou a tarefa «{chore.Title}»");
         await db.SaveChangesAsync(ct);
         await notifier.ChoreDeleted(householdId, choreId, ct);
+        await notifier.PointsChanged(householdId, ct); // As conclusões (e os pontos) foram com a tarefa.
         return Results.NoContent();
     }
 
@@ -472,6 +473,7 @@ public static class ChoreEndpoints
         await db.SaveChangesAsync(ct);
 
         await notifier.ChoreUpserted(chore.HouseholdId, ToDto(chore), ct);
+        await notifier.PointsChanged(chore.HouseholdId, ct);
         await NotifyAssignee(notifications, chore, previousAssignee, userId, $"É a tua vez: {chore.Title}", ct);
         return completion;
     }
@@ -501,12 +503,12 @@ public static class ChoreEndpoints
             .Select(m => new { m.UserId, m.User.DisplayName, m.Color })
             .ToListAsync(ct);
 
-        var completions = await db.ChoreCompletions.AsNoTracking()
+        // Agrupado na base (antes vinham todas as conclusões do período, até 365 dias, para somar aqui).
+        var byUser = await db.ChoreCompletions.AsNoTracking()
             .Where(c => c.Chore.HouseholdId == householdId && c.CompletedAt >= since && c.RejectedAt == null)
-            .Select(c => new { c.UserId, c.Points })
-            .ToListAsync(ct);
-
-        var byUser = completions.GroupBy(c => c.UserId).ToDictionary(g => g.Key, g => (Count: g.Count(), Points: g.Sum(c => c.Points)));
+            .GroupBy(c => c.UserId)
+            .Select(g => new { UserId = g.Key, Count = g.Count(), Points = g.Sum(c => c.Points) })
+            .ToDictionaryAsync(g => g.UserId, g => (g.Count, g.Points), ct);
 
         var stats = members
             .Select(m =>

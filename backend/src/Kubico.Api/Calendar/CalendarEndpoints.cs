@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 using Kubico.Api.Activity;
 using Kubico.Api.Common;
 using Kubico.Api.Notifications;
@@ -53,15 +54,16 @@ public record CalendarEventDto(
 /// <summary>
 /// Uma ocorrência no intervalo pedido. <c>OccurrenceDate</c> identifica-a dentro da série (para alterar ou apagar
 /// só esta). <c>ConflictUserIds</c> são os membros que estão noutro evento ao mesmo tempo (ou ocupados quando
-/// têm de levar ou ir buscar).
+/// têm de levar ou ir buscar). Os campos vazios (as horas nos de dia inteiro, os dias nos que têm hora) não vão no
+/// JSON: são milhares por mês.
 /// </summary>
 public record CalendarOccurrenceDto(
     Guid EventId,
     DateOnly OccurrenceDate,
-    DateTimeOffset? StartsAt,
-    DateTimeOffset? EndsAt,
-    DateOnly? StartDate,
-    DateOnly? EndDate,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? StartsAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? EndsAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? StartDate,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? EndDate,
     IReadOnlyList<Guid> ConflictUserIds);
 
 public record HolidayDto(DateOnly Date, string Name);
@@ -129,9 +131,11 @@ public static class CalendarEndpoints
         var windowStart = ZonedTime.StartOfDay(windowFirst, zone);
         var windowEnd = ZonedTime.StartOfDay(windowLast.AddDays(1), zone);
 
+        // As séries que já acabaram (RecurrenceEndDate, com margem para a duração) ficam de fora logo na consulta.
         var events = await db.CalendarEvents.AsNoTracking()
             .Where(e => e.HouseholdId == householdId)
-            .Where(e => (e.Recurrence != null && (e.StartsAt < windowEnd || e.StartDate <= windowLast))
+            .Where(e => (e.Recurrence != null && (e.StartsAt < windowEnd || e.StartDate <= windowLast)
+                    && (e.RecurrenceEndDate == null || e.RecurrenceEndDate >= windowFirst))
                 || (e.StartsAt < windowEnd && e.EndsAt > windowStart)
                 || (e.StartDate <= windowLast && e.EndDate >= windowFirst))
             .ToListAsync(ct);
@@ -147,7 +151,7 @@ public static class CalendarEndpoints
         var absences = await db.MemberAbsences.AsNoTracking()
             .Where(a => a.HouseholdId == householdId && a.StartDate <= windowLast && a.EndDate >= windowFirst)
             .ToListAsync(ct);
-        var conflicts = CalendarConflicts.Find(occurrences, MemberAbsence.Checker(absences), zone);
+        var conflicts = CalendarConflicts.Find(occurrences, absences.Count == 0 ? null : MemberAbsence.Checker(absences), zone);
 
         var rangeStart = ZonedTime.StartOfDay(first, zone);
         var rangeEnd = ZonedTime.StartOfDay(last.AddDays(1), zone);
@@ -537,14 +541,10 @@ public static class CalendarEndpoints
         }
     }
 
-    private static async Task NotifyDeleted(
-        HouseholdNotifier notifier, Guid householdId, IEnumerable<Guid> eventIds, CancellationToken ct)
-    {
-        foreach (var eventId in eventIds)
-        {
-            await notifier.CalendarEventDeleted(householdId, eventId, ct);
-        }
-    }
+    /// <summary>Os eventos que saíram, numa só mensagem (<c>CalendarEventsDeleted</c>) quando são vários.</summary>
+    private static Task NotifyDeleted(
+        HouseholdNotifier notifier, Guid householdId, IEnumerable<Guid> eventIds, CancellationToken ct) =>
+        notifier.CalendarEventsDeleted(householdId, [.. eventIds], ct);
 
     /// <summary>true = "esta e as seguintes"; false = "só esta"; null = valor inválido.</summary>
     private static bool? ParseScope(string? scope) => scope?.ToLowerInvariant() switch

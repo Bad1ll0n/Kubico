@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
+import '../realtime/coalesced_reload.dart';
 import '../realtime/household_realtime.dart';
 import 'calendar_event_editor.dart';
 import 'calendar_feed_dialog.dart';
@@ -142,6 +143,10 @@ class _CalendarViewState extends State<CalendarView> {
   /// Só conta a resposta do pedido mais recente (ao navegar depressa, as anteriores chegam tarde).
   var _request = 0;
 
+  /// As alterações que chegam em tempo real (de outra pessoa, ou uma sincronização do Google com 20 eventos) juntam-se
+  /// numa só recarga do intervalo, sem voltar a pedir a casa (P2).
+  late final _reload = CoalescedReload(() => _load(withDetails: false));
+
   ApiClient get _api => context.read<ApiClient>();
   String get _householdId => widget.household.id;
 
@@ -160,21 +165,24 @@ class _CalendarViewState extends State<CalendarView> {
     for (final s in _subscriptions) {
       s.cancel();
     }
+    _reload.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
+  /// O intervalo à vista e (com [withDetails], ou se ainda não se tem) os membros da casa, para as cores e os nomes.
+  Future<void> _load({bool withDetails = true}) async {
     final range = visibleRange(_mode, _selected);
     final request = ++_request;
+    final needsDetails = withDetails || _details == null;
     try {
       final results = await Future.wait([
         _api.getCalendar(_householdId, range.$1, range.$2),
-        _api.getHousehold(_householdId),
+        if (needsDetails) _api.getHousehold(_householdId),
       ]);
       if (!mounted || request != _request) return;
       setState(() {
         _calendar = results[0] as CalendarRange;
-        _details = results[1] as HouseholdDetails;
+        if (needsDetails) _details = results[1] as HouseholdDetails;
         _loadedRange = range;
         _error = null;
       });
@@ -183,14 +191,28 @@ class _CalendarViewState extends State<CalendarView> {
     }
   }
 
+  Future<void> _loadDetails() async {
+    try {
+      final details = await _api.getHousehold(_householdId);
+      if (mounted) setState(() => _details = details);
+    } catch (_) {
+      // Ficam os nomes e as cores que já se tinham.
+    }
+  }
+
   void _onEvent(HouseholdEvent event) {
     switch (event) {
       case CalendarEventUpserted(event: final changed) when changed.householdId == _householdId:
         // Ignora versões que já temos (por exemplo, o eco das nossas próprias alterações).
         final known = _calendar?.events[changed.id];
-        if (known == null || changed.updatedAt.isAfter(known.updatedAt)) _load();
+        if (known == null || changed.updatedAt.isAfter(known.updatedAt)) _reload.request();
       case CalendarEventDeleted(:final eventId) when _calendar?.events.containsKey(eventId) ?? false:
-        _load();
+        _reload.request();
+      case CalendarEventsDeleted(:final eventIds) when eventIds.any((id) => _calendar?.events.containsKey(id) ?? false):
+        _reload.request();
+      // Os nomes e as cores vêm dos membros: só se voltam a pedir quando eles mudam.
+      case MembersChanged(:final householdId) when householdId == _householdId:
+        _loadDetails();
       default:
         break;
     }
@@ -364,32 +386,35 @@ class _CalendarViewState extends State<CalendarView> {
   Widget _content(CalendarRange calendar) {
     final (first, last) = visibleRange(_mode, _selected);
     final days = _mode == CalendarMode.month ? [_selected] : daysIn(first, last);
+    // Na semana de uma casa cheia são centenas de ocorrências: só se constroem as que aparecem no ecrã (P10).
+    final rows = <WidgetBuilder>[
+      if (_mode == CalendarMode.month)
+        (_) => _MonthGrid(
+          start: first,
+          month: _selected.month,
+          selected: _selected,
+          calendar: calendar,
+          colorFor: _colorFor,
+          onSelect: _go,
+        ),
+      for (final day in days) ..._daySection(calendar, day),
+    ];
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView(
+      child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-        children: [
-          if (_mode == CalendarMode.month)
-            _MonthGrid(
-              start: first,
-              month: _selected.month,
-              selected: _selected,
-              calendar: calendar,
-              colorFor: _colorFor,
-              onSelect: _go,
-            ),
-          for (final day in days) ..._daySection(calendar, day),
-        ],
+        itemCount: rows.length,
+        itemBuilder: (context, index) => rows[index](context),
       ),
     );
   }
 
-  List<Widget> _daySection(CalendarRange calendar, DateTime day) {
+  List<WidgetBuilder> _daySection(CalendarRange calendar, DateTime day) {
     final theme = Theme.of(context);
     final holiday = calendar.holidayOn(day);
     final occurrences = calendar.on(day);
     return [
-      Padding(
+      (_) => Padding(
         padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
         child: Text(
           holiday == null ? formatLongDate(day) : '${formatLongDate(day)} · ${holiday.name}',
@@ -397,11 +422,11 @@ class _CalendarViewState extends State<CalendarView> {
         ),
       ),
       if (occurrences.isEmpty)
-        Padding(
+        (_) => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Text('Sem eventos.'.tr, style: TextStyle(color: theme.colorScheme.outline)),
         ),
-      for (final o in occurrences) _tile(o, calendar.events[o.eventId]!, day),
+      for (final o in occurrences) (_) => _tile(o, calendar.events[o.eventId]!, day),
     ];
   }
 

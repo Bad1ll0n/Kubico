@@ -89,7 +89,12 @@ class _FakeVoice implements VoiceInput {
 
 Future<void> _pump(WidgetTester tester, _Server server, {String? scanned, VoiceInput? voice}) async {
   final api = ApiClient(baseUrl: 'http://api', httpClient: server.client)..accessToken = 't';
-  final shopping = ShoppingRepository(api: api, store: MemoryKeyValueStore(), retryEvery: const Duration(hours: 1));
+  final shopping = ShoppingRepository(
+    api: api,
+    store: MemoryKeyValueStore(),
+    retryEvery: const Duration(hours: 1),
+    saveDelay: Duration.zero,
+  );
   const list = ShoppingList(id: 'l1', householdId: 'h1', name: 'Supermercado', itemCount: 0, checkedCount: 0);
   await tester.pumpWidget(
     MultiProvider(

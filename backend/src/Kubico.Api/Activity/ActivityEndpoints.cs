@@ -51,7 +51,7 @@ public static class ActivityEndpoints
         ClaimsPrincipal principal,
         KubicoDbContext db,
         HouseholdAccess access,
-        ActivityLog log,
+        TimeProvider clock,
         HttpContext http,
         CancellationToken ct)
     {
@@ -62,13 +62,29 @@ public static class ActivityEndpoints
             return error;
         }
 
-        await log.PruneAsync(householdId, ct);
+        // Ler o histórico já não apaga nada (a limpeza dos 30 dias é do MaintenanceWorker, uma vez por dia): aqui só
+        // se deixam de fora as entradas mais antigas. Também não se leem os valores de antes (UndoData, que podem ter
+        // dezenas de KB por entrada): basta saber se existem.
+        var oldest = clock.GetUtcNow() - ActivityEntry.KeepFor;
         var levels = await access.GetAllAccessAsync(householdId, role!.Value, ct);
-        var entries = await db.ActivityEntries.AsNoTracking()
-            .Where(a => a.HouseholdId == householdId)
+        var entries = (await db.ActivityEntries.AsNoTracking()
+            .Where(a => a.HouseholdId == householdId && a.CreatedAt >= oldest)
             .OrderByDescending(a => a.Id)
             .Take(300)
-            .ToListAsync(ct);
+            .Select(a => new
+            {
+                a.Id, a.UserId, a.Module, a.RequiredAccess, a.PrivateToUserId, a.Summary, a.EntityKeys, a.UndoOfId,
+                a.CreatedAt, a.UndoneAt, a.UndoneByUserId, HasUndoData = a.UndoData != null,
+            })
+            .ToListAsync(ct))
+            .Select(a => new ActivityEntry
+            {
+                Id = a.Id, HouseholdId = householdId, UserId = a.UserId, Module = a.Module, RequiredAccess = a.RequiredAccess,
+                PrivateToUserId = a.PrivateToUserId, Summary = a.Summary, EntityKeys = a.EntityKeys, UndoOfId = a.UndoOfId,
+                CreatedAt = a.CreatedAt, UndoneAt = a.UndoneAt, UndoneByUserId = a.UndoneByUserId,
+                UndoData = a.HasUndoData ? string.Empty : null,
+            })
+            .ToList();
 
         // Do mais recente para o mais antigo: uma entrada só se desfaz se nada mais recente mexeu nas mesmas coisas.
         var touched = new HashSet<string>();
@@ -116,6 +132,7 @@ public static class ActivityEndpoints
         HouseholdAccess access,
         ActivityLog log,
         HouseholdNotifier notifier,
+        TimeProvider clock,
         HttpContext http,
         CancellationToken ct)
     {
@@ -126,7 +143,10 @@ public static class ActivityEndpoints
             return error;
         }
 
-        var entry = await db.ActivityEntries.SingleOrDefaultAsync(a => a.Id == entryId && a.HouseholdId == householdId, ct);
+        // Mais de 30 dias: é como se já tivesse sido apagada (a limpeza corre uma vez por dia).
+        var oldest = clock.GetUtcNow() - ActivityEntry.KeepFor;
+        var entry = await db.ActivityEntries.SingleOrDefaultAsync(
+            a => a.Id == entryId && a.HouseholdId == householdId && a.CreatedAt >= oldest, ct);
         if (entry is null)
         {
             return Results.NotFound();
@@ -238,6 +258,9 @@ public static class ActivityEndpoints
         Dictionary<Guid, Guid> itemLists,
         CancellationToken ct)
     {
+        // Os artigos que saíram vão juntos (por lista), e cada lista tocada leva as contagens novas no fim.
+        var removedItems = new Dictionary<Guid, List<Guid>>();
+        var touchedLists = new HashSet<Guid>();
         foreach (var (type, id) in keys.Select(ActivityLog.Parse))
         {
             if (type == typeof(ShoppingItem))
@@ -245,10 +268,12 @@ public static class ActivityEndpoints
                 if (await db.ShoppingItems.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id, ct) is { } item)
                 {
                     await notifier.ShoppingItemUpserted(householdId, ShoppingEndpoints.ToDto(item), ct);
+                    touchedLists.Add(item.ListId);
                 }
                 else if (itemLists.TryGetValue(id, out var listId))
                 {
-                    await notifier.ShoppingItemDeleted(householdId, listId, id, ct);
+                    (removedItems.TryGetValue(listId, out var ids) ? ids : removedItems[listId] = []).Add(id);
+                    touchedLists.Add(listId);
                 }
             }
             else if (type == typeof(ShoppingList))
@@ -276,6 +301,22 @@ public static class ActivityEndpoints
                 var reward = await db.Rewards.AsNoTracking().SingleOrDefaultAsync(r => r.Id == id, ct);
                 await (reward is null ? notifier.RewardDeleted(householdId, id, ct) : notifier.RewardUpserted(householdId, RewardEndpoints.ToDto(reward), ct));
             }
+        }
+
+        // Desfazer uma tarefa feita (ou a tarefa toda) muda os pontos.
+        if (keys.Select(ActivityLog.Parse).Any(k => k.Type == typeof(ChoreCompletion) || k.Type == typeof(Chore)))
+        {
+            await notifier.PointsChanged(householdId, ct);
+        }
+
+        foreach (var (listId, ids) in removedItems)
+        {
+            await notifier.ShoppingItemsDeleted(householdId, listId, ids, ct);
+        }
+
+        foreach (var listId in touchedLists)
+        {
+            await ShoppingEndpoints.NotifyCountsAsync(db, notifier, householdId, listId, ct);
         }
     }
 

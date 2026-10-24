@@ -18,7 +18,7 @@ import 'src/storage/key_value_store.dart';
 import 'src/ui/app.dart';
 
 Future<void> main() async {
-  // O Firebase arranca antes do runApp e precisa dos canais da plataforma já prontos.
+  // O Firebase (quando arrancar) e as preferências precisam dos canais da plataforma já prontos.
   WidgetsFlutterBinding.ensureInitialized();
   final preferences = PreferencesStore();
   await AppLanguage.restore(preferences);
@@ -39,8 +39,11 @@ Future<void> main() async {
     notifications.clear();
   };
 
-  // Avisos fora da app (Firebase, no Android e na web). Arranca em paralelo para não atrasar a abertura da app.
-  final push = PushRegistration(api: api, source: createPushTokenSource());
+  // A cópia das listas grava-se com um pequeno atraso; ao ir para segundo plano (ou fechar), grava-se já.
+  AppLifecycleListener(onPause: shopping.flush, onHide: shopping.flush, onDetach: shopping.flush);
+
+  // Avisos fora da app (Firebase, no Android e na web). O Firebase só arranca quando a pessoa entra (P8).
+  final push = PushRegistration.lazy(api: api, create: createPushTokenSource);
 
   runApp(
     MultiProvider(

@@ -87,13 +87,7 @@ public static class AllowanceEndpoints
             .Where(a => a.HouseholdId == householdId && (level >= ModuleAccess.Manage || a.UserId == me))
             .ToListAsync(ct);
         var household = await db.Households.AsNoTracking().SingleAsync(h => h.Id == householdId, ct);
-        var result = new List<AllowanceDto>();
-        foreach (var allowance in allowances)
-        {
-            result.Add(await DescribeAsync(db, household, allowance, clock.GetUtcNow(), ct));
-        }
-
-        return Results.Ok(result);
+        return Results.Ok(await DescribeAllAsync(db, household, allowances, clock.GetUtcNow(), ct));
     }
 
     private static async Task<IResult> SaveAllowance(
@@ -356,16 +350,54 @@ public static class AllowanceEndpoints
     }
 
     private static async Task<AllowanceDto> DescribeAsync(
-        KubicoDbContext db, Household household, Allowance allowance, DateTimeOffset now, CancellationToken ct)
-    {
-        var today = household.Today(now);
-        var starts = allowance.PeriodStarts(today, allowance.Period == AllowancePeriod.Weekly ? MaxWeeks : MaxMonths).ToList();
-        var oldest = starts.Count == 0 ? today : starts[^1];
-        var payments = await db.AllowancePayments.AsNoTracking()
-            .Where(p => p.HouseholdId == household.Id && p.UserId == allowance.UserId && p.PeriodStart >= oldest)
-            .ToListAsync(ct);
-        var completions = await CompletionTimesAsync(db, household.Id, allowance.UserId, StartOfDay(household, oldest), ct);
+        KubicoDbContext db, Household household, Allowance allowance, DateTimeOffset now, CancellationToken ct) =>
+        (await DescribeAllAsync(db, household, [allowance], now, ct))[0];
 
+    /// <summary>
+    /// As mesadas de várias pessoas com duas consultas ao todo (os pagamentos e as tarefas feitas de todas, desde o
+    /// período mais antigo que se mostra), repartidas depois em memória. Antes eram duas por pessoa (P14).
+    /// </summary>
+    private static async Task<List<AllowanceDto>> DescribeAllAsync(
+        KubicoDbContext db, Household household, IReadOnlyList<Allowance> allowances, DateTimeOffset now, CancellationToken ct)
+    {
+        if (allowances.Count == 0)
+        {
+            return [];
+        }
+
+        var today = household.Today(now);
+        var startsOf = allowances.ToDictionary(
+            a => a.UserId,
+            a => a.PeriodStarts(today, a.Period == AllowancePeriod.Weekly ? MaxWeeks : MaxMonths).ToList());
+        var oldest = startsOf.Values.Select(starts => starts.Count == 0 ? today : starts[^1]).Min();
+        var users = startsOf.Keys.ToList();
+        var payments = (await db.AllowancePayments.AsNoTracking()
+                .Where(p => p.HouseholdId == household.Id && users.Contains(p.UserId) && p.PeriodStart >= oldest)
+                .ToListAsync(ct))
+            .ToLookup(p => p.UserId);
+        var since = StartOfDay(household, oldest);
+        var completions = (await db.ChoreCompletions.AsNoTracking()
+                .Where(c => c.Chore.HouseholdId == household.Id && users.Contains(c.UserId) && c.RejectedAt == null && c.CompletedAt >= since)
+                .Select(c => new { c.UserId, c.CompletedAt })
+                .ToListAsync(ct))
+            .ToLookup(c => c.UserId, c => c.CompletedAt);
+
+        return
+        [
+            .. allowances.Select(a => Describe(
+                household, a, today, startsOf[a.UserId], [.. payments[a.UserId]], [.. completions[a.UserId]])),
+        ];
+    }
+
+    /// <summary>Os períodos de uma mesada, a partir dos pagamentos e das horas das tarefas feitas dessa pessoa.</summary>
+    private static AllowanceDto Describe(
+        Household household,
+        Allowance allowance,
+        DateOnly today,
+        List<DateOnly> starts,
+        List<AllowancePayment> payments,
+        List<DateTimeOffset> completions)
+    {
         var periods = starts.Select(start =>
         {
             var end = Allowance.PeriodEnd(start, allowance.Period);

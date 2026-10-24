@@ -42,7 +42,7 @@ public class CalendarProviderTests
         var tokens = await google.ExchangeCodeAsync("codigo", "http://localhost/cb", "verificador", default);
         var form = handler.Requests[0].Body;
 
-        Assert.Equal(new OAuthTokens("a", "r", "ana@example.com"), tokens);
+        Assert.Equal(new OAuthTokens("a", "r", "ana@example.com", TimeSpan.FromSeconds(3599)), tokens);
         Assert.Contains("code_verifier=verificador", form);
         Assert.Contains("grant_type=authorization_code", form);
         await Assert.ThrowsAsync<CalendarAuthException>(() => google.RefreshAsync("r", default));

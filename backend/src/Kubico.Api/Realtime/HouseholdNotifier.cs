@@ -16,14 +16,27 @@ public static class HouseholdEvents
     public const string ShoppingListDeleted = "ShoppingListDeleted";
     public const string ShoppingItemUpserted = "ShoppingItemUpserted";
     public const string ShoppingItemDeleted = "ShoppingItemDeleted";
+
+    /// <summary>Vários artigos de uma lista saíram de uma vez (limpar o carrinho): leva o id da lista e os dos artigos.</summary>
+    public const string ShoppingItemsDeleted = "ShoppingItemsDeleted";
     public const string ChoreUpserted = "ChoreUpserted";
     public const string ChoreDeleted = "ChoreDeleted";
     public const string CalendarEventUpserted = "CalendarEventUpserted";
     public const string CalendarEventDeleted = "CalendarEventDeleted";
+
+    /// <summary>Vários eventos saíram de uma vez (uma série e as suas exceções): leva os ids.</summary>
+    public const string CalendarEventsDeleted = "CalendarEventsDeleted";
     public const string RewardUpserted = "RewardUpserted";
     public const string RewardDeleted = "RewardDeleted";
     public const string RedemptionUpserted = "RedemptionUpserted";
     public const string RedemptionDeleted = "RedemptionDeleted";
+
+    /// <summary>
+    /// Mudaram os pontos ganhos (uma tarefa feita, não aceite, desfeita ou apagada): os saldos, a mesada e as
+    /// estatísticas voltam a ler-se. Vai para a casa toda, só com o id da casa. Assim a app não tem de os voltar a pedir
+    /// a cada <c>ChoreUpserted</c> (mudar o título de uma tarefa não mexe nos pontos).
+    /// </summary>
+    public const string PointsChanged = "PointsChanged";
 
     /// <summary>Mudou a mesada de alguém (valores, ou um período pago). Leva o id da pessoa.</summary>
     public const string AllowanceChanged = "AllowanceChanged";
@@ -50,7 +63,9 @@ public static class HouseholdEvents
 
 /// <summary>
 /// Avisa as apps das alterações em tempo real. As alterações ao calendário também pedem uma sincronização com os
-/// calendários externos ligados.
+/// calendários externos ligados. Para as apps não terem de voltar a pedir listas inteiras: cada alteração aos artigos
+/// vai seguida do <c>ShoppingListUpserted</c> com as contagens novas (<c>ShoppingEndpoints.NotifyCountsAsync</c>), e o
+/// que sai de uma vez (limpar o carrinho, uma série com exceções) vai numa só mensagem.
 /// </summary>
 public class HouseholdNotifier(IHubContext<HouseholdHub> hub, HouseholdGroups groups, CalendarSyncTrigger calendarSync)
 {
@@ -65,6 +80,15 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub, HouseholdGroups gr
 
     public Task ShoppingItemDeleted(Guid householdId, Guid listId, Guid itemId, CancellationToken ct) =>
         Area(householdId, HouseholdModule.Shopping).SendAsync(HouseholdEvents.ShoppingItemDeleted, listId, itemId, ct);
+
+    /// <summary>Uma mensagem só (em vez de uma por artigo); com um só artigo, vai o <c>ShoppingItemDeleted</c> de sempre.</summary>
+    public Task ShoppingItemsDeleted(Guid householdId, Guid listId, IReadOnlyCollection<Guid> itemIds, CancellationToken ct) =>
+        itemIds.Count switch
+        {
+            0 => Task.CompletedTask,
+            1 => ShoppingItemDeleted(householdId, listId, itemIds.Single(), ct),
+            _ => Area(householdId, HouseholdModule.Shopping).SendAsync(HouseholdEvents.ShoppingItemsDeleted, listId, itemIds, ct),
+        };
 
     public Task ChoreUpserted(Guid householdId, ChoreDto chore, CancellationToken ct) =>
         Area(householdId, HouseholdModule.Chores).SendAsync(HouseholdEvents.ChoreUpserted, chore, ct);
@@ -83,6 +107,21 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub, HouseholdGroups gr
         calendarSync.Request(householdId);
         return Area(householdId, HouseholdModule.Calendar).SendAsync(HouseholdEvents.CalendarEventDeleted, eventId, ct);
     }
+
+    /// <summary>Uma mensagem só (em vez de uma por evento); com um só, vai o <c>CalendarEventDeleted</c> de sempre.</summary>
+    public Task CalendarEventsDeleted(Guid householdId, IReadOnlyCollection<Guid> eventIds, CancellationToken ct)
+    {
+        if (eventIds.Count <= 1)
+        {
+            return eventIds.Count == 0 ? Task.CompletedTask : CalendarEventDeleted(householdId, eventIds.Single(), ct);
+        }
+
+        calendarSync.Request(householdId);
+        return Area(householdId, HouseholdModule.Calendar).SendAsync(HouseholdEvents.CalendarEventsDeleted, eventIds, ct);
+    }
+
+    public Task PointsChanged(Guid householdId, CancellationToken ct) =>
+        Group(householdId).SendAsync(HouseholdEvents.PointsChanged, householdId, ct);
 
     public Task AbsenceUpserted(Guid householdId, AbsenceDto absence, CancellationToken ct) =>
         Group(householdId).SendAsync(HouseholdEvents.AbsenceUpserted, absence, ct);

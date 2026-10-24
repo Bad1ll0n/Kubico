@@ -36,8 +36,11 @@ public class CalendarSyncOptions
 /// <summary>O calendário do Kubico numa conta externa, pronto a usar: o token de acesso, o id e o fuso da casa.</summary>
 public sealed record ExternalCalendar(string AccessToken, string CalendarId, TimeZoneInfo Zone);
 
-/// <summary>A resposta do servidor OAuth. O refresh token só vem quando muda (a Microsoft troca-o a cada uso).</summary>
-public sealed record OAuthTokens(string AccessToken, string? RefreshToken, string? Email);
+/// <summary>
+/// A resposta do servidor OAuth. O refresh token só vem quando muda (a Microsoft troca-o a cada uso).
+/// <see cref="ExpiresIn"/>: quanto tempo serve o token de acesso (o "expires_in"), quando o serviço o diz.
+/// </summary>
+public sealed record OAuthTokens(string AccessToken, string? RefreshToken, string? Email, TimeSpan? ExpiresIn = null);
 
 /// <summary>
 /// Um evento no modelo do Kubico, a caminho de ou vindo de um calendário externo. <see cref="EndDate"/> é inclusive.

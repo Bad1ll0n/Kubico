@@ -23,6 +23,9 @@ public sealed partial class FakeCalDavServer : HttpMessageHandler
 
     public List<string> Requests { get; } = [];
 
+    /// <summary>Quantas listas completas (REPORT) se pediram de cada calendário.</summary>
+    public Dictionary<string, int> Reports { get; } = [];
+
     public (string Path, Dictionary<string, string> Resources) CalendarNamed(string name)
     {
         lock (_lock)
@@ -106,7 +109,15 @@ public sealed partial class FakeCalDavServer : HttpMessageHandler
             case "MKCALENDAR" when path.StartsWith("/123/calendars/", StringComparison.Ordinal) && !Calendars.ContainsKey(path):
                 Calendars[path] = (DisplayName().Match(body).Groups[1].Value, []);
                 return new HttpResponseMessage(HttpStatusCode.Created);
+            case "PROPFIND" when Calendars.TryGetValue(path, out var calendar):
+                Reports.TryAdd(path, 0);
+                return Multistatus($"""
+                    <response><href>{path}</href><propstat><prop>
+                    <getctag xmlns="http://calendarserver.org/ns/">{CTag(calendar.Resources)}</getctag>
+                    </prop><status>HTTP/1.1 200 OK</status></propstat></response>
+                    """);
             case "REPORT" when Calendars.TryGetValue(path, out var calendar):
+                Reports[path] = Reports.GetValueOrDefault(path) + 1;
                 return Multistatus(string.Concat(calendar.Resources.Select(r => $"""
                     <response><href>{r.Key}</href><propstat><prop>
                     <getetag>"{ETag(r.Value)}"</getetag>
@@ -142,6 +153,11 @@ public sealed partial class FakeCalDavServer : HttpMessageHandler
     };
 
     private static string ETag(string text) => text.GetHashCode(StringComparison.Ordinal).ToString("x8");
+
+    /// <summary>Muda sempre que algum recurso do calendário muda (como o ctag do iCloud).</summary>
+    private static string CTag(Dictionary<string, string> resources) =>
+        string.Concat(resources.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => r.Key + ETag(r.Value)))
+            .GetHashCode(StringComparison.Ordinal).ToString("x8");
 
     [GeneratedRegex("<(?:\\w+:)?displayname>([^<]*)</(?:\\w+:)?displayname>")]
     private static partial Regex DisplayName();

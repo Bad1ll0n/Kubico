@@ -84,8 +84,12 @@ public static class CalendarFeedEndpoints
         return Results.NoContent();
     }
 
+    /// <summary>
+    /// O calendário subscrito. Vai com um ETag (do conteúdo) e "private, no-cache": os calendários do telemóvel, que
+    /// perguntam de hora a hora, recebem 304 sem corpo quando nada mudou.
+    /// </summary>
     private static async Task<IResult> GetFeed(
-        string token, KubicoDbContext db, HouseholdAccess access, TimeProvider clock, CancellationToken ct)
+        string token, KubicoDbContext db, HouseholdAccess access, TimeProvider clock, HttpContext http, CancellationToken ct)
     {
         var membership = await db.Memberships.AsNoTracking()
             .Include(m => m.Household)
@@ -114,7 +118,11 @@ public static class CalendarFeedEndpoints
             .ToDictionaryAsync(m => m.UserId, m => m.DisplayName, ct);
 
         var ics = new IcsWriter(household, names, membership.User.Language).Write(events, now);
-        return Results.Text(ics, "text/calendar", Encoding.UTF8);
+        var etag = HttpCaching.ETagOf(ics);
+        HttpCaching.PrivateWithETag(http, etag);
+        return HttpCaching.ClientHas(http, etag)
+            ? Results.StatusCode(StatusCodes.Status304NotModified)
+            : Results.Text(ics, "text/calendar", Encoding.UTF8);
     }
 
     /// <summary>Apaga os endereços de calendário dos membros escolhidos (deixam de servir já).</summary>

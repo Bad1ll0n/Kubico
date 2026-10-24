@@ -147,7 +147,10 @@ internal static class OAuth
 
         var accessToken = json.Str("access_token")
             ?? throw new CalendarProviderException($"O {service} não devolveu um token de acesso.");
-        return new OAuthTokens(accessToken, json.Str("refresh_token"), EmailFromIdToken(json.Str("id_token")));
+        var expiresIn = json.TryGetProperty("expires_in", out var seconds) && seconds.ValueKind == JsonValueKind.Number
+            ? TimeSpan.FromSeconds(seconds.GetDouble())
+            : (TimeSpan?)null;
+        return new OAuthTokens(accessToken, json.Str("refresh_token"), EmailFromIdToken(json.Str("id_token")), expiresIn);
     }
 
     /// <summary>

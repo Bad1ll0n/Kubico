@@ -46,13 +46,27 @@ public class HouseholdAccess(KubicoDbContext db)
     public async Task<(HouseholdRole? Role, ModuleAccess Access, IResult? Error)> RequireAsync(
         Guid userId, Guid householdId, HouseholdModule module, ModuleAccess needed, CancellationToken ct)
     {
-        var role = await GetRoleAsync(userId, householdId, ct);
-        if (role is null)
+        // O papel e a permissão escolhida para esse papel numa só consulta (antes eram duas em cada pedido).
+        var membership = await db.Memberships
+            .Where(m => m.UserId == userId && m.HouseholdId == householdId)
+            .Select(m => new
+            {
+                m.Role,
+                Chosen = db.HouseholdPermissions
+                    .Where(p => p.HouseholdId == householdId && p.Role == m.Role && p.Module == module)
+                    .Select(p => (ModuleAccess?)p.Access)
+                    .FirstOrDefault(),
+            })
+            .SingleOrDefaultAsync(ct);
+        if (membership is null)
         {
             return (null, ModuleAccess.None, Results.NotFound());
         }
 
-        var access = await GetAccessAsync(householdId, role.Value, module, ct);
+        var role = membership.Role;
+        var access = role == HouseholdRole.Admin
+            ? ModuleAccess.Manage
+            : membership.Chosen ?? ModulePermissions.Default(role, module);
         if (access < needed)
         {
             return (role, access, Results.Problem(

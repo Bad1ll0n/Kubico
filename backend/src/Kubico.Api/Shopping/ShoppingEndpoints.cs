@@ -205,7 +205,8 @@ public static class ShoppingEndpoints
             return error;
         }
 
-        if (!await ListBelongsTo(db, listId, householdId, ct))
+        // A lista (e o nome, para o histórico) numa só consulta.
+        if (await ListNameIn(db, listId, householdId, ct) is not { } listName)
         {
             return Results.NotFound();
         }
@@ -244,7 +245,7 @@ public static class ShoppingEndpoints
         }
 
         activity.Capture(
-            householdId, userId, HouseholdModule.Shopping, $"pôs «{item.Name}» na lista «{await ListName(db, listId, ct)}»",
+            householdId, userId, HouseholdModule.Shopping, $"pôs «{item.Name}» na lista «{listName}»",
             access: ModuleAccess.Participate);
         try
         {
@@ -266,6 +267,7 @@ public static class ShoppingEndpoints
 
         var dto = ToDto(item);
         await notifier.ShoppingItemUpserted(householdId, dto, ct);
+        await NotifyCountsAsync(db, notifier, householdId, listId, ct);
 
         return Results.Created($"/api/households/{householdId}/lists/{listId}/items/{item.Id}", dto);
     }
@@ -317,10 +319,11 @@ public static class ShoppingEndpoints
             item.Category = Clean(request.Category);
         }
 
-        if (request.IsChecked is { } isChecked && isChecked != item.IsChecked)
+        var countsChange = request.IsChecked is { } isChecked && isChecked != item.IsChecked;
+        if (countsChange)
         {
-            item.IsChecked = isChecked;
-            item.CheckedByUserId = isChecked ? userId : null;
+            item.IsChecked = request.IsChecked!.Value;
+            item.CheckedByUserId = item.IsChecked ? userId : null;
         }
 
         item.UpdatedAt = clock.GetUtcNow();
@@ -340,6 +343,10 @@ public static class ShoppingEndpoints
 
         var dto = ToDto(item);
         await notifier.ShoppingItemUpserted(householdId, dto, ct);
+        if (countsChange)
+        {
+            await NotifyCountsAsync(db, notifier, householdId, listId, ct);
+        }
 
         return Results.Ok(dto);
     }
@@ -362,18 +369,24 @@ public static class ShoppingEndpoints
             return error;
         }
 
-        var item = await FindItem(db, householdId, listId, itemId, ct);
-        if (item is null)
+        // O artigo e o nome da lista (para o histórico) numa só consulta.
+        var found = await db.ShoppingItems
+            .Where(i => i.Id == itemId && i.ListId == listId && i.List.HouseholdId == householdId)
+            .Select(i => new { Item = i, ListName = i.List.Name })
+            .SingleOrDefaultAsync(ct);
+        if (found is null)
         {
             return Results.NotFound();
         }
 
+        var item = found.Item;
         activity.Capture(
             householdId, principal.GetUserId(), HouseholdModule.Shopping,
-            $"tirou «{item.Name}» da lista «{await ListName(db, listId, ct)}»", access: ModuleAccess.Participate);
+            $"tirou «{item.Name}» da lista «{found.ListName}»", access: ModuleAccess.Participate);
         db.ShoppingItems.Remove(item);
         await db.SaveChangesAsync(ct);
         await notifier.ShoppingItemDeleted(householdId, listId, itemId, ct);
+        await NotifyCountsAsync(db, notifier, householdId, listId, ct);
 
         return Results.NoContent();
     }
@@ -395,31 +408,53 @@ public static class ShoppingEndpoints
             return error;
         }
 
-        if (!await ListBelongsTo(db, listId, householdId, ct))
+        if (await ListNameIn(db, listId, householdId, ct) is not { } listName)
         {
             return Results.NotFound();
         }
 
         var checkedItems = await db.ShoppingItems.Where(i => i.ListId == listId && i.IsChecked).ToListAsync(ct);
-        db.ShoppingItems.RemoveRange(checkedItems);
-        if (checkedItems.Count > 0)
+        if (checkedItems.Count == 0)
         {
-            activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Shopping,
-                $"limpou {checkedItems.Count} {(checkedItems.Count == 1 ? "artigo comprado" : "artigos comprados")} da lista «{await ListName(db, listId, ct)}»",
-                access: ModuleAccess.Participate);
+            return Results.Ok(new { Removed = 0 });
         }
+
+        db.ShoppingItems.RemoveRange(checkedItems);
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Shopping,
+            $"limpou {checkedItems.Count} {(checkedItems.Count == 1 ? "artigo comprado" : "artigos comprados")} da lista «{listName}»",
+            access: ModuleAccess.Participate);
         await db.SaveChangesAsync(ct);
 
-        foreach (var item in checkedItems)
-        {
-            await notifier.ShoppingItemDeleted(householdId, listId, item.Id, ct);
-        }
+        // Uma mensagem para todos os artigos (antes era uma por artigo) e outra com as contagens novas.
+        await notifier.ShoppingItemsDeleted(householdId, listId, [.. checkedItems.Select(i => i.Id)], ct);
+        await NotifyCountsAsync(db, notifier, householdId, listId, ct);
 
         return Results.Ok(new { Removed = checkedItems.Count });
     }
 
-    private static Task<string> ListName(KubicoDbContext db, Guid listId, CancellationToken ct) =>
-        db.ShoppingLists.Where(l => l.Id == listId).Select(l => l.Name).SingleAsync(ct);
+    /// <summary>O nome da lista, se for desta casa (null se não existir ou for de outra).</summary>
+    private static Task<string?> ListNameIn(KubicoDbContext db, Guid listId, Guid householdId, CancellationToken ct) =>
+        db.ShoppingLists.Where(l => l.Id == listId && l.HouseholdId == householdId).Select(l => (string?)l.Name).SingleOrDefaultAsync(ct);
+
+    /// <summary>A lista com as contagens de artigos (as mesmas do GET /lists).</summary>
+    internal static Task<ShoppingListDto?> ListDtoAsync(KubicoDbContext db, Guid listId, CancellationToken ct) =>
+        db.ShoppingLists.AsNoTracking()
+            .Where(l => l.Id == listId)
+            .Select(l => new ShoppingListDto(l.Id, l.HouseholdId, l.Name, l.Items.Count, l.Items.Count(i => i.IsChecked)))
+            .SingleOrDefaultAsync(ct);
+
+    /// <summary>
+    /// Depois de mudar os artigos de uma lista: envia a lista com as contagens novas (<c>ShoppingListUpserted</c>),
+    /// para as apps não terem de voltar a pedir todas as listas a cada artigo (P2).
+    /// </summary>
+    internal static async Task NotifyCountsAsync(
+        KubicoDbContext db, HouseholdNotifier notifier, Guid householdId, Guid listId, CancellationToken ct)
+    {
+        if (await ListDtoAsync(db, listId, ct) is { } list)
+        {
+            await notifier.ShoppingListUpserted(householdId, list, ct);
+        }
+    }
 
     private static Task<bool> ListBelongsTo(KubicoDbContext db, Guid listId, Guid householdId, CancellationToken ct) =>
         db.ShoppingLists.AnyAsync(l => l.Id == listId && l.HouseholdId == householdId, ct);

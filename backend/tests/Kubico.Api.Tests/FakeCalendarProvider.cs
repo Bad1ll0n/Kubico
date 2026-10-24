@@ -24,6 +24,9 @@ public sealed class FakeCalendarProvider(CalendarProvider kind, bool fullListing
     /// <summary>Os refresh tokens usados, pela ordem (para ver que a Microsoft os troca e o Kubico guarda o novo).</summary>
     public List<string> RefreshTokensUsed { get; } = [];
 
+    /// <summary>A validade ("expires_in") dos tokens de acesso que dá; null = não diz (o Kubico não os guarda).</summary>
+    public TimeSpan? AccessTokenLifetime { get; set; }
+
     public CalendarProvider Kind => kind;
 
     public bool IsConfigured => true;
@@ -49,7 +52,8 @@ public sealed class FakeCalendarProvider(CalendarProvider kind, bool fullListing
         RefreshTokensUsed.Add(refreshToken);
 
         // A Microsoft troca o refresh token a cada renovação; o Google não.
-        return Task.FromResult(new OAuthTokens("access", kind == CalendarProvider.Microsoft ? Token(account) : null, null));
+        return Task.FromResult(new OAuthTokens(
+            $"access|{account}", kind == CalendarProvider.Microsoft ? Token(account) : null, null, AccessTokenLifetime));
     }
 
     public Task RevokeAsync(string refreshToken, CancellationToken ct)
@@ -73,6 +77,12 @@ public sealed class FakeCalendarProvider(CalendarProvider kind, bool fullListing
 
     public Task<ExternalChanges> ListChangesAsync(ExternalCalendar calendar, string? cursor, CancellationToken ct)
     {
+        // Um token de acesso de uma conta que entretanto retirou o acesso deixa de servir (como um 401).
+        if (calendar.AccessToken.Split('|') is [_, var account] && RevokedAccounts.Contains(account))
+        {
+            throw new CalendarAuthException("Token de acesso recusado.");
+        }
+
         var events = Get(calendar).Events.Values;
         if (fullListing)
         {

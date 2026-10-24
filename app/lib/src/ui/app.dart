@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/flutter_localizations_pt_en.dart';
 import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'auth_screen.dart';
@@ -29,7 +29,8 @@ class KubicoApp extends StatelessWidget {
         darkTheme: buildTheme(Brightness.dark),
         locale: AppLanguage.locale,
         supportedLocales: const [kubicoLocale, Locale('en', 'GB')],
-        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        // Só pt e en (o Material traz ~80 línguas): menos ~300 KB no main.dart.js da web (P8).
+        localizationsDelegates: kubicoLocalizationsDelegates,
         home: const _Root(),
       ),
     );

@@ -1063,24 +1063,56 @@ class Holiday {
 
 /// O calendário de um intervalo de dias: eventos, as suas ocorrências e os feriados nacionais.
 class CalendarRange {
-  const CalendarRange({required this.events, required this.occurrences, required this.holidays});
+  CalendarRange({required this.events, required this.occurrences, required this.holidays});
 
   final Map<String, CalendarEvent> events;
   final List<CalendarOccurrence> occurrences;
   final List<Holiday> holidays;
 
-  List<CalendarOccurrence> on(DateTime day) =>
-      occurrences.where((o) => o.occursOn(day) && events.containsKey(o.eventId)).toList();
+  /// As ocorrências de cada dia (chave [dayKey]), pela ordem do servidor, construídas uma vez (P5): antes, cada uma das
+  /// 42 células do mês percorria todas as ocorrências (milhares numa casa cheia) a cada desenho.
+  late final Map<int, List<CalendarOccurrence>> _byDay = _indexByDay();
+
+  late final Map<String, Set<String>> _conflicts = _indexConflicts();
+
+  late final Map<int, Holiday> _holidays = {for (final h in holidays.reversed) dayKey(h.date): h};
+
+  /// Um dia como número (aaaammdd), para comparar sem criar datas.
+  static int dayKey(DateTime day) => day.year * 10000 + day.month * 100 + day.day;
+
+  List<CalendarOccurrence> on(DateTime day) => _byDay[dayKey(day)] ?? const [];
 
   /// Membros indisponíveis para alguma ocorrência de [eventId].
-  Set<String> conflictsFor(String eventId) =>
-      occurrences.where((o) => o.eventId == eventId).expand((o) => o.conflictUserIds).toSet();
+  Set<String> conflictsFor(String eventId) => _conflicts[eventId] ?? const {};
 
-  Holiday? holidayOn(DateTime day) {
-    for (final h in holidays) {
-      if (h.date.year == day.year && h.date.month == day.month && h.date.day == day.day) return h;
+  Holiday? holidayOn(DateTime day) => _holidays[dayKey(day)];
+
+  /// Cada ocorrência entra nos dias que ocupa. Os dias candidatos vão de um antes do início a um depois do fim, e
+  /// cada um confirma-se com [CalendarOccurrence.occursOn], para dar exatamente o mesmo que filtrar dia a dia.
+  Map<int, List<CalendarOccurrence>> _indexByDay() {
+    final index = <int, List<CalendarOccurrence>>{};
+    for (final o in occurrences) {
+      if (!events.containsKey(o.eventId)) continue;
+      final a = o.isAllDay ? o.startDate! : o.startsAt!;
+      final b = o.isAllDay ? o.endDate! : o.endsAt!;
+      final (first, last) = a.isAfter(b) ? (b, a) : (a, b);
+      for (
+        var day = DateTime(first.year, first.month, first.day - 1);
+        !day.isAfter(DateTime(last.year, last.month, last.day + 1));
+        day = DateTime(day.year, day.month, day.day + 1)
+      ) {
+        if (o.occursOn(day)) (index[dayKey(day)] ??= []).add(o);
+      }
     }
-    return null;
+    return index;
+  }
+
+  Map<String, Set<String>> _indexConflicts() {
+    final index = <String, Set<String>>{};
+    for (final o in occurrences) {
+      (index[o.eventId] ??= {}).addAll(o.conflictUserIds);
+    }
+    return index;
   }
 
   factory CalendarRange.fromJson(Map<String, dynamic> json) {

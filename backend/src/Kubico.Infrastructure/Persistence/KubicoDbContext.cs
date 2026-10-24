@@ -54,13 +54,30 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         RenewVersions();
+        UpdateRecurrenceEnds();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         RenewVersions();
+        UpdateRecurrenceEnds();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>
+    /// Os eventos novos ou alterados recalculam <see cref="CalendarEvent.RecurrenceEndDate"/> (o fim da série), seja
+    /// qual for o caminho que mudou a repetição ou as datas (endpoints, sincronização, desfazer).
+    /// </summary>
+    private void UpdateRecurrenceEnds()
+    {
+        foreach (var entry in ChangeTracker.Entries<CalendarEvent>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Entity.UpdateRecurrenceEnd();
+            }
+        }
     }
 
     /// <summary>
@@ -115,6 +132,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasIndex(t => t.TokenHash).IsUnique();
             e.HasIndex(t => t.FamilyId);
             e.HasIndex(t => t.UserId);
+            e.HasIndex(t => t.ExpiresAt);
             e.HasOne(t => t.User).WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -161,12 +179,16 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(i => i.Category).HasMaxLength(50);
             e.Property(i => i.Barcode).HasMaxLength(14);
             e.HasIndex(i => i.ListId);
+
+            // A exportação RGPD procura o que cada pessoa pôs nas listas (P15).
+            e.HasIndex(i => i.AddedByUserId);
             e.HasOne(i => i.List).WithMany(l => l.Items).HasForeignKey(i => i.ListId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Allowance>(e =>
         {
             e.HasKey(a => new { a.HouseholdId, a.UserId });
+            e.HasIndex(a => a.UserId);
             e.Property(a => a.Period).HasConversion<string>().HasMaxLength(20);
             e.HasOne<Household>().WithMany().HasForeignKey(a => a.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -175,6 +197,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         {
             e.Property(p => p.BonusPerChoreCents).HasDefaultValue(0);
             e.HasIndex(p => new { p.HouseholdId, p.UserId, p.PeriodStart }).IsUnique();
+            e.HasIndex(p => p.UserId);
             e.HasOne<Household>().WithMany().HasForeignKey(p => p.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -186,6 +209,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(a => a.RequiredAccess).HasConversion<string>().HasMaxLength(20);
             e.Property(a => a.Summary).HasMaxLength(300);
             e.HasIndex(a => new { a.HouseholdId, a.Id });
+            e.HasIndex(a => a.CreatedAt);
             e.HasOne<Household>().WithMany().HasForeignKey(a => a.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -244,6 +268,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasIndex(c => new { c.HouseholdId, c.StartsAt });
             e.HasIndex(c => new { c.HouseholdId, c.StartDate });
             e.HasIndex(c => new { c.SeriesId, c.OriginalDate });
+            e.HasIndex(c => c.CreatedByUserId);
             e.HasOne(c => c.Household).WithMany().HasForeignKey(c => c.HouseholdId).OnDelete(DeleteBehavior.Cascade);
 
             // Apagar uma série apaga as suas exceções.
@@ -265,6 +290,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(r => r.Version).IsConcurrencyToken();
             e.HasIndex(r => new { r.HouseholdId, r.RequestedAt });
             e.HasIndex(r => new { r.HouseholdId, r.UserId });
+            e.HasIndex(r => r.UserId);
             e.HasOne<Household>().WithMany().HasForeignKey(r => r.HouseholdId).OnDelete(DeleteBehavior.Cascade);
 
             // O histórico fica, mesmo que a recompensa seja apagada.
@@ -277,7 +303,10 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(n => n.Body).HasMaxLength(500);
             e.Property(n => n.Kind).HasConversion<string>().HasMaxLength(30);
             e.HasIndex(n => new { n.UserId, n.CreatedAt });
-            e.HasIndex(n => n.PushedAt);
+
+            // Só os avisos por enviar (poucos), que o envio procura a cada minuto; e a limpeza dos antigos.
+            e.HasIndex(n => n.UserId).HasFilter("\"PushedAt\" IS NULL").HasDatabaseName("IX_Notifications_Pending");
+            e.HasIndex(n => n.CreatedAt);
             e.HasOne<User>().WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Household>().WithMany().HasForeignKey(n => n.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });

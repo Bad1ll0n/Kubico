@@ -31,6 +31,13 @@ class ShoppingItemDeleted extends HouseholdEvent {
   final String itemId;
 }
 
+/// Vários artigos saíram de uma vez (limpar o carrinho): uma só mensagem, em vez de uma por artigo.
+class ShoppingItemsDeleted extends HouseholdEvent {
+  const ShoppingItemsDeleted(this.listId, this.itemIds);
+  final String listId;
+  final List<String> itemIds;
+}
+
 class ChoreUpserted extends HouseholdEvent {
   const ChoreUpserted(this.chore);
   final Chore chore;
@@ -49,6 +56,18 @@ class CalendarEventUpserted extends HouseholdEvent {
 class CalendarEventDeleted extends HouseholdEvent {
   const CalendarEventDeleted(this.eventId);
   final String eventId;
+}
+
+/// Vários eventos saíram de uma vez (uma série e as suas exceções).
+class CalendarEventsDeleted extends HouseholdEvent {
+  const CalendarEventsDeleted(this.eventIds);
+  final List<String> eventIds;
+}
+
+/// Mudaram os pontos ganhos (uma tarefa feita, não aceite, desfeita ou apagada): saldos, mesada e estatísticas.
+class PointsChanged extends HouseholdEvent {
+  const PointsChanged(this.householdId);
+  final String householdId;
 }
 
 /// Um aviso pessoal novo (chega pelo canal da pessoa, seja qual for a casa aberta).
@@ -145,6 +164,10 @@ class HouseholdRealtime {
       'ShoppingItemDeleted',
       (args) => _emit(args, (a) => ShoppingItemDeleted(a[0] as String, a[1] as String)),
     );
+    connection.on(
+      'ShoppingItemsDeleted',
+      (args) => _emit(args, (a) => ShoppingItemsDeleted(a[0] as String, (a[1] as List).cast<String>())),
+    );
 
     connection.on('ChoreUpserted', (args) => _emit(args, (a) => ChoreUpserted(Chore.fromJson(_map(a[0])))));
     connection.on('ChoreDeleted', (args) => _emit(args, (a) => ChoreDeleted(a[0] as String)));
@@ -154,6 +177,11 @@ class HouseholdRealtime {
       (args) => _emit(args, (a) => CalendarEventUpserted(CalendarEvent.fromJson(_map(a[0])))),
     );
     connection.on('CalendarEventDeleted', (args) => _emit(args, (a) => CalendarEventDeleted(a[0] as String)));
+    connection.on(
+      'CalendarEventsDeleted',
+      (args) => _emit(args, (a) => CalendarEventsDeleted((a[0] as List).cast<String>())),
+    );
+    connection.on('PointsChanged', (args) => _emit(args, (a) => PointsChanged(a[0] as String)));
 
     connection.on(
       'NotificationCreated',

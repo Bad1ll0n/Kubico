@@ -320,6 +320,37 @@ public class CalendarSyncTests(CalendarSyncFixture fixture) : IClassFixture<Cale
     }
 
     [Fact]
+    public async Task The_access_token_is_reused_while_valid_and_lost_access_is_still_noticed_at_once()
+    {
+        Google.AccessTokenLifetime = TimeSpan.FromHours(1);
+        try
+        {
+            var (admin, _) = await fixture.RegisterAsync("Mãe");
+            var household = await HouseholdTests.CreateHousehold(admin, Unique("Casa"));
+            await CreateEvent(admin, household.Id, Timed("Jantar", 2026, 10, 22, 20));
+            await ConnectAsync(admin, household.Id, "google", "token@example.com");
+            int Refreshes() => Google.RefreshTokensUsed.Count(t => t.Contains("token@example.com", StringComparison.Ordinal));
+
+            var before = Refreshes();
+            await SyncAsync(admin, household.Id);
+            await SyncAsync(admin, household.Id);
+            await SyncAsync(admin, household.Id);
+            var refreshes = Refreshes() - before;
+
+            Google.RevokedAccounts.Add("token@example.com");
+            var lost = await SyncAsync(admin, household.Id);
+            Google.RevokedAccounts.Remove("token@example.com");
+
+            Assert.Equal(1, refreshes);
+            Assert.Equal(CalendarConnectionStatus.NeedsReconnect, lost.Status);
+        }
+        finally
+        {
+            Google.AccessTokenLifetime = null;
+        }
+    }
+
+    [Fact]
     public async Task Lost_access_asks_to_reconnect_and_disconnecting_removes_the_copy_but_keeps_the_events()
     {
         var (admin, _) = await fixture.RegisterAsync("Pai");

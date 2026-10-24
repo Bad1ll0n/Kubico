@@ -91,7 +91,14 @@ class _ChorePhotoImageState extends State<ChorePhotoImage> {
       width: widget.size,
       height: widget.size,
       child: switch (snapshot) {
-        AsyncSnapshot(:final data?) => Image.memory(data, fit: widget.fit),
+        // Nas miniaturas, a foto descodifica-se no tamanho em que aparece (o dobro, para o corte "cover" de uma foto
+        // ao alto ou ao baixo), e não nos 1600 px com que foi enviada: ~7–10 MB de memória por foto passam a < 0,5 MB
+        // (P12).
+        AsyncSnapshot(:final data?) => Image.memory(
+          data,
+          fit: widget.fit,
+          cacheWidth: widget.size == null ? null : (widget.size! * MediaQuery.devicePixelRatioOf(context) * 2).round(),
+        ),
         AsyncSnapshot(hasError: true) => const Icon(Icons.broken_image_outlined),
         _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       },
@@ -203,6 +210,22 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
   Widget build(BuildContext context) {
     final items = _items;
     final theme = Theme.of(context);
+    final rows = <WidgetBuilder>[
+      if (items != null && items.isEmpty)
+        (_) => Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text('Ainda ninguém fez tarefas nos últimos 30 dias.'.tr, textAlign: TextAlign.center),
+        ),
+      if (items != null)
+        for (final (i, item) in items.indexed) ...[
+          if (i == 0 || !_sameDay(items[i - 1].completedAt, item.completedAt))
+            (_) => Padding(
+              padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
+              child: Text(formatShortDate(item.completedAt), style: theme.textTheme.titleSmall),
+            ),
+          (_) => _tile(item),
+        ],
+    ];
     return Scaffold(
       appBar: AppBar(title: Text('Histórico das tarefas'.tr)),
       body: items == null
@@ -219,23 +242,11 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
             )
           : RefreshIndicator(
               onRefresh: _load,
-              child: ListView(
+              // Até 200 conclusões, com fotos: só se constroem (e pedem) as que aparecem no ecrã (P10).
+              child: ListView.builder(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                children: [
-                  if (items.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Text('Ainda ninguém fez tarefas nos últimos 30 dias.'.tr, textAlign: TextAlign.center),
-                    ),
-                  for (final (i, item) in items.indexed) ...[
-                    if (i == 0 || !_sameDay(items[i - 1].completedAt, item.completedAt))
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
-                        child: Text(formatShortDate(item.completedAt), style: theme.textTheme.titleSmall),
-                      ),
-                    _tile(item),
-                  ],
-                ],
+                itemCount: rows.length,
+                itemBuilder: (context, index) => rows[index](context),
               ),
             ),
     );

@@ -20,6 +20,7 @@ public class CalendarSyncService(
     IEnumerable<ICalendarProvider> providers,
     CalendarSecrets secrets,
     CalendarSyncLocks locks,
+    CalendarAccessTokens accessTokens,
     HouseholdNotifier notifier,
     TimeProvider clock,
     ILogger<CalendarSyncService> logger)
@@ -34,13 +35,19 @@ public class CalendarSyncService(
 
     public static string CalendarName(string householdName) => $"Kubico · {householdName}";
 
-    public async Task SyncAllAsync(CancellationToken ct)
-    {
-        var ids = await db.CalendarConnections
+    /// <summary>
+    /// As ligações ativas (para a volta completa do <see cref="CalendarSyncWorker"/>, que as corre em paralelo, cada
+    /// uma com o seu DbContext).
+    /// </summary>
+    public Task<List<Guid>> ActiveConnectionsAsync(CancellationToken ct) =>
+        db.CalendarConnections
             .Where(c => c.Status == CalendarConnectionStatus.Active)
             .Select(c => c.Id)
             .ToListAsync(ct);
-        foreach (var id in ids)
+
+    public async Task SyncAllAsync(CancellationToken ct)
+    {
+        foreach (var id in await ActiveConnectionsAsync(ct))
         {
             await SyncAsync(id, ct);
         }
@@ -103,7 +110,7 @@ public class CalendarSyncService(
         return connection;
     }
 
-    private async Task RunAsync(SyncRun run, ICalendarProvider provider, CancellationToken ct)
+    private async Task RunAsync(SyncRun run, ICalendarProvider provider, CancellationToken ct, bool retried = false)
     {
         var connection = run.Connection;
         try
@@ -131,6 +138,12 @@ public class CalendarSyncService(
             connection.LastSyncedAt = clock.GetUtcNow();
             connection.LastError = run.Warnings.Count == 0 ? null : string.Join("\n", run.Warnings.Take(MaxWarnings));
         }
+        catch (CalendarAuthException) when (!retried && accessTokens.Forget(connection.Id))
+        {
+            // O token de acesso guardado deixou de servir antes do tempo (acesso retirado?): tenta-se já uma vez com um
+            // novo; se a renovação também falhar, é a falta de acesso de sempre (voltar a ligar).
+            await RunAsync(run, provider, ct, retried: true);
+        }
         catch (CalendarAuthException e)
         {
             logger.LogInformation("A ligação {Connection} perdeu o acesso: {Reason}", connection.Id, e.Message);
@@ -145,7 +158,11 @@ public class CalendarSyncService(
         }
     }
 
-    /// <summary>Renova o token de acesso (a Microsoft troca também o refresh token, que se guarda).</summary>
+    /// <summary>
+    /// O token de acesso: o que já se tem em memória (<see cref="CalendarAccessTokens"/>, enquanto não expira), ou um
+    /// novo a partir do refresh token (a Microsoft troca também o refresh token, que se guarda). Antes, renovava-se em
+    /// todas as voltas, embora o token sirva cerca de uma hora.
+    /// </summary>
     private async Task<ExternalCalendar> OpenAsync(SyncRun run, ICalendarProvider provider, CancellationToken ct)
     {
         string refreshToken;
@@ -158,13 +175,20 @@ public class CalendarSyncService(
             throw new CalendarAuthException("O token guardado já não se consegue decifrar.");
         }
 
-        var tokens = await provider.RefreshAsync(refreshToken, ct);
-        if (tokens.RefreshToken is { } rotated && rotated != refreshToken)
+        if (accessTokens.Get(run.Connection.Id, refreshToken) is not { } accessToken)
         {
-            run.Connection.ProtectedRefreshToken = secrets.ProtectToken(rotated);
+            var tokens = await provider.RefreshAsync(refreshToken, ct);
+            if (tokens.RefreshToken is { } rotated && rotated != refreshToken)
+            {
+                run.Connection.ProtectedRefreshToken = secrets.ProtectToken(rotated);
+                refreshToken = rotated;
+            }
+
+            accessToken = tokens.AccessToken;
+            accessTokens.Set(run.Connection.Id, refreshToken, accessToken, tokens.ExpiresIn);
         }
 
-        return new ExternalCalendar(tokens.AccessToken, run.Connection.ExternalCalendarId, run.Zone);
+        return new ExternalCalendar(accessToken, run.Connection.ExternalCalendarId, run.Zone);
     }
 
     private async Task SyncOnceAsync(SyncRun run, ICalendarProvider provider, ExternalCalendar calendar, CancellationToken ct)
@@ -172,9 +196,9 @@ public class CalendarSyncService(
         run.Events = await db.CalendarEvents
             .Where(e => e.HouseholdId == run.Household.Id)
             .ToDictionaryAsync(e => e.Id, ct);
-        run.Links = await db.CalendarEventLinks
+        run.Links = new LinkIndex(await db.CalendarEventLinks
             .Where(l => l.ConnectionId == run.Connection.Id)
-            .ToListAsync(ct);
+            .ToListAsync(ct));
 
         // Quem não pode criar eventos no Kubico (crianças, convidados) só recebe a cópia.
         if (run.CanEdit)
@@ -540,7 +564,7 @@ public class CalendarSyncService(
             }
 
             link ??= AddLink(run, calendarEvent, copy.Id, copy.Version, calendarEvent.SeriesId is not null);
-            link.ExternalId = copy.Id;
+            run.Links.SetExternalId(link, copy.Id);
             link.ExternalVersion = copy.Version;
             link.SyncedUpdatedAt = calendarEvent.UpdatedAt;
             await db.SaveChangesAsync(ct);
@@ -620,7 +644,7 @@ public class CalendarSyncService(
             run.Links.Add(link);
         }
 
-        link.ExternalId = externalId;
+        run.Links.SetExternalId(link, externalId);
         link.ExternalVersion = version;
         link.SyncedUpdatedAt = calendarEvent.UpdatedAt;
         link.IsOccurrence = isOccurrence;
@@ -644,10 +668,7 @@ public class CalendarSyncService(
             }
         }
 
-        foreach (var id in run.Deleted)
-        {
-            await notifier.CalendarEventDeleted(run.Household.Id, id, ct);
-        }
+        await notifier.CalendarEventsDeleted(run.Household.Id, [.. run.Deleted], ct);
 
         await notifier.CalendarConnectionUpserted(run.Connection.UserId, CalendarSyncEndpoints.ToDto(run.Connection, run.Language), ct);
     }
@@ -672,7 +693,8 @@ public class CalendarSyncService(
 
         public Dictionary<Guid, CalendarEvent> Events { get; set; } = [];
 
-        public List<CalendarEventLink> Links { get; set; } = [];
+        /// <summary>As ligações aos eventos, com índices pelo id do evento e pelo id externo (antes, procuras lineares).</summary>
+        public LinkIndex Links { get; set; } = new([]);
 
         public HashSet<Guid> Upserted { get; } = [];
 
@@ -680,9 +702,9 @@ public class CalendarSyncService(
 
         public List<string> Warnings { get; } = [];
 
-        public CalendarEventLink? LinkByExternal(string externalId) => Links.FirstOrDefault(l => l.ExternalId == externalId);
+        public CalendarEventLink? LinkByExternal(string externalId) => Links.ByExternal(externalId);
 
-        public CalendarEventLink? LinkByEvent(Guid eventId) => Links.FirstOrDefault(l => l.EventId == eventId);
+        public CalendarEventLink? LinkByEvent(Guid eventId) => Links.ByEvent(eventId);
 
         public void Warn(string warning)
         {
@@ -690,6 +712,89 @@ public class CalendarSyncService(
             {
                 Warnings.Add(warning);
             }
+        }
+    }
+}
+
+/// <summary>
+/// As ligações aos eventos de uma sincronização, com dicionários pelo id do evento e pelo id externo (as procuras
+/// eram lineares dentro de ciclos, O(eventos × ligações)). O id externo de uma ligação pode mudar (ver PushAsync):
+/// muda-se com <see cref="SetExternalId"/>.
+/// </summary>
+internal sealed class LinkIndex : IEnumerable<CalendarEventLink>
+{
+    private readonly List<CalendarEventLink> _links;
+    private readonly Dictionary<Guid, CalendarEventLink> _byEvent = [];
+    private readonly Dictionary<string, CalendarEventLink> _byExternal = new(StringComparer.Ordinal);
+
+    public LinkIndex(List<CalendarEventLink> links)
+    {
+        _links = links;
+        foreach (var link in links)
+        {
+            Index(link);
+        }
+    }
+
+    public int Count => _links.Count;
+
+    public CalendarEventLink? ByEvent(Guid eventId) => _byEvent.GetValueOrDefault(eventId);
+
+    public CalendarEventLink? ByExternal(string externalId) => _byExternal.GetValueOrDefault(externalId);
+
+    public void Add(CalendarEventLink link)
+    {
+        _links.Add(link);
+        Index(link);
+    }
+
+    public bool Remove(CalendarEventLink link)
+    {
+        if (!_links.Remove(link))
+        {
+            return false;
+        }
+
+        Rebuild();
+        return true;
+    }
+
+    public void Clear()
+    {
+        _links.Clear();
+        _byEvent.Clear();
+        _byExternal.Clear();
+    }
+
+    public void SetExternalId(CalendarEventLink link, string externalId)
+    {
+        if (link.ExternalId == externalId)
+        {
+            return;
+        }
+
+        link.ExternalId = externalId;
+        Rebuild();
+    }
+
+    public IEnumerator<CalendarEventLink> GetEnumerator() => _links.GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    /// <summary>Com repetidos (não deviam existir), fica o primeiro, como no FirstOrDefault de antes.</summary>
+    private void Index(CalendarEventLink link)
+    {
+        _byEvent.TryAdd(link.EventId, link);
+        _byExternal.TryAdd(link.ExternalId, link);
+    }
+
+    private void Rebuild()
+    {
+        _byEvent.Clear();
+        _byExternal.Clear();
+        foreach (var link in _links)
+        {
+            Index(link);
         }
     }
 }

@@ -205,7 +205,12 @@ void main() {
       return http.Response('', 404);
     });
     final api = ApiClient(baseUrl: 'http://api', httpClient: client)..accessToken = 't';
-    final shopping = ShoppingRepository(api: api, store: MemoryKeyValueStore(), retryEvery: const Duration(hours: 1));
+    final shopping = ShoppingRepository(
+      api: api,
+      store: MemoryKeyValueStore(),
+      retryEvery: const Duration(hours: 1),
+      saveDelay: Duration.zero,
+    );
     const list = ShoppingList(id: 'l1', householdId: 'h1', name: 'Supermercado', itemCount: 1, checkedCount: 0);
 
     await tester.pumpWidget(

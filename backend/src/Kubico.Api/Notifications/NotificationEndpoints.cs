@@ -119,6 +119,7 @@ public static class NotificationEndpoints
         preferences.QuietFrom = request.QuietFrom;
         preferences.QuietUntil = request.QuietUntil;
         preferences.TimeZoneId = request.TimeZoneId;
+        preferences.NextPushAt = null; // As horas mudaram: o envio volta a olhar para os avisos desta pessoa já.
         await db.SaveChangesAsync(ct);
         return Results.Ok(ToDto(preferences));
     }

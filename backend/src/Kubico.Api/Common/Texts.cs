@@ -41,17 +41,36 @@ public static partial class Texts
             return english;
         }
 
+        // As frases com partes variáveis (o histórico em inglês) percorriam ~70 expressões regulares cada vez: guarda-se
+        // o resultado das já vistas (no máximo MaxCached; depois recomeça).
+        if (Translated.TryGetValue(text, out var cached))
+        {
+            return cached;
+        }
+
+        var result = text;
         foreach (var pattern in Patterns)
         {
             var match = pattern.Regex.Match(text);
             if (match.Success)
             {
-                return pattern.Format(match, language);
+                result = pattern.Format(match, language);
+                break;
             }
         }
 
-        return text;
+        if (Translated.Count >= MaxCached)
+        {
+            Translated.Clear();
+        }
+
+        Translated[text] = result;
+        return result;
     }
+
+    private const int MaxCached = 4096;
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Translated = new(StringComparer.Ordinal);
 
     /// <summary>Um texto com partes variáveis composto já na língua de quem o vai ler.</summary>
     public static string Format(string language, string portuguese, params object[] args) =>
@@ -561,7 +580,7 @@ public static partial class Texts
 
             regex.Append(Regex.Escape(portuguese[last..])).Append('$');
             FixedLength += portuguese.Length - last;
-            Regex = new Regex(regex.ToString(), RegexOptions.Singleline | RegexOptions.CultureInvariant);
+            Regex = new Regex(regex.ToString(), RegexOptions.Singleline | RegexOptions.CultureInvariant | RegexOptions.Compiled);
         }
 
         public Regex Regex { get; }

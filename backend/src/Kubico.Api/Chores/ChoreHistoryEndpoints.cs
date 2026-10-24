@@ -88,8 +88,18 @@ public static class ChoreHistoryEndpoints
         return Results.Created($"/api/households/{householdId}/chores/photos/{stored.Id}", new ChorePhotoDto(stored.Id));
     }
 
+    /// <summary>
+    /// A foto nunca muda: vai com o id como ETag e "private, no-cache" (só o próprio aparelho guarda uma cópia e
+    /// confirma-a sempre; o acesso volta a ser verificado). Quando a app já a tem, a resposta é 304, sem ler os bytes.
+    /// </summary>
     private static async Task<IResult> GetPhoto(
-        Guid householdId, Guid photoId, ClaimsPrincipal principal, KubicoDbContext db, HouseholdAccess access, CancellationToken ct)
+        Guid householdId,
+        Guid photoId,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        HttpContext http,
+        CancellationToken ct)
     {
         var (_, _, error) = await access.RequireAsync(
             principal.GetUserId(), householdId, HouseholdModule.Chores, ModuleAccess.View, ct);
@@ -98,11 +108,27 @@ public static class ChoreHistoryEndpoints
             return error;
         }
 
-        var photo = await db.ChorePhotos.AsNoTracking()
-            .Where(p => p.Id == photoId && p.HouseholdId == householdId)
-            .Select(p => new { p.ContentType, p.Data })
-            .SingleOrDefaultAsync(ct);
-        return photo is null ? Results.NotFound() : Results.File(photo.Data, photo.ContentType);
+        var photos = db.ChorePhotos.AsNoTracking().Where(p => p.Id == photoId && p.HouseholdId == householdId);
+        var etag = HttpCaching.ETagOf(photoId);
+        if (HttpCaching.ClientHas(http, etag))
+        {
+            if (!await photos.AnyAsync(ct))
+            {
+                return Results.NotFound();
+            }
+
+            HttpCaching.PrivateWithETag(http, etag);
+            return Results.StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        var photo = await photos.Select(p => new { p.ContentType, p.Data }).SingleOrDefaultAsync(ct);
+        if (photo is null)
+        {
+            return Results.NotFound();
+        }
+
+        HttpCaching.PrivateWithETag(http, etag);
+        return Results.File(photo.Data, photo.ContentType);
     }
 
     /// <summary>As tarefas feitas nos últimos dias (por omissão 30), das mais recentes para as mais antigas.</summary>
@@ -193,6 +219,7 @@ public static class ChoreHistoryEndpoints
         await db.SaveChangesAsync(ct);
 
         await notifier.ChoreUpserted(householdId, ChoreEndpoints.ToDto(chore), ct);
+        await notifier.PointsChanged(householdId, ct);
         await notifications.NotifyAsync(
             householdId,
             [completion.UserId],
@@ -207,24 +234,28 @@ public static class ChoreHistoryEndpoints
             completion.PhotoId, true));
     }
 
-    /// <summary>Apaga as fotos antigas e as que se enviaram mas nunca serviram para concluir uma tarefa.</summary>
-    private static async Task CleanUpAsync(KubicoDbContext db, Guid householdId, DateTimeOffset now, CancellationToken ct)
+    /// <summary>
+    /// Apaga as fotos antigas e as que se enviaram mas nunca serviram para concluir uma tarefa: as de uma casa (ao
+    /// enviar outra) ou, sem <paramref name="householdId"/>, as de todas (o <c>MaintenanceWorker</c>, uma vez por dia,
+    /// para as casas que deixaram de enviar fotos). Não lê os bytes das fotos. Devolve quantas apagou.
+    /// </summary>
+    internal static async Task<int> CleanUpAsync(KubicoDbContext db, Guid? householdId, DateTimeOffset now, CancellationToken ct)
     {
         var old = now - ChorePhoto.KeepFor;
         var unused = now - ChorePhoto.KeepUnusedFor;
-        var photos = await db.ChorePhotos
-            .Where(p => p.HouseholdId == householdId)
-            .Select(p => new { p.Id, p.CreatedAt, Used = db.ChoreCompletions.Any(c => c.PhotoId == p.Id) })
+        var expired = await db.ChorePhotos
+            .Where(p => householdId == null || p.HouseholdId == householdId)
+            .Where(p => p.CreatedAt < old || (p.CreatedAt < unused && !db.ChoreCompletions.Any(c => c.PhotoId == p.Id)))
+            .Select(p => p.Id)
             .ToListAsync(ct);
-        var expired = photos.Where(p => p.CreatedAt < old || (!p.Used && p.CreatedAt < unused)).Select(p => p.Id).ToList();
         if (expired.Count == 0)
         {
-            return;
+            return 0;
         }
 
         await db.ChoreCompletions.Where(c => c.PhotoId != null && expired.Contains(c.PhotoId.Value))
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.PhotoId, (Guid?)null), ct);
-        await db.ChorePhotos.Where(p => expired.Contains(p.Id)).ExecuteDeleteAsync(ct);
+        return await db.ChorePhotos.Where(p => expired.Contains(p.Id)).ExecuteDeleteAsync(ct);
     }
 
     private static IResult Invalid(string title) => Results.Problem(title: title, statusCode: StatusCodes.Status400BadRequest);

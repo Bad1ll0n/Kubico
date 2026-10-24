@@ -126,9 +126,46 @@ public sealed class CalendarSyncTrigger
 }
 
 /// <summary>
-/// Sincroniza em segundo plano: logo a seguir a uma alteração no Kubico (com uns segundos para juntar alterações
-/// seguidas) e, para apanhar o que muda nos calendários externos, todas as ligações a cada
-/// <see cref="CalendarSyncOptions.IntervalMinutes"/> minutos.
+/// Os tokens de acesso das ligações, só em memória e até perto de expirarem (P7): uma volta já não renova o token se o
+/// anterior ainda serve (servem cerca de uma hora). Ficam presos ao refresh token com que foram pedidos (um hash), por
+/// isso uma ligação refeita não usa o token antigo. Sem "expires_in" (ou com menos de 5 minutos), não se guardam.
+/// </summary>
+public sealed class CalendarAccessTokens(TimeProvider clock)
+{
+    private static readonly TimeSpan Margin = TimeSpan.FromMinutes(2);
+
+    private readonly ConcurrentDictionary<Guid, (string RefreshHash, string AccessToken, DateTimeOffset ExpiresAt)> _tokens = new();
+
+    public string? Get(Guid connectionId, string refreshToken) =>
+        _tokens.TryGetValue(connectionId, out var cached) && cached.RefreshHash == Hash(refreshToken)
+            && clock.GetUtcNow() < cached.ExpiresAt - Margin
+            ? cached.AccessToken
+            : null;
+
+    public void Set(Guid connectionId, string refreshToken, string accessToken, TimeSpan? lifetime)
+    {
+        if (lifetime is not { } value || value < TimeSpan.FromMinutes(5))
+        {
+            _tokens.TryRemove(connectionId, out _);
+            return;
+        }
+
+        _tokens[connectionId] = (Hash(refreshToken), accessToken, clock.GetUtcNow() + value);
+    }
+
+    /// <summary>Esquece o token guardado; devolve true se havia um.</summary>
+    public bool Forget(Guid connectionId) => _tokens.TryRemove(connectionId, out _);
+
+    private static string Hash(string refreshToken) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(refreshToken)));
+}
+
+/// <summary>
+/// Sincroniza em segundo plano, com dois ciclos independentes (P7): as casas onde algo mudou no Kubico, logo a seguir
+/// (com uns segundos para juntar alterações seguidas), e, para apanhar o que muda nos calendários externos, todas as
+/// ligações a cada <see cref="CalendarSyncOptions.IntervalMinutes"/> minutos, várias ao mesmo tempo
+/// (<see cref="Parallelism"/>, cada uma com o seu DbContext). Uma alteração já não espera pelo fim da volta completa;
+/// a mesma ligação nunca sincroniza duas vezes ao mesmo tempo (<see cref="CalendarSyncLocks"/>).
 /// </summary>
 public class CalendarSyncWorker(
     IServiceScopeFactory scopes,
@@ -139,48 +176,67 @@ public class CalendarSyncWorker(
 {
     private static readonly TimeSpan Debounce = TimeSpan.FromSeconds(3);
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    /// <summary>Ligações sincronizadas ao mesmo tempo na volta completa.</summary>
+    public const int Parallelism = 8;
+
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
+        Task.WhenAll(FullSyncLoopAsync(stoppingToken), RequestedLoopAsync(stoppingToken));
+
+    private async Task FullSyncLoopAsync(CancellationToken ct)
     {
-        var interval = TimeSpan.FromMinutes(Math.Max(1, options.Value.IntervalMinutes));
-        var nextFullSync = clock.GetUtcNow();
-        while (!stoppingToken.IsCancellationRequested)
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(Math.Max(1, options.Value.IntervalMinutes)), clock);
+        do
         {
-            var households = new HashSet<Guid>();
-            var wait = nextFullSync - clock.GetUtcNow();
-            if (wait > TimeSpan.Zero)
+            try
             {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-                timeout.CancelAfter(wait);
-                try
+                List<Guid> ids;
+                await using (var scope = scopes.CreateAsyncScope())
                 {
-                    households.Add(await trigger.Requests.ReadAsync(timeout.Token));
-                    await Task.Delay(Debounce, stoppingToken);
-                    while (trigger.Requests.TryRead(out var more))
+                    ids = await scope.ServiceProvider.GetRequiredService<CalendarSyncService>().ActiveConnectionsAsync(ct);
+                }
+
+                await Parallel.ForEachAsync(
+                    ids,
+                    new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = ct },
+                    async (id, token) =>
                     {
-                        households.Add(more);
-                    }
-                }
-                catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
-                {
-                    // Chegou a hora da volta completa.
-                }
+                        try
+                        {
+                            await using var scope = scopes.CreateAsyncScope();
+                            await scope.ServiceProvider.GetRequiredService<CalendarSyncService>().SyncAsync(id, token);
+                        }
+                        catch (Exception e) when (e is not OperationCanceledException)
+                        {
+                            logger.LogError(e, "Falha a sincronizar a ligação {Connection}; volta a tentar mais tarde.", id);
+                        }
+                    });
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                logger.LogError(e, "Falha na sincronização dos calendários externos; volta a tentar mais tarde.");
+            }
+        }
+        while (await timer.WaitForNextTickAsync(ct));
+    }
+
+    private async Task RequestedLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            var households = new HashSet<Guid> { await trigger.Requests.ReadAsync(ct) };
+            await Task.Delay(Debounce, clock, ct);
+            while (trigger.Requests.TryRead(out var more))
+            {
+                households.Add(more);
             }
 
             try
             {
                 await using var scope = scopes.CreateAsyncScope();
                 var sync = scope.ServiceProvider.GetRequiredService<CalendarSyncService>();
-                if (households.Count == 0)
+                foreach (var householdId in households)
                 {
-                    nextFullSync = clock.GetUtcNow() + interval;
-                    await sync.SyncAllAsync(stoppingToken);
-                }
-                else
-                {
-                    foreach (var householdId in households)
-                    {
-                        await sync.SyncHouseholdAsync(householdId, stoppingToken);
-                    }
+                    await sync.SyncHouseholdAsync(householdId, ct);
                 }
             }
             catch (Exception e) when (e is not OperationCanceledException)

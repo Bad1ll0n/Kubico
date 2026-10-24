@@ -149,11 +149,11 @@ public sealed class ActivityLog(KubicoDbContext db, TimeProvider clock)
     public static IEnumerable<string> AllKeys(IEnumerable<string> keys) =>
         keys.Select(k => k.StartsWith(ParentMark, StringComparison.Ordinal) ? k[ParentMark.Length..] : k);
 
-    /// <summary>Apaga o histórico com mais de 30 dias.</summary>
-    public Task PruneAsync(Guid householdId, CancellationToken ct)
+    /// <summary>Apaga o histórico com mais de 30 dias, de todas as casas (o <c>MaintenanceWorker</c>, uma vez por dia).</summary>
+    public static Task<int> PruneAsync(KubicoDbContext db, DateTimeOffset now, CancellationToken ct)
     {
-        var oldest = clock.GetUtcNow() - ActivityEntry.KeepFor;
-        return db.ActivityEntries.Where(a => a.HouseholdId == householdId && a.CreatedAt < oldest).ExecuteDeleteAsync(ct);
+        var oldest = now - ActivityEntry.KeepFor;
+        return db.ActivityEntries.Where(a => a.CreatedAt < oldest).ExecuteDeleteAsync(ct);
     }
 
     public static (Type Type, Guid Id) Parse(string key)

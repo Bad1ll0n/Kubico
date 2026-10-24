@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
+import '../realtime/coalesced_reload.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import 'chore_editor.dart';
@@ -78,8 +79,12 @@ class _ChoresViewState extends State<ChoresView> {
     for (final s in _subscriptions) {
       s.cancel();
     }
+    _reloadStats.dispose();
     super.dispose();
   }
+
+  /// As estatísticas só mudam com as tarefas feitas (PointsChanged), e várias seguidas dão uma só recarga.
+  late final _reloadStats = CoalescedReload(_loadStats);
 
   Future<void> _load() async {
     try {
@@ -113,9 +118,10 @@ class _ChoresViewState extends State<ChoresView> {
     switch (event) {
       case ChoreUpserted(:final chore) when chore.householdId == _householdId:
         _upsert(chore);
-        _loadStats();
       case ChoreDeleted(:final choreId):
         setState(() => _chores?.remove(choreId));
+      case PointsChanged(:final householdId) when householdId == _householdId:
+        _reloadStats.request();
       default:
         break;
     }
@@ -318,18 +324,20 @@ class _ChoresViewState extends State<ChoresView> {
           : null,
       body: RefreshIndicator(
         onRefresh: _load,
-        child: ListView(
+        // As linhas só se constroem quando aparecem no ecrã (P10): numa casa com 300 tarefas, cada alteração já não
+        // reconstrói as 300.
+        child: _LazyList(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-          children: [
+          rows: [
             if (_stats.any((s) => s.points > 0 || s.completed > 0))
-              _StatsCard(
+              (context) => _StatsCard(
                 stats: _stats,
                 onHistory: () =>
                     Navigator.of(context)
                         .push(MaterialPageRoute<void>(builder: (_) => ChoreHistoryScreen(household: widget.household))),
               ),
             if (chores.isEmpty)
-              Padding(
+              (context) => Padding(
                 padding: const EdgeInsets.all(32),
                 child: Text(
                   canManage ? 'Sem tarefas por fazer. Cria a primeira!'.tr : 'Sem tarefas por fazer.'.tr,
@@ -338,7 +346,7 @@ class _ChoresViewState extends State<ChoresView> {
               ),
             for (final group in ChoreGroup.values)
               if (grouped[group] case final items?) ...[
-                Padding(
+                (context) => Padding(
                   padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
                   child: Text(
                     '${group.label} (${items.length})',
@@ -347,7 +355,8 @@ class _ChoresViewState extends State<ChoresView> {
                   ),
                 ),
                 for (final chore in items)
-                  _ChoreTile(
+                  (context) => _ChoreTile(
+                    key: ValueKey(chore.id),
                     chore: chore,
                     assignee: _details?.member(chore.assigneeUserId),
                     canComplete: _canComplete(chore),
@@ -365,8 +374,21 @@ class _ChoresViewState extends State<ChoresView> {
   }
 }
 
+/// Uma lista que só constrói as linhas que aparecem no ecrã (P10). Cada linha é uma função que a constrói.
+class _LazyList extends StatelessWidget {
+  const _LazyList({required this.rows, this.padding});
+
+  final List<WidgetBuilder> rows;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) =>
+      ListView.builder(padding: padding, itemCount: rows.length, itemBuilder: (context, index) => rows[index](context));
+}
+
 class _ChoreTile extends StatelessWidget {
   const _ChoreTile({
+    super.key,
     required this.chore,
     required this.assignee,
     required this.canComplete,

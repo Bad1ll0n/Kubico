@@ -91,6 +91,35 @@ public class AppleCalendarSyncTests(AppleCalendarFixture fixture) : IClassFixtur
     }
 
     [Fact]
+    public async Task Icloud_is_only_listed_again_when_its_ctag_changes()
+    {
+        var (admin, _) = await fixture.RegisterAsync("Mãe");
+        var name = Unique("Casa");
+        var calendarName = $"Kubico · {name}";
+        var household = await HouseholdTests.CreateHousehold(admin, name);
+        await CreateEvent(admin, household.Id, Timed("Dentista", 2026, 11, 3, 9));
+        await ConnectAsync(admin, household.Id);
+        await SyncAsync(admin, household.Id);
+        await SyncAsync(admin, household.Id);
+        var path = Server.CalendarNamed(calendarName).Path;
+        int Reports() => Server.Reports.GetValueOrDefault(path);
+
+        var settled = Reports();
+        await SyncAsync(admin, household.Id);
+        await SyncAsync(admin, household.Id);
+        var unchanged = Reports();
+        fixture.Tick();
+        Server.Edit(calendarName, Server.Resource(calendarName, "SUMMARY:Dentista").Key, ics => ics.Replace("SUMMARY:Dentista", "SUMMARY:Dentista (Dra. Ana)"));
+        await SyncAsync(admin, household.Id);
+        var afterEdit = Reports();
+        var calendar = await admin.GetFromJsonAsync<CalendarDto>($"/api/households/{household.Id}/events?from=2026-11-03&to=2026-11-03", TestJson.Options);
+
+        Assert.Equal(settled, unchanged);
+        Assert.Equal(settled + 1, afterEdit);
+        Assert.Equal("Dentista (Dra. Ana)", Assert.Single(calendar!.Events).Title);
+    }
+
+    [Fact]
     public async Task Household_events_go_to_icloud_in_the_household_time_zone_and_changes_there_come_back()
     {
         var (admin, _) = await fixture.RegisterAsync("Mãe");

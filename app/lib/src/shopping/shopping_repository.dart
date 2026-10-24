@@ -82,9 +82,18 @@ class ShoppingChange {
 /// Guarda no dispositivo a última cópia das listas e dos artigos e uma fila das alterações feitas. Cada alteração
 /// aparece logo e é enviada por ordem quando houver ligação; até lá, a lista mostra a cópia com as alterações
 /// por cima. Os artigos novos levam um id gerado aqui, por isso reenviar não os duplica.
+///
+/// A cópia dos artigos fica também em memória: cada alteração confirmada muda a memória e a gravação no dispositivo
+/// faz-se [saveDelay] depois, uma vez para várias alterações seguidas (P11; antes, cada toque lia, descodificava e
+/// voltava a gravar o JSON da lista toda, ~100 KB numa lista de 300 artigos). A fila grava-se sempre logo: é ela que
+/// não pode perder nada. Ao sair da app (ou da sessão), o que falta gravar grava-se já ([flush]).
 class ShoppingRepository extends ChangeNotifier {
-  ShoppingRepository({required this.api, required KeyValueStore store, this.retryEvery = const Duration(seconds: 30)})
-    : _store = store; // ignore: prefer_initializing_formals
+  ShoppingRepository({
+    required this.api,
+    required KeyValueStore store,
+    this.retryEvery = const Duration(seconds: 30),
+    this.saveDelay = const Duration(seconds: 1),
+  }) : _store = store; // ignore: prefer_initializing_formals
 
   static const _pendingKey = 'kubico.shopping.pending';
   static const _cacheKeysKey = 'kubico.shopping.cacheKeys';
@@ -95,11 +104,22 @@ class ShoppingRepository extends ChangeNotifier {
   /// De quanto em quanto tempo se volta a tentar enviar quando não há rede.
   final Duration retryEvery;
 
+  /// Quanto tempo se espera para gravar a cópia dos artigos depois de uma alteração (junta as seguintes). Zero grava
+  /// logo (nos testes).
+  final Duration saveDelay;
+
   final _pending = <ShoppingChange>[];
   final _cacheKeys = <String>{};
   var _offline = false;
   Future<void>? _syncing;
   Timer? _retry;
+
+  /// A cópia dos artigos de cada lista em memória (a mesma que está gravada, mais as alterações por gravar).
+  final _itemsCache = <String, Map<String, ShoppingItem>>{};
+
+  /// As listas com alterações à cópia ainda por gravar.
+  final _unsaved = <String>{};
+  Timer? _saveTimer;
 
   /// O último pedido falhou por falta de ligação.
   bool get isOffline => _offline;
@@ -143,13 +163,15 @@ class ShoppingRepository extends ChangeNotifier {
     try {
       final items = await api.getItems(householdId, listId);
       _setOffline(false);
+      _itemsCache[listId] = {for (final i in items) i.id: i};
+      _unsaved.remove(listId);
       await _saveItems(listId, items);
       return _withPending(listId, items);
     } on ApiException catch (e) {
-      final cached = await _store.read(_itemsKey(listId));
+      final cached = await _cachedItems(listId);
       if (!_isNetwork(e) || cached == null) rethrow;
       _setOffline(true);
-      return _withPending(listId, _decodeItems(cached));
+      return _withPending(listId, cached.values.toList());
     }
   }
 
@@ -210,10 +232,26 @@ class ShoppingRepository extends ChangeNotifier {
   /// recusa (por exemplo, o artigo já foi apagado por outra pessoa) é descartada.
   Future<void> sync() => _syncing ??= _flush().whenComplete(() => _syncing = null);
 
+  /// Grava já a cópia dos artigos que ainda está só em memória (ao sair da app).
+  Future<void> flush() async {
+    _saveTimer?.cancel();
+    _saveTimer = null;
+    final lists = [..._unsaved];
+    _unsaved.clear();
+    for (final listId in lists) {
+      final items = _itemsCache[listId];
+      if (items != null) await _saveItems(listId, items.values);
+    }
+  }
+
   /// Ao terminar a sessão: esquece a fila e as cópias (são dados da casa).
   Future<void> clear() async {
     _retry?.cancel();
     _retry = null;
+    _saveTimer?.cancel();
+    _saveTimer = null;
+    _unsaved.clear();
+    _itemsCache.clear();
     _pending.clear();
     for (final key in _cacheKeys) {
       await _store.write(key, null);
@@ -228,6 +266,7 @@ class ShoppingRepository extends ChangeNotifier {
   @override
   void dispose() {
     _retry?.cancel();
+    unawaited(flush());
     super.dispose();
   }
 
@@ -320,15 +359,33 @@ class ShoppingRepository extends ChangeNotifier {
   Future<void> _saveItems(String listId, Iterable<ShoppingItem> items) =>
       _cache(_itemsKey(listId), [for (final i in items) i.toJson()]);
 
-  /// Mantém a cópia certa depois de enviar uma alteração (para continuar certa se a rede voltar a falhar).
+  /// Mantém a cópia certa depois de enviar uma alteração (para continuar certa se a rede voltar a falhar): muda-a em
+  /// memória e grava-a um pouco depois, uma vez para várias alterações seguidas.
   Future<void> _updateCachedItems(
     String listId,
     Map<String, ShoppingItem> Function(Map<String, ShoppingItem>) apply,
   ) async {
-    final cached = await _store.read(_itemsKey(listId));
-    if (cached == null) return;
-    final items = apply({for (final i in _decodeItems(cached)) i.id: i});
-    await _saveItems(listId, items.values);
+    final items = await _cachedItems(listId);
+    if (items == null) return;
+    apply(items);
+    _unsaved.add(listId);
+    if (saveDelay == Duration.zero) {
+      await flush();
+      return;
+    }
+    _saveTimer ??= Timer(saveDelay, () {
+      _saveTimer = null;
+      unawaited(flush());
+    });
+  }
+
+  /// A cópia dos artigos de uma lista: da memória ou, da primeira vez, do que está gravado no dispositivo.
+  Future<Map<String, ShoppingItem>?> _cachedItems(String listId) async {
+    final inMemory = _itemsCache[listId];
+    if (inMemory != null) return inMemory;
+    final stored = await _store.read(_itemsKey(listId));
+    if (stored == null) return null;
+    return _itemsCache[listId] = {for (final i in _decodeItems(stored)) i.id: i};
   }
 
   Future<void> _cache(String key, Object value) async {

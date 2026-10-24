@@ -140,6 +140,78 @@ public sealed record RecurrenceRule(
         }
     }
 
+    /// <summary>
+    /// As mesmas datas que <see cref="Dates(DateOnly)"/>, sem as anteriores a <paramref name="notBefore"/>. Nas
+    /// regras diárias e semanais sem COUNT salta logo para o primeiro período que interessa, em vez de percorrer
+    /// todos desde o início (uma série diária com 3 anos tinha mais de mil dias para trás).
+    /// </summary>
+    public IEnumerable<DateOnly> Dates(DateOnly start, DateOnly notBefore)
+    {
+        if (notBefore <= start)
+        {
+            return Dates(start);
+        }
+
+        // Com COUNT conta-se desde o início (no máximo 1000); mensais e anuais têm poucos períodos por ano.
+        if (Count is not null || Frequency is RecurrenceFrequency.Monthly or RecurrenceFrequency.Yearly)
+        {
+            return Dates(start).SkipWhile(d => d < notBefore);
+        }
+
+        return DatesFrom(start, notBefore);
+    }
+
+    /// <summary>
+    /// Diárias e semanais sem COUNT, a partir de <paramref name="notBefore"/> (&gt; <paramref name="start"/>): a
+    /// primeira data (o início) já ficou para trás, por isso o UNTIL aplica-se a todas, como em <see cref="Dates(DateOnly)"/>.
+    /// Os limites (<see cref="MaxPeriods"/>, <see cref="MaxYear"/>) são os mesmos de <see cref="Candidates"/>.
+    /// </summary>
+    private IEnumerable<DateOnly> DatesFrom(DateOnly start, DateOnly notBefore)
+    {
+        if (Frequency == RecurrenceFrequency.Daily || ByDay is not { Count: > 0 })
+        {
+            var step = Frequency == RecurrenceFrequency.Daily ? Interval : 7 * Interval;
+            var first = Math.Max(1, (notBefore.DayNumber - start.DayNumber + step - 1) / step);
+            for (var k = first; k <= MaxPeriods && CanAddDays(start, k * step); k++)
+            {
+                var date = start.AddDays(k * step);
+                if (Until is { } until && date > until)
+                {
+                    yield break;
+                }
+
+                yield return date;
+            }
+
+            yield break;
+        }
+
+        var days = ByDay.Distinct().OrderBy(MondayIndex).ToList();
+        var weekStart = start.AddDays(-MondayIndex(start.DayOfWeek));
+
+        // Começa uma semana antes da que tem notBefore (margem); as datas anteriores filtram-se a seguir.
+        var firstWeek = Math.Max(0, (notBefore.DayNumber - weekStart.DayNumber) / (7 * Interval) - 1);
+        for (var k = firstWeek; k <= MaxPeriods && CanAddDays(weekStart, 7 * k * Interval + 6); k++)
+        {
+            var week = weekStart.AddDays(7 * k * Interval);
+            foreach (var day in days)
+            {
+                var date = week.AddDays(MondayIndex(day));
+                if (date <= start || date < notBefore)
+                {
+                    continue;
+                }
+
+                if (Until is { } until && date > until)
+                {
+                    yield break;
+                }
+
+                yield return date;
+            }
+        }
+    }
+
     private IEnumerable<DateOnly> Candidates(DateOnly start)
     {
         yield return start;

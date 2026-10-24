@@ -24,22 +24,39 @@ public static class CalendarConflicts
         var margin = rideMargin ?? DefaultRideMargin;
         var conflicts = occurrences.Select(_ => new HashSet<Guid>()).ToArray();
 
-        for (var i = 0; i < occurrences.Count; i++)
+        // Varrimento por ordem de início, em vez de comparar todos os pares (O(n²): 0,5 s num mês de uma casa cheia).
+        // Todos os conflitos (sobreposição, boleia durante outro evento, duas boleias a menos da margem) exigem que os
+        // intervalos [início, fim] dos dois, alargados pela margem, se toquem; por isso, para cada ocorrência, só
+        // interessam as seguintes que começam até ao seu fim mais a margem. Usa-se o menor e o maior dos dois instantes,
+        // para continuar certo mesmo num evento (vindo de fora) que acabe antes de começar. Os de dia inteiro não ocupam
+        // ninguém. Os resultados são os mesmos da comparação de todos os pares (CalendarEquivalenceTests).
+        var timed = Enumerable.Range(0, occurrences.Count)
+            .Where(i => !occurrences[i].IsAllDay)
+            .Select(i => (Index: i, Low: Min(occurrences[i].Start, occurrences[i].End), High: Max(occurrences[i].Start, occurrences[i].End)))
+            .OrderBy(x => x.Low)
+            .ToArray();
+
+        for (var x = 0; x < timed.Length; x++)
         {
-            for (var j = i + 1; j < occurrences.Count; j++)
+            var reach = timed[x].High + (margin > TimeSpan.Zero ? margin : TimeSpan.Zero);
+            for (var y = x + 1; y < timed.Length && timed[y].Low <= reach; y++)
             {
+                var (i, j) = (timed[x].Index, timed[y].Index);
                 var (a, b) = (occurrences[i], occurrences[j]);
-                if (a.IsAllDay || b.IsAllDay || a.Event.Id == b.Event.Id)
+                if (a.Event.Id == b.Event.Id)
                 {
                     continue;
                 }
 
                 if (a.Overlaps(b))
                 {
-                    foreach (var userId in a.Event.ParticipantUserIds.Intersect(b.Event.ParticipantUserIds))
+                    foreach (var userId in a.Event.ParticipantUserIds)
                     {
-                        conflicts[i].Add(userId);
-                        conflicts[j].Add(userId);
+                        if (b.Event.ParticipantUserIds.Contains(userId))
+                        {
+                            conflicts[i].Add(userId);
+                            conflicts[j].Add(userId);
+                        }
                     }
                 }
 
@@ -92,6 +109,10 @@ public static class CalendarConflicts
     }
 
     private static bool Near(DateTimeOffset a, DateTimeOffset b, TimeSpan margin) => (a - b).Duration() < margin;
+
+    private static DateTimeOffset Min(DateTimeOffset a, DateTimeOffset b) => a <= b ? a : b;
+
+    private static DateTimeOffset Max(DateTimeOffset a, DateTimeOffset b) => a >= b ? a : b;
 
     /// <summary>Quem participa, leva ou vai buscar num evento com hora e está fora nesse dia (no fuso da casa).</summary>
     private static void AddAbsences(EventOccurrence occurrence, Func<Guid, DateOnly, bool> isAway, TimeZoneInfo zone, HashSet<Guid> conflicts)

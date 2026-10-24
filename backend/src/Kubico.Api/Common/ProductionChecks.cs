@@ -103,7 +103,8 @@ public static class SecurityHeaders
     /// <summary>
     /// nosniff (o browser não adivinha tipos: uma "foto" nunca corre como HTML), sem iframes, sem Referer, uma CSP
     /// que não deixa carregar nada (a API só devolve dados; as páginas próprias, como o regresso do OAuth, definem a
-    /// sua) e, em /api, sem cache (exportação RGPD, fotos, calendário).
+    /// sua) e, em /api, sem cache (exportação RGPD, calendário…). Só os endpoints que escolhem a sua política
+    /// (<see cref="HttpCaching"/>: as fotos e o calendário subscrito, "private, no-cache" com ETag) a mantêm.
     /// </summary>
     public static IApplicationBuilder UseSecurityHeaders(this IApplicationBuilder app) => app.Use(async (http, next) =>
     {
@@ -118,7 +119,7 @@ public static class SecurityHeaders
                 headers.ContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'";
             }
 
-            if (http.Request.Path.StartsWithSegments("/api"))
+            if (http.Request.Path.StartsWithSegments("/api") && !HttpCaching.HasOwnPolicy(http))
             {
                 headers.CacheControl = "no-store";
             }

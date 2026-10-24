@@ -90,6 +90,31 @@ class _ActivityScreenState extends State<ActivityScreen> {
   Widget build(BuildContext context) {
     final items = _items;
     final theme = Theme.of(context);
+    final rows = <WidgetBuilder>[
+      (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+        child: Text(
+          'O que mudou nesta casa nos últimos 30 dias. Podes desfazer o que fizeste (e, se gerires a '
+                  'área, o que os outros fizeram), começando pelo mais recente.'
+              .tr,
+          style: theme.textTheme.bodySmall,
+        ),
+      ),
+      if (items != null && items.isEmpty)
+        (_) => Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text('Ainda não há alterações.'.tr, textAlign: TextAlign.center),
+        ),
+      if (items != null)
+        for (final (i, item) in items.indexed) ...[
+          if (i == 0 || !_sameDay(items[i - 1].createdAt, item.createdAt))
+            (_) => Padding(
+              padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
+              child: Text(capitalize(formatLongDate(item.createdAt)), style: theme.textTheme.titleSmall),
+            ),
+          (_) => _tile(item),
+        ],
+    ];
     return Scaffold(
       appBar: AppBar(title: Text('Histórico de alterações'.tr)),
       body: items == null
@@ -106,32 +131,11 @@ class _ActivityScreenState extends State<ActivityScreen> {
             )
           : RefreshIndicator(
               onRefresh: _load,
-              child: ListView(
+              // Até 300 entradas: só se constroem as que aparecem no ecrã (P10).
+              child: ListView.builder(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-                    child: Text(
-                      'O que mudou nesta casa nos últimos 30 dias. Podes desfazer o que fizeste (e, se gerires a '
-                              'área, o que os outros fizeram), começando pelo mais recente.'
-                          .tr,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                  if (items.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Text('Ainda não há alterações.'.tr, textAlign: TextAlign.center),
-                    ),
-                  for (final (i, item) in items.indexed) ...[
-                    if (i == 0 || !_sameDay(items[i - 1].createdAt, item.createdAt))
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
-                        child: Text(capitalize(formatLongDate(item.createdAt)), style: theme.textTheme.titleSmall),
-                      ),
-                    _tile(item),
-                  ],
-                ],
+                itemCount: rows.length,
+                itemBuilder: (context, index) => rows[index](context),
               ),
             ),
     );

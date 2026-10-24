@@ -129,19 +129,84 @@ public class CalendarEvent
     public IEnumerable<EventOccurrence> Occurrences(DateTimeOffset from, DateTimeOffset to, TimeZoneInfo zone)
     {
         var firstDate = FirstDate(zone);
-        foreach (var date in Dates(firstDate))
+
+        // Os dias que acabam de certeza antes de "from" saltam-se só pela data, sem converter fusos (uma série diária
+        // com anos tinha de calcular a hora local de cada dia que já passou).
+        var dates = RecurrenceRule.TryParse(Recurrence, out var rule)
+            ? rule.Dates(firstDate, FirstDateEndingAfter(from, zone))
+            : [firstDate];
+        var excluded = ExcludedDates.Count > 8 ? ExcludedDates.ToHashSet() : null;
+        var duration = EndsAt - StartsAt;
+        var localTime = StartsAt is { } startsAt ? TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(startsAt, zone).DateTime) : default;
+        foreach (var date in dates)
         {
-            var occurrence = OccurrenceOn(date, date == firstDate, zone);
+            var occurrence = OccurrenceOn(date, date == firstDate, zone, localTime, duration);
             if (occurrence.Start >= to)
             {
                 yield break;
             }
 
-            if (occurrence.End > from && !ExcludedDates.Contains(date))
+            if (occurrence.End > from && !(excluded?.Contains(date) ?? ExcludedDates.Contains(date)))
             {
                 yield return occurrence;
             }
         }
+    }
+
+    /// <summary>
+    /// Um dia (local) tal que as ocorrências que começam antes dele acabam todas antes de <paramref name="from"/>:
+    /// o dia de <paramref name="from"/> menos a duração (em dias de 23 horas, o mais curto com a mudança de hora) e
+    /// dois dias de margem.
+    /// </summary>
+    private DateOnly FirstDateEndingAfter(DateTimeOffset from, TimeZoneInfo zone)
+    {
+        var fromDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(from, zone).DateTime);
+        var days = SpanDays() + 2;
+        return fromDate.DayNumber > days ? DateOnly.FromDayNumber(fromDate.DayNumber - days) : DateOnly.MinValue;
+    }
+
+    /// <summary>Quantos dias (no máximo) uma ocorrência ocupa além do dia em que começa.</summary>
+    private int SpanDays() => StartDate is { } startDate
+        ? Math.Max(0, EndDate!.Value.DayNumber - startDate.DayNumber)
+        : (int)Math.Min(int.MaxValue / 2, Math.Ceiling(Math.Max(0, (EndsAt!.Value - StartsAt!.Value).TotalHours) / 23));
+
+    /// <summary>
+    /// Último dia (com margem) em que a série ainda pode ocupar o calendário: o início da última ocorrência (o UNTIL
+    /// ou a última de um COUNT), mais a duração e três dias. <see cref="DateOnly.MaxValue"/> numa série sem fim; null
+    /// nos eventos que não se repetem. A consulta de um intervalo usa-o para não carregar as séries que já acabaram
+    /// (crescem com cada "este e os seguintes"). Não depende do fuso: nos eventos com hora, o primeiro dia local está
+    /// a um dia do dia UTC. Calcula-se sozinho ao gravar (<see cref="UpdateRecurrenceEnd"/>, chamado pelo DbContext).
+    /// </summary>
+    public DateOnly? RecurrenceEndDate { get; private set; }
+
+    /// <summary>Volta a calcular <see cref="RecurrenceEndDate"/> a partir da repetição e das datas.</summary>
+    public void UpdateRecurrenceEnd()
+    {
+        RecurrenceEndDate = ComputeRecurrenceEnd();
+    }
+
+    private DateOnly? ComputeRecurrenceEnd()
+    {
+        if (!RecurrenceRule.TryParse(Recurrence, out var rule) || (StartDate is null && StartsAt is null))
+        {
+            return null;
+        }
+
+        if (rule.Count is null && rule.Until is null)
+        {
+            return DateOnly.MaxValue;
+        }
+
+        // O primeiro dia local possível (todos, nos eventos com hora: fusos de -14 h a +14 h).
+        DateOnly[] firstDates = StartDate is { } startDate
+            ? [startDate]
+            : [.. new[] { -1, 0, 1 }.Select(d => DateOnly.FromDateTime(StartsAt!.Value.UtcDateTime).AddDays(d))];
+
+        var lastStart = firstDates.Max(first => rule.Count is null
+            ? (rule.Until!.Value > first ? rule.Until.Value : first)
+            : rule.Dates(first).Last());
+        var end = (long)lastStart.DayNumber + SpanDays() + 3;
+        return end >= DateOnly.MaxValue.DayNumber ? DateOnly.MaxValue : DateOnly.FromDayNumber((int)end);
     }
 
     /// <summary>Se a série tem uma ocorrência neste dia (mesmo que tenha sido retirada).</summary>
@@ -188,7 +253,11 @@ public class CalendarEvent
     private IEnumerable<DateOnly> Dates(DateOnly firstDate) =>
         RecurrenceRule.TryParse(Recurrence, out var rule) ? rule.Dates(firstDate) : [firstDate];
 
-    private EventOccurrence OccurrenceOn(DateOnly date, bool isFirst, TimeZoneInfo zone)
+    /// <summary>
+    /// A ocorrência de um dia. <paramref name="localTime"/> (a hora local do início) e <paramref name="duration"/>
+    /// vêm calculados de fora, uma vez por série.
+    /// </summary>
+    private EventOccurrence OccurrenceOn(DateOnly date, bool isFirst, TimeZoneInfo zone, TimeOnly localTime, TimeSpan? duration)
     {
         if (StartDate is { } startDate)
         {
@@ -202,12 +271,9 @@ public class CalendarEvent
                 lastDate);
         }
 
-        var duration = EndsAt!.Value - StartsAt!.Value;
-        var localTime = TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(StartsAt.Value, zone).DateTime);
-
         // A primeira usa o instante guardado: numa hora ambígua (quando o relógio recua) a hora local não chega.
-        var start = isFirst ? StartsAt.Value : ZonedTime.ToInstant(date.ToDateTime(localTime), zone);
-        return new EventOccurrence(this, date, start, start + duration);
+        var start = isFirst ? StartsAt!.Value : ZonedTime.ToInstant(date.ToDateTime(localTime), zone);
+        return new EventOccurrence(this, date, start, start + duration!.Value);
     }
 }
 

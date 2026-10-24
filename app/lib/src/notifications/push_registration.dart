@@ -41,17 +41,27 @@ class NoPushTokenSource implements PushTokenSource {
 class PushRegistration {
   /// [source] pode chegar mais tarde (o Firebase arranca em paralelo com a app).
   // ignore: prefer_initializing_formals
-  PushRegistration({required this.api, required FutureOr<PushTokenSource> source}) : _source = source;
+  PushRegistration({required this.api, required FutureOr<PushTokenSource> source}) : _source = source, _create = null;
+
+  /// O serviço de avisos só se cria na primeira vez que é preciso (ao entrar): na web, o Firebase JS (dois scripts do
+  /// gstatic) deixa de se descarregar no arranque, antes de a pessoa entrar (P8).
+  PushRegistration.lazy({required this.api, required FutureOr<PushTokenSource> Function() create})
+    // ignore: prefer_initializing_formals
+    : _create = create,
+      _source = null;
 
   final ApiClient api;
-  final FutureOr<PushTokenSource> _source;
+  final FutureOr<PushTokenSource> Function()? _create;
+  FutureOr<PushTokenSource>? _source;
+
+  FutureOr<PushTokenSource> get _sourceNow => _source ??= _create!();
 
   String? _token;
   StreamSubscription<String>? _refreshes;
 
   /// Depois de entrar. Falhas (sem rede, autorização recusada) não impedem de usar a app.
   Future<void> register() async {
-    final source = await _source;
+    final source = await _sourceNow;
     final platform = source.platform;
     if (platform == null) return;
     try {
@@ -74,7 +84,9 @@ class PushRegistration {
 
   /// Antes de terminar a sessão (ainda com sessão, para o pedido ser aceite).
   Future<void> unregister() async {
-    final source = await _source;
+    // Nunca se registou (o serviço nem chegou a arrancar): não há nada para apagar.
+    if (_source == null) return;
+    final source = await _sourceNow;
     await _refreshes?.cancel();
     _refreshes = null;
     final token = _token;

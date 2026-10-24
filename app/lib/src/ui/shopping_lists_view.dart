@@ -78,9 +78,8 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
       case ShoppingListDeleted(:final listId):
         setState(() => _lists = _lists?.where((l) => l.id != listId).toList());
         widget.onDeleted(listId);
-      case ShoppingItemUpserted() || ShoppingItemDeleted():
-        // As contagens mudaram; recarregar é barato e evita contas erradas.
-        _load();
+      // As contagens chegam no ShoppingListUpserted que o servidor envia a seguir a cada alteração aos artigos: não
+      // é preciso voltar a pedir as listas (antes era um GET /lists por artigo, em cada aparelho).
       default:
         break;
     }

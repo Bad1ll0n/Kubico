@@ -75,6 +75,8 @@ namespace Kubico.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedAt");
+
                     b.HasIndex("HouseholdId", "Id");
 
                     b.ToTable("ActivityEntries");
@@ -191,6 +193,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<DateOnly?>("RecurrenceEndDate")
+                        .HasColumnType("date");
+
                     b.Property<Guid?>("SeriesId")
                         .HasColumnType("uuid");
 
@@ -209,6 +214,8 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("HouseholdId", "StartDate");
 
@@ -628,9 +635,13 @@ namespace Kubico.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedAt");
+
                     b.HasIndex("HouseholdId");
 
-                    b.HasIndex("PushedAt");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_Notifications_Pending")
+                        .HasFilter("\"PushedAt\" IS NULL");
 
                     b.HasIndex("UserId", "CreatedAt");
 
@@ -651,6 +662,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasColumnType("time without time zone");
 
                     b.Property<DateTimeOffset?>("LastDigestAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("NextPushAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<TimeOnly?>("QuietFrom")
@@ -736,6 +750,8 @@ namespace Kubico.Infrastructure.Persistence.Migrations
 
                     b.HasKey("HouseholdId", "UserId");
 
+                    b.HasIndex("UserId");
+
                     b.ToTable("Allowances");
                 });
 
@@ -775,6 +791,8 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("HouseholdId", "UserId", "PeriodStart")
                         .IsUnique();
@@ -866,6 +884,8 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("RewardId");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("HouseholdId", "RequestedAt");
 
@@ -976,6 +996,8 @@ namespace Kubico.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AddedByUserId");
+
                     b.HasIndex("ListId");
 
                     b.ToTable("ShoppingItems");
@@ -1079,6 +1101,8 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
 
                     b.HasIndex("FamilyId");
 
