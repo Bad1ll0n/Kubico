@@ -27,8 +27,17 @@ public sealed class ActivityLog(KubicoDbContext db, TimeProvider clock)
     /// <summary>
     /// Regista a alteração que está para ser gravada. Com <paramref name="undoable"/>, guarda o necessário para a
     /// desfazer (só as coisas de <see cref="Undoable"/>); grava-se com o próximo <c>SaveChanges</c>.
+    /// <paramref name="access"/> é o acesso à área que a alteração pediu (para a desfazer é preciso tê-lo ainda);
+    /// com <paramref name="privateTo"/>, só essa pessoa e quem gere a área a veem.
     /// </summary>
-    public ActivityEntry Capture(Guid householdId, Guid userId, HouseholdModule? module, string summary, bool undoable = true)
+    public ActivityEntry Capture(
+        Guid householdId,
+        Guid userId,
+        HouseholdModule? module,
+        string summary,
+        bool undoable = true,
+        ModuleAccess access = ModuleAccess.Manage,
+        Guid? privateTo = null)
     {
         var entry = new ActivityEntry
         {
@@ -37,6 +46,8 @@ public sealed class ActivityLog(KubicoDbContext db, TimeProvider clock)
             Module = module,
             Summary = summary.Length <= 300 ? summary : summary[..300],
             CreatedAt = clock.GetUtcNow(),
+            RequiredAccess = access,
+            PrivateToUserId = privateTo,
         };
 
         db.ChangeTracker.DetectChanges();
@@ -103,7 +114,7 @@ public sealed class ActivityLog(KubicoDbContext db, TimeProvider clock)
             }
 
             var target = db.Entry(entity);
-            foreach (var property in target.Properties.Where(p => !p.Metadata.IsPrimaryKey()))
+            foreach (var property in target.Properties.Where(p => !p.Metadata.IsPrimaryKey() && !p.Metadata.IsConcurrencyToken))
             {
                 if (before.Values.TryGetValue(property.Metadata.Name, out var value))
                 {

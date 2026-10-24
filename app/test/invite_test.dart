@@ -41,6 +41,8 @@ final _server = MockClient((request) async {
       });
     case ('GET', '/api/households/h1/absences'):
       return _json(<Object>[]);
+    case ('GET', '/api/households/h1/invites'):
+      return _json(<Object>[]);
     case ('POST', '/api/households/h1/invites'):
       return _json({'code': 'K7M2QX9P', 'role': 'Adult', 'expiresAt': '2026-10-25T10:00:00Z'});
   }

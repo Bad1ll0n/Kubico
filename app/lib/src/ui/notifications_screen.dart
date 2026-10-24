@@ -193,7 +193,7 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
     return Scaffold(
       appBar: AppBar(title: Text('Como receber os avisos'.tr)),
       body: _saved == null
-          ? Center(child: _error == null ? const CircularProgressIndicator() : Text(_error.toString()))
+          ? Center(child: _error == null ? const CircularProgressIndicator() : Text(errorText(_error!)))
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [

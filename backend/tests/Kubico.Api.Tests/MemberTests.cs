@@ -45,7 +45,9 @@ public class MemberTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFact
         var (child, childAuth) = await factory.CreateUserAsync("Rita");
         var (partner, partnerAuth) = await factory.CreateUserAsync("Pai");
         var household = await HouseholdTests.CreateHousehold(admin, "Casa");
-        await NotificationTests.Join(admin, child, household.Id, HouseholdRole.Child);
+
+        // A Rita entra como convidada (uma criança não pode ir buscar ninguém: A6), para se ver que sai das boleias.
+        await NotificationTests.Join(admin, child, household.Id, HouseholdRole.Guest);
         await NotificationTests.Join(admin, partner, household.Id, HouseholdRole.Adult);
         var (me, rita, dad) = (adminAuth.User.Id, childAuth.User.Id, partnerAuth.User.Id);
 

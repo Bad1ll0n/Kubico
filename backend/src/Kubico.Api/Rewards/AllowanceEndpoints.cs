@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
+using Kubico.Api.Activity;
 using Kubico.Api.Common;
 using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
@@ -20,7 +21,8 @@ public record PayAllowanceRequest(DateOnly PeriodStart);
 
 /// <summary>
 /// Um período da mesada. Os que já acabaram e não foram pagos estão "por pagar"; o atual (<c>IsCurrent</c>) vai
-/// crescendo com as tarefas feitas. Os pagos mostram o que se pagou.
+/// crescendo com as tarefas feitas. Os pagos mostram o que se pagou (<c>AmountCents</c>); se se pagou antes de o
+/// período acabar e depois houve mais tarefas, <c>OwedCents</c> é o extra que ainda falta pagar.
 /// </summary>
 public record AllowancePeriodDto(
     DateOnly Start,
@@ -29,7 +31,8 @@ public record AllowancePeriodDto(
     int AmountCents,
     bool IsCurrent,
     Guid? PaymentId,
-    DateTimeOffset? PaidAt);
+    DateTimeOffset? PaidAt,
+    int OwedCents = 0);
 
 /// <summary>A mesada de um membro e os seus últimos períodos (do mais recente para o mais antigo).</summary>
 public record AllowanceDto(
@@ -99,6 +102,7 @@ public static class AllowanceEndpoints
         SaveAllowanceRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
@@ -140,6 +144,8 @@ public static class AllowanceEndpoints
         allowance.BonusPerChoreCents = request.BonusPerChoreCents;
         allowance.Period = request.Period;
         allowance.UpdatedAt = now;
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Rewards,
+            $"definiu a mesada de {await NameAsync(db, userId, ct)}", undoable: false, privateTo: userId);
         await db.SaveChangesAsync(ct);
 
         await notifier.AllowanceChanged(householdId, userId, ct);
@@ -152,6 +158,7 @@ public static class AllowanceEndpoints
         Guid userId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
@@ -170,18 +177,24 @@ public static class AllowanceEndpoints
         }
 
         db.Allowances.Remove(allowance);
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Rewards,
+            $"acabou com a mesada de {await NameAsync(db, userId, ct)}", undoable: false, privateTo: userId);
         await db.SaveChangesAsync(ct);
         await notifier.AllowanceChanged(householdId, userId, ct);
         return Results.NoContent();
     }
 
-    /// <summary>Marca um período como pago, com o valor que tem agora; a pessoa é avisada.</summary>
+    /// <summary>
+    /// Marca um período como pago, com o valor que tem agora; a pessoa é avisada. Um período já pago só se volta a
+    /// pagar se depois houve mais tarefas (o extra que falta). Dois pagamentos em simultâneo: um passa, o outro 409.
+    /// </summary>
     private static async Task<IResult> Pay(
         Guid householdId,
         Guid userId,
         PayAllowanceRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
@@ -211,9 +224,12 @@ public static class AllowanceEndpoints
             return Invalid("Esse período não é desta mesada.");
         }
 
-        if (await db.AllowancePayments.AnyAsync(p => p.HouseholdId == householdId && p.UserId == userId && p.PeriodStart == start, ct))
+        var name = await NameAsync(db, userId, ct);
+        var paid = await db.AllowancePayments.AsNoTracking()
+            .SingleOrDefaultAsync(p => p.HouseholdId == householdId && p.UserId == userId && p.PeriodStart == start, ct);
+        if (paid is not null)
         {
-            return Results.Problem(title: "Esse período já está pago.", statusCode: StatusCodes.Status409Conflict);
+            return await PayRestAsync(db, activity, notifier, notifications, household, allowance, paid, name, me, now, ct);
         }
 
         var end = Allowance.PeriodEnd(start, allowance.Period);
@@ -226,11 +242,28 @@ public static class AllowanceEndpoints
             PeriodEnd = end,
             ChoresDone = done,
             AmountCents = allowance.AmountFor(done),
+            BonusPerChoreCents = allowance.BonusPerChoreCents,
             PaidAt = now,
             PaidByUserId = me,
         };
         db.AllowancePayments.Add(payment);
-        await db.SaveChangesAsync(ct);
+        activity.Capture(householdId, me, HouseholdModule.Rewards,
+            $"pagou a mesada de {name}: {Allowance.Format(payment.AmountCents)}", undoable: false, privateTo: userId);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException e) when (e is not DbUpdateConcurrencyException)
+        {
+            // Outro pagamento do mesmo período chegou ao mesmo tempo (índice único): fica esse.
+            db.ChangeTracker.Clear();
+            if (!await db.AllowancePayments.AnyAsync(p => p.HouseholdId == householdId && p.UserId == userId && p.PeriodStart == start, ct))
+            {
+                throw;
+            }
+
+            return AlreadyPaid();
+        }
 
         await notifier.AllowanceChanged(householdId, userId, ct);
         await notifications.NotifyAsync(
@@ -241,6 +274,52 @@ public static class AllowanceEndpoints
         return Results.Ok(await DescribeAsync(db, household, allowance, now, ct));
     }
 
+    /// <summary>
+    /// Um período pago antes de acabar teve mais tarefas depois: paga-se o extra delas (ao valor do pagamento). A
+    /// atualização só passa se o pagamento não mudou entretanto.
+    /// </summary>
+    private static async Task<IResult> PayRestAsync(
+        KubicoDbContext db,
+        ActivityLog activity,
+        HouseholdNotifier notifier,
+        NotificationService notifications,
+        Household household,
+        Allowance allowance,
+        AllowancePayment paid,
+        string name,
+        Guid me,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var done = await ChoresDoneAsync(db, household, paid.UserId, paid.PeriodStart, paid.PeriodEnd, ct);
+        var extra = Math.Max(0, done - paid.ChoresDone) * paid.BonusPerChoreCents;
+        if (extra == 0)
+        {
+            return AlreadyPaid();
+        }
+
+        var updated = await db.AllowancePayments
+            .Where(p => p.Id == paid.Id && p.ChoresDone == paid.ChoresDone)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.AmountCents, p => p.AmountCents + extra)
+                .SetProperty(p => p.ChoresDone, done)
+                .SetProperty(p => p.PaidAt, now)
+                .SetProperty(p => p.PaidByUserId, me), ct);
+        if (updated == 0)
+        {
+            return AlreadyPaid();
+        }
+
+        activity.Capture(household.Id, me, HouseholdModule.Rewards,
+            $"pagou o resto da mesada de {name}: {Allowance.Format(extra)}", undoable: false, privateTo: paid.UserId);
+        await db.SaveChangesAsync(ct);
+        await notifier.AllowanceChanged(household.Id, paid.UserId, ct);
+        await notifications.NotifyAsync(
+            household.Id, [paid.UserId], me, NotificationKind.AllowancePaid,
+            $"Recebeste o resto da mesada: {Allowance.Format(extra)}", null, null, ct);
+        return Results.Ok(await DescribeAsync(db, household, allowance, now, ct));
+    }
+
     /// <summary>Desfaz um pagamento marcado por engano: o período volta a estar por pagar.</summary>
     private static async Task<IResult> UndoPayment(
         Guid householdId,
@@ -248,6 +327,7 @@ public static class AllowanceEndpoints
         Guid paymentId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
@@ -268,6 +348,8 @@ public static class AllowanceEndpoints
         }
 
         db.AllowancePayments.Remove(payment);
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Rewards,
+            $"anulou um pagamento da mesada de {await NameAsync(db, userId, ct)}", undoable: false, privateTo: userId);
         await db.SaveChangesAsync(ct);
         await notifier.AllowanceChanged(householdId, userId, ct);
         return Results.NoContent();
@@ -287,18 +369,24 @@ public static class AllowanceEndpoints
         var periods = starts.Select(start =>
         {
             var end = Allowance.PeriodEnd(start, allowance.Period);
-            if (payments.FirstOrDefault(p => p.PeriodStart == start) is { } paid)
-            {
-                return new AllowancePeriodDto(start, paid.PeriodEnd, paid.ChoresDone, paid.AmountCents, end >= today, paid.Id, paid.PaidAt);
-            }
-
             var (from, to) = (StartOfDay(household, start), StartOfDay(household, end.AddDays(1)));
             var done = completions.Count(t => t >= from && t < to);
-            return new AllowancePeriodDto(start, end, done, allowance.AmountFor(done), end >= today, null, null);
+            if (payments.FirstOrDefault(p => p.PeriodStart == start) is { } paid)
+            {
+                // Pago antes de acabar: as tarefas feitas depois ficam por pagar (ao extra desse pagamento).
+                var paidTo = StartOfDay(household, paid.PeriodEnd.AddDays(1));
+                var doneNow = completions.Count(t => t >= from && t < paidTo);
+                var rest = Math.Max(0, doneNow - paid.ChoresDone) * paid.BonusPerChoreCents;
+                return new AllowancePeriodDto(
+                    start, paid.PeriodEnd, Math.Max(doneNow, paid.ChoresDone), paid.AmountCents, end >= today, paid.Id, paid.PaidAt, rest);
+            }
+
+            var amount = allowance.AmountFor(done);
+            return new AllowancePeriodDto(start, end, done, amount, end >= today, null, null, amount);
         }).ToList();
 
-        // Por pagar: os períodos que já acabaram e não foram pagos.
-        var owed = periods.Where(p => !p.IsCurrent && p.PaidAt is null).Sum(p => p.AmountCents);
+        // Por pagar: o que falta dos períodos que já acabaram (não pagos, ou com tarefas feitas depois de pagos).
+        var owed = periods.Where(p => !p.IsCurrent).Sum(p => p.OwedCents);
         return new AllowanceDto(
             allowance.UserId, allowance.AmountCents, allowance.BonusPerChoreCents, allowance.Period, allowance.StartDate,
             owed, periods);
@@ -329,4 +417,10 @@ public static class AllowanceEndpoints
     }
 
     private static IResult Invalid(string title) => Results.Problem(title: title, statusCode: StatusCodes.Status400BadRequest);
+
+    private static IResult AlreadyPaid() =>
+        Results.Problem(title: "Esse período já está pago.", statusCode: StatusCodes.Status409Conflict);
+
+    private static async Task<string> NameAsync(KubicoDbContext db, Guid userId, CancellationToken ct) =>
+        await db.Users.Where(u => u.Id == userId).Select(u => u.DisplayName).SingleOrDefaultAsync(ct) ?? "antigo membro";
 }

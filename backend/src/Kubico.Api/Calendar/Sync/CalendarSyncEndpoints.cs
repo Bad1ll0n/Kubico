@@ -45,6 +45,9 @@ public static class CalendarSyncEndpoints
     /// <summary>Quanto tempo há para autorizar na página do Google ou da Microsoft.</summary>
     private static readonly TimeSpan AuthorizationLifetime = TimeSpan.FromMinutes(15);
 
+    /// <summary>Quanto tempo há para confirmar a ligação na página do Kubico, depois de autorizar.</summary>
+    private static readonly TimeSpan ConfirmationLifetime = TimeSpan.FromMinutes(10);
+
     public static RouteGroupBuilder MapCalendarSyncEndpoints(this RouteGroupBuilder api)
     {
         var sync = api.MapGroup("/households/{householdId:guid}/calendar-sync")
@@ -57,10 +60,16 @@ public static class CalendarSyncEndpoints
         sync.MapPost("/{connectionId:guid}/sync", SyncNow);
         sync.MapDelete("/{connectionId:guid}", Disconnect);
 
-        // O navegador volta aqui depois de autorizar: quem é e de que casa vem no estado cifrado, não num token.
+        // O navegador volta aqui depois de autorizar: quem é e de que casa vem no estado cifrado, não num token. A
+        // ligação só fica feita depois de a pessoa confirmar, nessa página, que é ela que a quer.
         api.MapGet("/calendar-sync/callback/{provider}", Callback)
             .WithTags("Calendar")
             .AllowAnonymous()
+            .ExcludeFromDescription();
+        api.MapPost("/calendar-sync/callback/{provider}/confirm", Confirm)
+            .WithTags("Calendar")
+            .AllowAnonymous()
+            .DisableAntiforgery()
             .ExcludeFromDescription();
 
         return api;
@@ -135,8 +144,9 @@ public static class CalendarSyncEndpoints
     }
 
     /// <summary>
-    /// O regresso da página de autorização: troca o código por tokens, cria o calendário do Kubico na conta (ou
-    /// reaproveita o da ligação anterior à mesma conta) e pede a primeira sincronização.
+    /// O regresso da página de autorização: troca o código por tokens e pergunta, na própria página, se é mesmo esta
+    /// conta que se quer ligar a esta casa (de quem e qual). Assim, um link de autorização enviado a outra pessoa não
+    /// liga a conta dela sem ela saber a que casa.
     /// </summary>
     private static async Task<IResult> Callback(
         string provider,
@@ -187,33 +197,101 @@ public static class CalendarSyncEndpoints
             return Page(language, "Indisponível", $"A ligação ao {ServiceName(kind)} não está configurada neste servidor.", 400);
         }
 
-        var logger = loggers.CreateLogger(typeof(CalendarSyncEndpoints));
-        var name = CalendarSyncService.CalendarName(household.Name);
-        CalendarConnection? connection;
-        string email;
+        OAuthTokens tokens;
         try
         {
-            var tokens = await service.ExchangeCodeAsync(code, RedirectUri(http, configuration, kind), request.CodeVerifier, ct);
+            tokens = await service.ExchangeCodeAsync(code, RedirectUri(http, configuration, kind), request.CodeVerifier, ct);
             if (tokens.RefreshToken is null)
             {
                 return Page(language, "Não foi possível ligar", $"O {ServiceName(kind)} não deu acesso permanente. Tenta outra vez.", 502);
             }
-
-            email = tokens.Email ?? "(conta sem email)";
-            connection = await SaveConnectionAsync(
-                db, service, secrets, request.HouseholdId, request.UserId, household, tokens with { Email = email }, now, ct);
         }
         catch (Exception e) when (e is CalendarAuthException or CalendarProviderException or HttpRequestException)
         {
-            logger.LogWarning(e, "Falha a ligar uma conta {Provider}.", kind);
+            loggers.CreateLogger(typeof(CalendarSyncEndpoints)).LogWarning(e, "Falha a ligar uma conta {Provider}.", kind);
+            return Page(language, "Não foi possível ligar", $"O {ServiceName(kind)} não confirmou a autorização. Tenta outra vez.", 502);
+        }
+
+        var email = tokens.Email ?? "(conta sem email)";
+        var who = await db.Users.Where(u => u.Id == request.UserId).Select(u => u.DisplayName).SingleAsync(ct);
+        var pending = secrets.ProtectPending(new PendingConnection(
+            request.UserId, request.HouseholdId, kind, tokens.AccessToken, tokens.RefreshToken, email, now + ConfirmationLifetime));
+        var message = Texts.Format(language,
+            "{0} quer mostrar os eventos da casa «{1}» do Kubico no calendário «{2}» da conta {3}, e o que mudar lá muda também no Kubico. Só confirma se foste tu a pedir esta ligação.",
+            who, household.Name, CalendarSyncService.CalendarName(household.Name), email);
+        return Page(language, "Confirma a ligação", message, 200,
+            form: ($"/api/calendar-sync/callback/{kind.ToString().ToLowerInvariant()}/confirm", pending));
+    }
+
+    /// <summary>
+    /// A pessoa confirmou na página: cria o calendário do Kubico na conta (ou reaproveita o da ligação anterior à
+    /// mesma conta) e pede a primeira sincronização.
+    /// </summary>
+    private static async Task<IResult> Confirm(
+        string provider,
+        HttpRequest http,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        CalendarSyncService sync,
+        CalendarSecrets secrets,
+        CalendarSyncTrigger trigger,
+        HouseholdNotifier notifier,
+        TimeProvider clock,
+        ILoggerFactory loggers,
+        CancellationToken ct)
+    {
+        var language = Texts.LanguageOf(http.HttpContext);
+        var form = http.HasFormContentType ? await http.ReadFormAsync(ct) : null;
+        var pending = secrets.UnprotectPending(form?["pending"]);
+        if (pending is null || ParseProvider(provider) is not { } kind || pending.Provider != kind)
+        {
+            return Page(language, "Pedido inválido", "Este endereço não é válido. Volta à app do Kubico e tenta outra vez.", 400);
+        }
+
+        language = await db.Users.Where(u => u.Id == pending.UserId).Select(u => u.Language).SingleOrDefaultAsync(ct) ?? language;
+        if (form?["decision"].ToString() != "connect")
+        {
+            return Page(language, "Ligação cancelada", "Não foi dada autorização ao Kubico. Podes fechar esta página e tentar outra vez na app.", 400);
+        }
+
+        var now = clock.GetUtcNow();
+        if (pending.ExpiresAt < now)
+        {
+            return Page(language, "O pedido expirou", "Passou demasiado tempo. Volta à app do Kubico e tenta outra vez.", 400);
+        }
+
+        var role = await access.GetRoleAsync(pending.UserId, pending.HouseholdId, ct);
+        var household = await db.Households.AsNoTracking().SingleOrDefaultAsync(h => h.Id == pending.HouseholdId, ct);
+        if (role is null || household is null
+            || await access.GetAccessAsync(pending.HouseholdId, role.Value, HouseholdModule.Calendar, ct) < ModuleAccess.Manage)
+        {
+            return Page(language, "Sem permissão", "Já não podes ligar calendários nesta casa.", 403);
+        }
+
+        if (sync.Provider(kind) is not { IsConfigured: true } service)
+        {
+            return Page(language, "Indisponível", $"A ligação ao {ServiceName(kind)} não está configurada neste servidor.", 400);
+        }
+
+        var name = CalendarSyncService.CalendarName(household.Name);
+        CalendarConnection connection;
+        try
+        {
+            connection = await SaveConnectionAsync(
+                db, service, secrets, pending.HouseholdId, pending.UserId, household,
+                new OAuthTokens(pending.AccessToken, pending.RefreshToken, pending.Email), now, ct);
+        }
+        catch (Exception e) when (e is CalendarAuthException or CalendarProviderException or HttpRequestException)
+        {
+            loggers.CreateLogger(typeof(CalendarSyncEndpoints)).LogWarning(e, "Falha a ligar uma conta {Provider}.", kind);
             return Page(language, "Não foi possível ligar", $"O {ServiceName(kind)} não confirmou a autorização. Tenta outra vez.", 502);
         }
 
         await db.SaveChangesAsync(ct);
-        trigger.Request(request.HouseholdId);
-        await notifier.CalendarConnectionUpserted(request.UserId, ToDto(connection, language), ct);
+        trigger.Request(pending.HouseholdId);
+        await notifier.CalendarConnectionUpserted(pending.UserId, ToDto(connection, language), ct);
         return Page(language, "Calendário ligado",
-            $"Os eventos da casa vão aparecer no calendário «{name}» da conta {email}. Já podes voltar ao Kubico.", 200);
+            $"Os eventos da casa vão aparecer no calendário «{name}» da conta {pending.Email}. Já podes voltar ao Kubico.", 200);
     }
 
     /// <summary>
@@ -391,26 +469,34 @@ public static class CalendarSyncEndpoints
 
         if (sync.Provider(connection.Provider) is { IsConfigured: true } service)
         {
-            try
-            {
-                var refreshToken = secrets.UnprotectToken(connection.ProtectedRefreshToken);
-                var tokens = await service.RefreshAsync(refreshToken, ct);
-                await service.DeleteCalendarAsync(tokens.AccessToken, connection.ExternalCalendarId, ct);
-                await service.RevokeAsync(tokens.RefreshToken ?? refreshToken, ct);
-            }
-            catch (Exception e) when (e is CryptographicException or CalendarAuthException or CalendarProviderException
-                or HttpRequestException)
-            {
-                // A cópia fica na conta; a pessoa pode apagá-la lá.
-                loggers.CreateLogger(typeof(CalendarSyncEndpoints))
-                    .LogInformation(e, "Não foi possível apagar o calendário da ligação {Connection}.", connection.Id);
-            }
+            await ForgetRemoteAsync(service, secrets, connection, loggers.CreateLogger(typeof(CalendarSyncEndpoints)), ct);
         }
 
         db.CalendarConnections.Remove(connection);
         await db.SaveChangesAsync(ct);
         await notifier.CalendarConnectionDeleted(userId, householdId, connection.Id, ct);
         return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Apaga lá o calendário do Kubico e retira o acesso à conta. Se a conta já não responder, não falha: a cópia fica
+    /// na conta e a pessoa pode apagá-la lá.
+    /// </summary>
+    public static async Task ForgetRemoteAsync(
+        ICalendarProvider service, CalendarSecrets secrets, CalendarConnection connection, ILogger logger, CancellationToken ct)
+    {
+        try
+        {
+            var refreshToken = secrets.UnprotectToken(connection.ProtectedRefreshToken);
+            var tokens = await service.RefreshAsync(refreshToken, ct);
+            await service.DeleteCalendarAsync(tokens.AccessToken, connection.ExternalCalendarId, ct);
+            await service.RevokeAsync(tokens.RefreshToken ?? refreshToken, ct);
+        }
+        catch (Exception e) when (e is CryptographicException or CalendarAuthException or CalendarProviderException
+            or HttpRequestException or OperationCanceledException or System.Xml.XmlException)
+        {
+            logger.LogInformation(e, "Não foi possível apagar o calendário da ligação {Connection}.", connection.Id);
+        }
     }
 
     /// <summary>A ligação, com os avisos da última sincronização (um por linha) na língua de quem a vê.</summary>
@@ -437,10 +523,23 @@ public static class CalendarSyncEndpoints
         _ => "iCloud",
     };
 
-    /// <summary>Uma página simples para o navegador, em vez de JSON.</summary>
-    private static IResult Page(string language, string title, string message, int statusCode)
+    /// <summary>
+    /// Uma página simples para o navegador, em vez de JSON. Com <paramref name="form"/>, os botões "Ligar" e
+    /// "Cancelar" (um formulário para esse endereço, com a ligação por confirmar).
+    /// </summary>
+    private static IResult Page(
+        string language, string title, string message, int statusCode, (string Action, string Pending)? form = null)
     {
         (title, message) = (Texts.Translate(title, language), Texts.Translate(message, language));
+        var buttons = form is { } f
+            ? $$"""
+                <form method="post" action="{{Html(f.Action)}}">
+                <input type="hidden" name="pending" value="{{Html(f.Pending)}}">
+                <button type="submit" name="decision" value="connect">{{Html(Texts.Translate("Ligar", language))}}</button>
+                <button type="submit" name="decision" value="cancel">{{Html(Texts.Translate("Cancelar", language))}}</button>
+                </form>
+                """
+            : "";
         var html = $$"""
             <!doctype html>
             <html lang="{{(language == Texts.English ? "en" : "pt-PT")}}">
@@ -453,15 +552,30 @@ public static class CalendarSyncEndpoints
                    background: #fffbfe; color: #1c1b1f; }
             @media (prefers-color-scheme: dark) { body { background: #1c1b1f; color: #e6e1e5; } }
             h1 { font-size: 1.4rem; }
+            button { font: inherit; padding: .5rem 1.2rem; margin-right: .5rem; border-radius: 1.2rem; border: 1px solid #79747e;
+                     background: transparent; color: inherit; }
+            button[value=connect] { background: #6750a4; color: #fff; border-color: #6750a4; }
             </style>
             </head>
             <body>
             <h1>{{Html(title)}}</h1>
             <p>{{Html(message)}}</p>
+            {{buttons}}
             </body>
             </html>
             """;
-        return Results.Content(html, "text/html; charset=utf-8", Encoding.UTF8, statusCode);
+        return new HtmlPage(html, statusCode);
+    }
+
+    /// <summary>A página, com a sua própria CSP (estilos na página e o formulário só para a própria API).</summary>
+    private sealed class HtmlPage(string html, int statusCode) : IResult
+    {
+        public Task ExecuteAsync(HttpContext http)
+        {
+            http.Response.Headers.ContentSecurityPolicy =
+                "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'";
+            return Results.Content(html, "text/html; charset=utf-8", Encoding.UTF8, statusCode).ExecuteAsync(http);
+        }
     }
 
     /// <summary>Escapa só o que o HTML exige; os acentos vão tal e qual (a página é UTF-8).</summary>

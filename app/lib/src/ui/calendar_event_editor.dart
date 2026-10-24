@@ -225,13 +225,15 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
   }
 
   Widget _rideField(String label, String? value, ValueChanged<String?> onChanged) {
+    // As crianças não levam nem vão buscar ninguém.
+    final drivers = widget.members.where((m) => m.role != HouseholdRole.child).toList();
     return DropdownButtonFormField<String?>(
       key: ValueKey(label),
-      initialValue: widget.members.any((m) => m.userId == value) ? value : null,
+      initialValue: drivers.any((m) => m.userId == value) ? value : null,
       decoration: InputDecoration(labelText: label, prefixIcon: const Icon(Icons.directions_car_outlined)),
       items: [
         DropdownMenuItem<String?>(value: null, child: Text('Ninguém'.tr)),
-        for (final m in widget.members) DropdownMenuItem<String?>(value: m.userId, child: Text(m.displayName)),
+        for (final m in drivers) DropdownMenuItem<String?>(value: m.userId, child: Text(m.displayName)),
       ],
       onChanged: onChanged,
     );

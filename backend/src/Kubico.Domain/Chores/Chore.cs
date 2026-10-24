@@ -6,9 +6,12 @@ namespace Kubico.Domain.Chores;
 /// Uma tarefa da casa ("Tirar o lixo", "Aspirar a sala"). Pode repetir-se e rodar
 /// automaticamente entre membros sempre que é concluída.
 /// </summary>
-public class Chore
+public class Chore : IVersioned
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+
+    /// <summary>Muda em cada gravação: duas conclusões em simultâneo não contam as duas.</summary>
+    public Guid Version { get; set; }
     public Guid HouseholdId { get; set; }
     public Household Household { get; set; } = null!;
 
@@ -20,6 +23,12 @@ public class Chore
 
     public DateOnly? DueDate { get; set; }
     public ChoreRecurrence Recurrence { get; set; }
+
+    /// <summary>
+    /// Nas tarefas mensais, o dia do mês de referência (o do prazo escolhido): uma tarefa a 31 fica no último dia dos
+    /// meses mais curtos e volta ao 31 nos outros. Null = o dia do prazo atual.
+    /// </summary>
+    public int? DueDay { get; set; }
 
     /// <summary>Responsável atual; null significa "qualquer pessoa".</summary>
     public Guid? AssigneeUserId { get; set; }
@@ -55,6 +64,18 @@ public class Chore
     public List<ChoreCompletion> Completions { get; set; } = [];
 
     public bool IsDone => CompletedAt is not null;
+
+    /// <summary>
+    /// Numa tarefa que se repete, desde quando se pode fazer a ocorrência atual: o dia a seguir à anterior (numa
+    /// diária, o próprio dia do prazo). Assim cada ocorrência conclui-se uma vez e não se adiantam as seguintes.
+    /// Null nas tarefas que não se repetem ou sem prazo.
+    /// </summary>
+    public DateOnly? AvailableFrom => Recurrence == ChoreRecurrence.None || DueDate is not { } due
+        ? null
+        : Previous(due, Recurrence, DueDay ?? due.Day).AddDays(1);
+
+    /// <summary>Se já se pode concluir hoje (as que não se repetem, sempre).</summary>
+    public bool IsAvailableOn(DateOnly today) => AvailableFrom is not { } from || today >= from;
 
     /// <summary>
     /// Uma conclusão não foi aceite: a tarefa volta a estar por fazer, hoje, por quem a fez (numa tarefa que se
@@ -128,7 +149,7 @@ public class Chore
         }
         else
         {
-            DueDate = NextDueDate(DueDate ?? today, Recurrence, today);
+            DueDate = NextDueDate(DueDate ?? today, Recurrence, today, DueDay);
             if (RotationUserIds.Count > 0)
             {
                 // Quem está fora no próximo prazo é saltado. Se os outros estiverem todos fora, fica com quem a fez
@@ -195,6 +216,38 @@ public class Chore
         return true;
     }
 
+    /// <summary>
+    /// Quem tem a tarefa vai estar fora e ninguém a pode fazer por ele (sem rotação, ou com os outros também fora):
+    /// a tarefa fica em pausa, com o prazo no dia a seguir ao regresso; nas que se repetem saltam-se as ocorrências
+    /// desse período. As que já estavam em atraso também esperam, se a ausência já começou. Devolve true se mudou.
+    /// </summary>
+    public bool PauseFor(MemberAbsence absence, DateOnly today, DateTimeOffset now)
+    {
+        if (IsDone || AssigneeUserId != absence.UserId || DueDate is not { } due || due > absence.EndDate
+            || (due < absence.StartDate && absence.StartDate > today))
+        {
+            return false;
+        }
+
+        if (Recurrence == ChoreRecurrence.None)
+        {
+            DueDate = absence.EndDate.AddDays(1);
+        }
+        else
+        {
+            var anchor = DueDay ?? due.Day;
+            while (due <= absence.EndDate)
+            {
+                due = Advance(due, Recurrence, anchor);
+            }
+
+            DueDate = due;
+        }
+
+        UpdatedAt = now;
+        return true;
+    }
+
     /// <summary>O próximo da rotação, a seguir a <paramref name="from"/>, que não está fora nesse dia.</summary>
     private Guid? NextAvailable(Guid from, DateOnly day, Func<Guid, DateOnly, bool> isAway)
     {
@@ -212,25 +265,44 @@ public class Chore
         return null;
     }
 
-    /// <summary>Próximo prazo depois de hoje, saltando os períodos que já passaram.</summary>
-    public static DateOnly NextDueDate(DateOnly from, ChoreRecurrence recurrence, DateOnly today)
+    /// <summary>
+    /// O prazo seguinte a uma conclusão feita hoje: a primeira ocorrência cujo período começa depois de hoje (o que
+    /// se fez hoje conta para o período em que hoje está, e os que já passaram saltam-se). Assim a tarefa não se
+    /// volta a fazer no mesmo dia, nem uma semanal em atraso feita hoje conta por duas semanas. Nas mensais conta o
+    /// dia de referência (<paramref name="dueDay"/>, por omissão o de <paramref name="from"/>): 31/01 → 28/02 → 31/03…
+    /// </summary>
+    public static DateOnly NextDueDate(DateOnly from, ChoreRecurrence recurrence, DateOnly today, int? dueDay = null)
     {
-        var next = Advance(from, recurrence);
-        while (next <= today)
+        var anchor = dueDay ?? from.Day;
+        var next = Advance(from, recurrence, anchor);
+        while (Previous(next, recurrence, anchor) < today)
         {
-            next = Advance(next, recurrence);
+            next = Advance(next, recurrence, anchor);
         }
 
         return next;
     }
 
-    private static DateOnly Advance(DateOnly date, ChoreRecurrence recurrence) => recurrence switch
+    private static DateOnly Advance(DateOnly date, ChoreRecurrence recurrence, int anchor) => recurrence switch
     {
         ChoreRecurrence.Daily => date.AddDays(1),
         ChoreRecurrence.Weekly => date.AddDays(7),
-        ChoreRecurrence.Monthly => date.AddMonths(1),
+        ChoreRecurrence.Monthly => OnDay(date.AddMonths(1), anchor),
         _ => throw new InvalidOperationException("Tarefa sem recorrência não tem próximo prazo."),
     };
+
+    /// <summary>A ocorrência anterior a <paramref name="date"/>.</summary>
+    private static DateOnly Previous(DateOnly date, ChoreRecurrence recurrence, int anchor) => recurrence switch
+    {
+        ChoreRecurrence.Daily => date.AddDays(-1),
+        ChoreRecurrence.Weekly => date.AddDays(-7),
+        ChoreRecurrence.Monthly => OnDay(date.AddMonths(-1), anchor),
+        _ => throw new InvalidOperationException("Tarefa sem recorrência não tem ocorrência anterior."),
+    };
+
+    /// <summary>O dia <paramref name="day"/> do mês de <paramref name="month"/> (ou o último, se esse mês for mais curto).</summary>
+    private static DateOnly OnDay(DateOnly month, int day) =>
+        new(month.Year, month.Month, Math.Min(day, DateTime.DaysInMonth(month.Year, month.Month)));
 
     private Guid NextInRotation(Guid current)
     {

@@ -130,8 +130,14 @@ void main() {
     api.accessToken = 't';
     expect(find.text('Ligar'), findsOneWidget);
 
+    // Primeiro a palavra-passe (quem só tem uma sessão aberta não a liga no lugar da pessoa).
     await tester.tap(find.text('Ligar'));
     await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Palavra-passe'), 'certa-certa');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Continuar'));
+    await tester.pumpAndSettle();
+    expect(server.requests, contains('POST /api/account/2fa/setup'));
     expect(find.text('JBSW Y3DP EHPK 3PXP JBSW Y3DP EHPK 3PXP'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextField, 'Código'), '999999');

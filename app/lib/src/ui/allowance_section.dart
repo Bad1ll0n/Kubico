@@ -103,15 +103,17 @@ class _AllowanceSectionState extends State<AllowanceSection> {
 
   Future<void> _pay(Allowance allowance, AllowancePeriodEntry period) async {
     final name = _member(allowance.userId)?.displayName ?? 'esta pessoa'.tr;
+    // Num período já pago, paga-se o que falta (as tarefas feitas depois de pagar).
+    final amount = period.isPaid ? period.owedCents : period.amountCents;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Pagar ${formatEuros(period.amountCents)} a $name?'.tr),
+        title: Text('Pagar ${formatEuros(amount)} a $name?'.tr),
         content: Text(
           [
             '${capitalize(_periodLabel(allowance.period, period))}: ${_detail(period)}.',
             if (period.isCurrent)
-              'Ainda não acabou: as tarefas feitas depois de pagar já não contam para ${_periodLabel(allowance.period, period)}.'
+              'Ainda não acabou: as tarefas feitas depois de pagar ficam por pagar e aparecem quando ${_periodLabel(allowance.period, period)} acabar.'
                   .tr,
             'Fica marcado como pago e $name recebe um aviso.'.tr,
           ].join(' '),
@@ -222,6 +224,14 @@ class _AllowanceSectionState extends State<AllowanceSection> {
                   children: [
                     Text(formatEuros(period.amountCents), style: theme.textTheme.titleSmall),
                     const SizedBox(width: 8),
+                    if (period.isPaid && period.owedCents > 0 && _canManage)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: FilledButton.tonal(
+                          onPressed: () => _pay(allowance, period),
+                          child: Text('Pagar o resto'.tr),
+                        ),
+                      ),
                     if (period.isPaid)
                       _canManage
                           ? PopupMenuButton<String>(
@@ -251,6 +261,7 @@ class _AllowanceSectionState extends State<AllowanceSection> {
       final n => '$n tarefas feitas'.tr,
     },
     if (period.isCurrent && !period.isPaid) 'ainda a decorrer'.tr,
+    if (period.isPaid && period.owedCents > 0) 'falta pagar ${formatEuros(period.owedCents)}'.tr,
   ].join(' · ');
 
   static String _periodLabel(AllowancePeriod kind, AllowancePeriodEntry period) => switch (kind) {

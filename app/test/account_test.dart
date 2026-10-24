@@ -18,9 +18,12 @@ http.Response _json(Object body, [int status = 200]) => http.Response.bytes(
 );
 
 class _Server {
-  _Server({this.child = false});
+  _Server({this.child = false, this.blocked = false});
 
   final bool child;
+
+  /// A Mãe é a única administradora de uma casa sem outro adulto.
+  final bool blocked;
   final requests = <String>[];
 
   late final client = MockClient((request) async {
@@ -49,6 +52,14 @@ class _Server {
               'attachment; filename=kubico-dados-2026-10-19.json; filename*=UTF-8\'\'kubico-dados-2026-10-19.json',
         },
       );
+    }
+    if (path == '/api/account/deletion') {
+      return _json([
+        if (blocked)
+          {'householdId': 'h1', 'householdName': 'Casa', 'outcome': 'Blocked', 'successorName': null}
+        else
+          {'householdId': 'h1', 'householdName': 'Casa', 'outcome': 'AdminPassesTo', 'successorName': 'Pai'},
+      ]);
     }
     if (path == '/api/account' && request.method == 'DELETE') {
       final password = (jsonDecode(request.body) as Map<String, dynamic>)['password'];
@@ -150,6 +161,21 @@ void main() {
     expect(session.status, SessionStatus.signedOut);
     expect(find.text('Abrir a conta'), findsOneWidget);
     expect(find.text('A tua conta foi apagada.'), findsOneWidget);
+  });
+
+  testWidgets('apagar a conta diz quem fica a administrar cada casa', (tester) async {
+    await _pump(tester, _Server());
+    await tester.tap(find.text('Apagar a minha conta'));
+    await tester.pumpAndSettle();
+    expect(find.text('«Casa»: a administração passa para Pai.'), findsOneWidget);
+  });
+
+  testWidgets('apagar a conta não deixa uma casa sem administrador adulto', (tester) async {
+    await _pump(tester, _Server(blocked: true));
+    await tester.tap(find.text('Apagar a minha conta'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('«Casa»: és o único administrador'), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Apagar a conta')).onPressed, isNull);
   });
 
   testWidgets('um perfil de criança não apaga a conta', (tester) async {

@@ -243,8 +243,26 @@ public static class ShoppingEndpoints
             await ProductEndpoints.RememberAsync(db, householdId, barcode, item.Name, item.Category, now, ct);
         }
 
-        activity.Capture(householdId, userId, HouseholdModule.Shopping, $"pôs «{item.Name}» na lista «{await ListName(db, listId, ct)}»");
-        await db.SaveChangesAsync(ct);
+        activity.Capture(
+            householdId, userId, HouseholdModule.Shopping, $"pôs «{item.Name}» na lista «{await ListName(db, listId, ct)}»",
+            access: ModuleAccess.Participate);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException e) when (request.Id is { } repeated && e is not DbUpdateConcurrencyException)
+        {
+            // O mesmo artigo chegou duas vezes ao mesmo tempo (a fila sem rede a reenviar): fica o que chegou primeiro.
+            db.ChangeTracker.Clear();
+            if (await db.ShoppingItems.AsNoTracking().SingleOrDefaultAsync(i => i.Id == repeated, ct) is not { } first)
+            {
+                throw;
+            }
+
+            return first.ListId == listId
+                ? Results.Ok(ToDto(first))
+                : Results.Problem(title: "Este artigo já existe noutra lista.", statusCode: StatusCodes.Status409Conflict);
+        }
 
         var dto = ToDto(item);
         await notifier.ShoppingItemUpserted(householdId, dto, ct);
@@ -281,6 +299,11 @@ public static class ShoppingEndpoints
 
         if (request.Name is not null)
         {
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["Name"] = ["O nome é obrigatório."] });
+            }
+
             item.Name = request.Name.Trim();
         }
 
@@ -312,7 +335,7 @@ public static class ShoppingEndpoints
             true => $"marcou «{item.Name}» como comprado",
             false => $"desmarcou «{item.Name}»",
             _ => $"mudou «{item.Name}»",
-        });
+        }, access: ModuleAccess.Participate);
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(item);
@@ -345,7 +368,9 @@ public static class ShoppingEndpoints
             return Results.NotFound();
         }
 
-        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Shopping, $"tirou «{item.Name}» da lista «{await ListName(db, listId, ct)}»");
+        activity.Capture(
+            householdId, principal.GetUserId(), HouseholdModule.Shopping,
+            $"tirou «{item.Name}» da lista «{await ListName(db, listId, ct)}»", access: ModuleAccess.Participate);
         db.ShoppingItems.Remove(item);
         await db.SaveChangesAsync(ct);
         await notifier.ShoppingItemDeleted(householdId, listId, itemId, ct);
@@ -380,7 +405,8 @@ public static class ShoppingEndpoints
         if (checkedItems.Count > 0)
         {
             activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Shopping,
-                $"limpou {checkedItems.Count} {(checkedItems.Count == 1 ? "artigo comprado" : "artigos comprados")} da lista «{await ListName(db, listId, ct)}»");
+                $"limpou {checkedItems.Count} {(checkedItems.Count == 1 ? "artigo comprado" : "artigos comprados")} da lista «{await ListName(db, listId, ct)}»",
+                access: ModuleAccess.Participate);
         }
         await db.SaveChangesAsync(ct);
 

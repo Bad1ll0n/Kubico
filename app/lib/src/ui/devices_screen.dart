@@ -78,7 +78,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     return Scaffold(
       appBar: AppBar(title: Text('Dispositivos com sessão iniciada'.tr)),
       body: sessions == null
-          ? Center(child: _error == null ? const CircularProgressIndicator() : Text(_error.toString()))
+          ? Center(child: _error == null ? const CircularProgressIndicator() : Text(errorText(_error!)))
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(

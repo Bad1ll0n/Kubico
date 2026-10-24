@@ -37,9 +37,12 @@ public enum RedemptionStatus
 /// Um pedido de troca de pontos por uma recompensa. Guarda o nome e o custo do momento, para o histórico não
 /// mudar se a recompensa for alterada ou apagada.
 /// </summary>
-public class RewardRedemption
+public class RewardRedemption : IVersioned
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+
+    /// <summary>Muda em cada gravação: aprovar e recusar (ou cancelar) ao mesmo tempo não passam os dois.</summary>
+    public Guid Version { get; set; }
     public Guid HouseholdId { get; set; }
     public Guid? RewardId { get; set; }
     public Guid UserId { get; set; }

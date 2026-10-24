@@ -34,6 +34,7 @@ class _Server {
   final requests = <String>[];
   final bodies = <Map<String, dynamic>>[];
   final absences = <Map<String, dynamic>>[];
+  final invites = <Map<String, dynamic>>[];
   var households = [
     {'id': 'h1', 'name': 'Casa'},
   ];
@@ -61,6 +62,14 @@ class _Server {
         'members': members,
       });
     }
+    if (path == '/api/households/h1/invites') {
+      return _json(invites);
+    }
+    if (path.startsWith('/api/households/h1/invites/') && request.method == 'DELETE') {
+      invites.removeWhere((i) => path.endsWith(i['code'] as String));
+      return http.Response('', 204);
+    }
+    if (path.endsWith('/sign-out')) return http.Response('', 204);
     if (path == '/api/households/h1/absences') {
       if (request.method == 'POST') {
         final b = bodies.last;
@@ -227,7 +236,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Mudar PIN'));
     await tester.pumpAndSettle();
     expect(server.requests, contains('PUT /api/households/h1/children/rita/pin'));
-    expect(find.text('O PIN de Rita foi mudado.'), findsOneWidget);
+    expect(find.text('O PIN de Rita foi mudado e as sessões abertas terminaram.'), findsOneWidget);
   });
 
   testWidgets('o único administrador tem de passar a administração antes de sair', (tester) async {

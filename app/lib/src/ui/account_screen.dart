@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
+import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'theme.dart';
@@ -56,10 +57,21 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _delete() async {
-    final password = await showDialog<String>(context: context, builder: (_) => const _DeleteAccountDialog());
+    final api = context.read<ApiClient>();
+    List<AccountDeletionHousehold> plan;
+    try {
+      plan = await api.getAccountDeletion();
+    } catch (e) {
+      if (mounted) showError(context, e);
+      return;
+    }
+    if (!mounted) return;
+    final password = await showDialog<String>(
+      context: context,
+      builder: (_) => _DeleteAccountDialog(plan: plan),
+    );
     if (password == null || !mounted) return;
 
-    final api = context.read<ApiClient>();
     final session = context.read<SessionController>();
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
@@ -157,9 +169,11 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 }
 
-/// Explica o que acontece e pede a palavra-passe outra vez.
+/// Explica o que acontece (a cada casa) e pede a palavra-passe outra vez.
 class _DeleteAccountDialog extends StatefulWidget {
-  const _DeleteAccountDialog();
+  const _DeleteAccountDialog({required this.plan});
+
+  final List<AccountDeletionHousehold> plan;
 
   @override
   State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
@@ -177,38 +191,58 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
   @override
   Widget build(BuildContext context) {
     final error = Theme.of(context).colorScheme.error;
+    final blocked = widget.plan.where((h) => h.outcome == AccountDeletionOutcome.blocked).toList();
     return AlertDialog(
       title: Text('Apagar a tua conta?'.tr),
       content: SizedBox(
         width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '• Sais de todas as casas. As casas onde mais ninguém tem conta são apagadas, com tudo o que têm '
-                      '(incluindo os perfis de criança).\n'
-                      '• Onde és a única pessoa a administrar, a administração passa para outra pessoa da casa.\n'
-                      '• O que fizeste nas casas (tarefas feitas, artigos, eventos) fica para os outros, sem o teu nome.\n'
-                      '• Não se pode desfazer. Se quiseres, descarrega antes os teus dados.'
-                  .tr,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _password,
-              autofocus: true,
-              obscureText: true,
-              decoration: InputDecoration(labelText: 'Palavra-passe'.tr, helperText: 'Para confirmar que és tu.'.tr),
-              onChanged: (_) => setState(() {}),
-            ),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '• Sais de todas as casas. As casas onde mais ninguém tem conta são apagadas, com tudo o que têm '
+                        '(incluindo os perfis de criança).\n'
+                        '• Onde és a única pessoa a administrar, a administração passa para o adulto que lá está há mais tempo.\n'
+                        '• O que fizeste nas casas (tarefas feitas, artigos, eventos) fica para os outros, sem o teu nome.\n'
+                        '• Não se pode desfazer. Se quiseres, descarrega antes os teus dados.'
+                    .tr,
+              ),
+              if (widget.plan.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                for (final h in widget.plan)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(switch (h.outcome) {
+                      AccountDeletionOutcome.deleted => '«${h.householdName}» é apagada.'.tr,
+                      AccountDeletionOutcome.adminPassesTo =>
+                        '«${h.householdName}»: a administração passa para ${h.successorName}.'.tr,
+                      AccountDeletionOutcome.blocked =>
+                        '«${h.householdName}»: és o único administrador e não há outro adulto. Antes de apagares a conta, passa a administração a um adulto (ou muda o papel de alguém para Adulto).'
+                            .tr,
+                      AccountDeletionOutcome.leaves => '«${h.householdName}»: sais da casa.'.tr,
+                    }, style: h.outcome == AccountDeletionOutcome.blocked ? TextStyle(color: error) : null),
+                  ),
+              ],
+              const SizedBox(height: 16),
+              TextField(
+                controller: _password,
+                autofocus: true,
+                obscureText: true,
+                decoration: InputDecoration(labelText: 'Palavra-passe'.tr, helperText: 'Para confirmar que és tu.'.tr),
+                enabled: blocked.isEmpty,
+                onChanged: (_) => setState(() {}),
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: error),
-          onPressed: _password.text.isEmpty ? null : () => Navigator.pop(context, _password.text),
+          onPressed: _password.text.isEmpty || blocked.isNotEmpty ? null : () => Navigator.pop(context, _password.text),
           child: Text('Apagar a conta'.tr),
         ),
       ],

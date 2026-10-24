@@ -11,6 +11,7 @@ import '../shopping/shopping_repository.dart';
 import '../shopping/voice_input.dart';
 import 'scanner_screen.dart';
 import 'shopping_add_dialogs.dart';
+import 'theme.dart';
 
 /// Artigos de uma lista, sincronizados em tempo real com os outros membros. Funciona sem rede: as alterações
 /// aparecem logo e são enviadas quando a ligação voltar (ver [ShoppingRepository]).
@@ -221,7 +222,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
             : Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(_error.toString()),
+                  Text(errorText(_error!)),
                   TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
                 ],
               ),

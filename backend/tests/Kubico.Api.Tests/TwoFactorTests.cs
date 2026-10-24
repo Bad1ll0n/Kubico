@@ -28,7 +28,7 @@ public class TwoFactorTests(KubicoApiFactory factory) : IClassFixture<KubicoApiF
     {
         var email = $"{Guid.NewGuid():N}@kubico.test";
         var (client, _) = await factory.CreateUserAsync("Mãe", email);
-        var setup = await NotificationTests.Post<TwoFactorSetupDto>(client, "/api/account/2fa/setup", null);
+        var setup = await NotificationTests.Post<TwoFactorSetupDto>(client, "/api/account/2fa/setup", new TwoFactorSetupRequest(Password));
         var secret = Totp.FromBase32(setup.Secret);
         var step = Totp.StepAt(factory.Clock.GetUtcNow());
 
@@ -94,7 +94,7 @@ public class TwoFactorTests(KubicoApiFactory factory) : IClassFixture<KubicoApiF
         var off = await client.PostAsJsonAsync("/api/account/2fa/disable", new DisableTwoFactorRequest(Password, Totp.Code(secret, step + 1)), TestJson.Options);
         var login = await factory.CreateClient().PostAsJsonAsync("/api/auth/login", new LoginRequest(email, Password));
         var auth = await login.Content.ReadFromJsonAsync<AuthResponse>(TestJson.Options);
-        var again = await client.PostAsync("/api/account/2fa/setup", null);
+        var again = await client.PostAsJsonAsync("/api/account/2fa/setup", new TwoFactorSetupRequest(Password), TestJson.Options);
 
         Assert.Equal(HttpStatusCode.BadRequest, wrongPassword.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, wrongCode.StatusCode);
@@ -114,13 +114,14 @@ public class TwoFactorTests(KubicoApiFactory factory) : IClassFixture<KubicoApiF
         var child = factory.CreateClient();
         child.DefaultRequestHeaders.Authorization = new("Bearer", (await login.Content.ReadFromJsonAsync<AuthResponse>(TestJson.Options))!.AccessToken);
 
-        Assert.Equal(HttpStatusCode.Forbidden, (await child.PostAsync("/api/account/2fa/setup", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await child.PostAsJsonAsync("/api/account/2fa/setup", new TwoFactorSetupRequest("1234"), TestJson.Options)).StatusCode);
     }
 
     /// <summary>Liga a verificação e devolve o segredo.</summary>
     private async Task<byte[]> TurnOn(HttpClient client)
     {
-        var setup = await NotificationTests.Post<TwoFactorSetupDto>(client, "/api/account/2fa/setup", null);
+        var setup = await NotificationTests.Post<TwoFactorSetupDto>(client, "/api/account/2fa/setup", new TwoFactorSetupRequest(Password));
         var secret = Totp.FromBase32(setup.Secret);
         await NotificationTests.Post<TwoFactorEnabledDto>(
             client, "/api/account/2fa/enable", new TwoFactorCodeRequest(Totp.Code(secret, Totp.StepAt(factory.Clock.GetUtcNow()))));

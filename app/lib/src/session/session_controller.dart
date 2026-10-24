@@ -36,6 +36,10 @@ class SessionController extends ChangeNotifier {
   DateTime? _accessExpiresAt;
   Future<bool>? _renewing;
 
+  /// Chamado sempre que a sessão deste aparelho acaba (terminou aqui, noutro aparelho, expirou ou a conta foi
+  /// apagada): apaga o que a app guardou (a cópia das listas, a fila, os avisos) e desliga o tempo real.
+  Future<void> Function()? onSessionEnded;
+
   HouseholdSummary? get currentHousehold {
     if (households.isEmpty) return null;
     return households.firstWhere((h) => h.id == _selectedHouseholdId, orElse: () => households.first);
@@ -128,9 +132,10 @@ class SessionController extends ChangeNotifier {
   /// A conta foi apagada: esquece a sessão neste dispositivo (no servidor já não existe).
   Future<void> forgetDeletedAccount() => _forgetSession();
 
-  /// Termina a sessão em todos os dispositivos (por exemplo, depois de perder o telemóvel).
-  Future<void> signOutEverywhere() async {
-    await api.logoutEverywhere();
+  /// Termina a sessão em todos os dispositivos (por exemplo, depois de perder o telemóvel). Com
+  /// [resetCalendarFeeds], os endereços de calendário subscritos também deixam de servir.
+  Future<void> signOutEverywhere({bool resetCalendarFeeds = false}) async {
+    await api.logoutEverywhere(resetCalendarFeeds: resetCalendarFeeds);
     await _forgetSession();
   }
 
@@ -163,10 +168,18 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> _forgetSession() async {
+    final hadSession = api.accessToken != null;
     api.accessToken = null;
     _accessExpiresAt = null;
     await _store.write(_tokenKey, null);
     await _store.write(_refreshKey, null);
+    if (hadSession) {
+      try {
+        await onSessionEnded?.call();
+      } catch (e) {
+        debugPrint('Kubico: não foi possível apagar os dados locais ($e)');
+      }
+    }
     _setSignedOut();
   }
 

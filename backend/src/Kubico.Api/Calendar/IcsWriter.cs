@@ -197,13 +197,19 @@ public sealed class IcsWriter
 
     private static string Date(DateOnly date) => date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
-    /// <summary>Texto iCalendar: barras, pontos e vírgulas, vírgulas e mudanças de linha são escapados.</summary>
-    public static string Text(string value) => value
+    /// <summary>
+    /// Texto iCalendar: barras, pontos e vírgulas, vírgulas e mudanças de linha são escapados (também um CR sozinho,
+    /// que algumas apps leem como fim de linha); os outros caracteres de controlo saem.
+    /// </summary>
+    public static string Text(string value) => new string(value
         .Replace("\\", "\\\\")
         .Replace(";", "\\;")
         .Replace(",", "\\,")
         .Replace("\r\n", "\\n")
-        .Replace("\n", "\\n");
+        .Replace("\n", "\\n")
+        .Replace("\r", "\\n")
+        .Where(c => !char.IsControl(c))
+        .ToArray());
 
     /// <summary>Parte as linhas com mais de 75 bytes (RFC 5545 §3.1), sem cortar caracteres a meio.</summary>
     public static string Fold(string line)

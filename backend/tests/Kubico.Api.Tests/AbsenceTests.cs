@@ -28,8 +28,8 @@ public class AbsenceTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFac
         var table = await NotificationTests.Post<ChoreDto>(admin, chores, new SaveChoreRequest(
             "Pôr a mesa", DueDate: today, Recurrence: ChoreRecurrence.Daily, AssigneeUserId: me, RotationUserIds: [rita, me]));
 
-        // A Rita vai passar uns dias a casa do pai: marca a sua ausência.
-        var away = await child.PostAsJsonAsync($"/api/households/{household.Id}/absences",
+        // A Rita vai passar uns dias a casa do pai: a mãe marca a ausência dela (as das crianças marca-as um adulto).
+        var away = await admin.PostAsJsonAsync($"/api/households/{household.Id}/absences",
             new SaveAbsenceRequest(rita, today, today.AddDays(10), "Casa do pai"), TestJson.Options);
         var afterAway = await admin.GetFromJsonAsync<List<ChoreDto>>(chores, TestJson.Options);
         var dadInbox = await NotificationTests.Inbox(partner);

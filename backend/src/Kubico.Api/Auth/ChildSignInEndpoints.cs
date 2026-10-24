@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Kubico.Api.Common;
 using Kubico.Domain.Users;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -15,15 +16,16 @@ public record ChildProfileOptionDto(Guid UserId, string DisplayName, string Colo
 
 /// <summary>
 /// Entrada das crianças sem email: o código da família diz que casa é, a criança escolhe o seu perfil e escreve o
-/// PIN. Ao fim de 5 PINs errados seguidos, o perfil fica bloqueado 15 minutos.
+/// PIN. Ao fim de 5 PINs errados seguidos, o perfil fica bloqueado 15 minutos, mesmo com PINs enviados em
+/// simultâneo (ver <see cref="AttemptLimits"/>). Há também um limite de pedidos por IP.
 /// </summary>
 public static class ChildSignInEndpoints
 {
     public static RouteGroupBuilder MapChildSignInEndpoints(this RouteGroupBuilder api)
     {
         var child = api.MapGroup("/auth/child").WithTags("Auth").AllowAnonymous();
-        child.MapPost("/profiles", ListProfiles);
-        child.MapPost("/login", Login);
+        child.MapPost("/profiles", ListProfiles).RequireRateLimiting(RateLimits.ChildProfiles);
+        child.MapPost("/login", Login).RequireRateLimiting(RateLimits.ChildLogin);
         return api;
     }
 
@@ -69,24 +71,23 @@ public static class ChildSignInEndpoints
             return InvalidCode();
         }
 
+        // A tentativa é reservada antes de verificar o PIN: com pedidos em simultâneo, no máximo 5 são verificados.
         var now = clock.GetUtcNow();
-        if (child.IsPinLocked(now))
+        if (!await AttemptLimits.ReservePinAsync(db, child.Id, now, ct))
         {
-            return Locked(child, now);
+            await db.Entry(child).ReloadAsync(ct);
+            return Locked(AttemptLimits.MinutesLeft(child.PinLockedUntil, now));
         }
 
         if (child.PinHash is null
             || hasher.VerifyHashedPassword(child, child.PinHash, request.Pin) == PasswordVerificationResult.Failed)
         {
-            child.RegisterWrongPin(now);
-            await db.SaveChangesAsync(ct);
-            return child.IsPinLocked(now)
-                ? Locked(child, now)
+            return await AttemptLimits.PinFailedAsync(db, child.Id, now, ct)
+                ? Locked(AttemptLimits.MinutesLeft(now + User.PinLockout, now))
                 : Results.Problem(title: "PIN errado.", statusCode: StatusCodes.Status401Unauthorized);
         }
 
-        child.RegisterRightPin();
-        await db.SaveChangesAsync(ct);
+        await AttemptLimits.PinSucceededAsync(db, child.Id, ct);
         return Results.Ok(await sessions.StartAsync(child, AuthEndpoints.Device(http), ct));
     }
 
@@ -97,11 +98,7 @@ public static class ChildSignInEndpoints
     private static IResult InvalidCode() =>
         Results.Problem(title: "Código da família inválido. Pede-o a um adulto da casa.", statusCode: StatusCodes.Status404NotFound);
 
-    private static IResult Locked(User child, DateTimeOffset now)
-    {
-        var minutes = (int)Math.Ceiling((child.PinLockedUntil!.Value - now).TotalMinutes);
-        return Results.Problem(
-            title: $"Demasiados PINs errados. Tenta outra vez daqui a {minutes} minutos.",
-            statusCode: StatusCodes.Status429TooManyRequests);
-    }
+    private static IResult Locked(int minutes) => Results.Problem(
+        title: $"Demasiados PINs errados. Tenta outra vez daqui a {minutes} minutos.",
+        statusCode: StatusCodes.Status429TooManyRequests);
 }

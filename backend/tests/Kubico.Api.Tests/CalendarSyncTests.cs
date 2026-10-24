@@ -353,6 +353,30 @@ public class CalendarSyncTests(CalendarSyncFixture fixture) : IClassFixture<Cale
     }
 
     [Fact]
+    public async Task Leaving_the_household_or_deleting_the_account_removes_the_kubico_calendar_and_the_access()
+    {
+        var (admin, _) = await fixture.RegisterAsync("Mãe");
+        var (partner, _) = await fixture.RegisterAsync("Pai");
+        var name = Unique("Casa");
+        var household = await HouseholdTests.CreateHousehold(admin, name);
+        await NotificationTests.Join(admin, partner, household.Id, HouseholdRole.Adult);
+        await ConnectAsync(partner, household.Id, "google", "pai.sai@example.com");
+        await ConnectAsync(admin, household.Id, "google", "mae.apaga@example.com");
+
+        var left = await partner.PostAsync($"/api/households/{household.Id}/leave", null);
+        var deleted = await admin.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "/api/account")
+        {
+            Content = JsonContent.Create(new DeleteAccountRequest("palavra-passe-segura")),
+        });
+
+        Assert.Equal(HttpStatusCode.NoContent, left.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+        Assert.DoesNotContain(Google.Calendars.Values, c => c.Name == $"Kubico · {name}");
+        Assert.Contains(Google.RevokedTokens, t => t.Contains("pai.sai@example.com", StringComparison.Ordinal));
+        Assert.Contains(Google.RevokedTokens, t => t.Contains("mae.apaga@example.com", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Nobody_syncs_or_disconnects_someone_elses_account()
     {
         var (admin, _) = await fixture.RegisterAsync("Mãe");
@@ -402,6 +426,10 @@ public class CalendarSyncTests(CalendarSyncFixture fixture) : IClassFixture<Cale
         }
 
         var cancelled = await Visit($"{callback}?error=access_denied&state={Uri.EscapeDataString(state)}");
+        var question = await Visit($"{callback}?code=ok:mae@example.com&state={Uri.EscapeDataString(state)}");
+        var saidNo = await Confirm(browser, question.Item2, "cancel");
+        var forgedConfirm = await browser.PostAsync($"/api/calendar-sync/callback/google/confirm",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["pending"] = "inventado", ["decision"] = "connect" }));
         var forged = await Visit($"{callback}?code=ok:mae@example.com&state={Uri.EscapeDataString(state + "x")}");
         var otherService = await Visit($"/api/calendar-sync/callback/microsoft?code=ok:mae@example.com&state={Uri.EscapeDataString(state)}");
         var refused = await Visit($"{callback}?code=recusado&state={Uri.EscapeDataString(state)}");
@@ -409,6 +437,9 @@ public class CalendarSyncTests(CalendarSyncFixture fixture) : IClassFixture<Cale
         var expired = await Visit($"{callback}?code=ok:mae@example.com&state={Uri.EscapeDataString(state)}");
 
         Assert.Equal((HttpStatusCode.BadRequest, true), (cancelled.Item1, cancelled.Item2.Contains("Ligação cancelada")));
+        Assert.Contains("«Casa ", question.Item2);
+        Assert.Equal(HttpStatusCode.BadRequest, saidNo.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, forgedConfirm.StatusCode);
         Assert.Equal((HttpStatusCode.BadRequest, true), (forged.Item1, forged.Item2.Contains("Pedido inválido")));
         Assert.Equal(HttpStatusCode.BadRequest, otherService.Item1);
         Assert.Equal((HttpStatusCode.BadGateway, true), (refused.Item1, refused.Item2.Contains("Não foi possível ligar")));
@@ -441,15 +472,34 @@ public class CalendarSyncTests(CalendarSyncFixture fixture) : IClassFixture<Cale
         return (new Uri(query["redirect_uri"].ToString()).AbsolutePath, query["state"].ToString());
     }
 
-    /// <summary>Faz o que a pessoa faz no navegador: autoriza e volta à página do Kubico.</summary>
+    /// <summary>
+    /// Faz o que a pessoa faz no navegador: autoriza, volta à página do Kubico, que pergunta se é mesmo esta conta e
+    /// esta casa, e confirma.
+    /// </summary>
     private async Task<string> ConnectAsync(HttpClient client, Guid householdId, string provider, string email)
     {
         var (callback, state) = await AuthorizeAsync(client, householdId, provider);
         using var browser = fixture.App.CreateClient();
         var page = await browser.GetAsync($"{callback}?code={Uri.EscapeDataString("ok:" + email)}&state={Uri.EscapeDataString(state)}");
-        var html = await page.Content.ReadAsStringAsync();
-        Assert.True(page.IsSuccessStatusCode, html);
+        var question = await page.Content.ReadAsStringAsync();
+        Assert.True(page.IsSuccessStatusCode, question);
+        Assert.Contains("Confirma a ligação", question);
+        var confirmed = await Confirm(browser, question, "connect");
+        var html = await confirmed.Content.ReadAsStringAsync();
+        Assert.True(confirmed.IsSuccessStatusCode, html);
         return html;
+    }
+
+    /// <summary>Carrega num dos botões da página de confirmação ("connect" ou "cancel").</summary>
+    private static Task<HttpResponseMessage> Confirm(HttpClient browser, string page, string decision)
+    {
+        var action = System.Text.RegularExpressions.Regex.Match(page, "action=\"([^\"]+)\"").Groups[1].Value;
+        var pending = System.Text.RegularExpressions.Regex.Match(page, "name=\"pending\" value=\"([^\"]+)\"").Groups[1].Value;
+        return browser.PostAsync(System.Net.WebUtility.HtmlDecode(action), new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["pending"] = System.Net.WebUtility.HtmlDecode(pending),
+            ["decision"] = decision,
+        }));
     }
 
     private static async Task<CalendarSyncDto> Overview(HttpClient client, Guid householdId) =>

@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Security.Claims;
+using Kubico.Api.Activity;
 using Kubico.Api.Chores;
 using Kubico.Api.Common;
 using Kubico.Api.Notifications;
@@ -19,8 +21,9 @@ public record SaveAbsenceRequest(
 public record AbsenceDto(Guid Id, Guid HouseholdId, Guid UserId, DateOnly StartDate, DateOnly EndDate, string? Reason);
 
 /// <summary>
-/// Ausências: quem está fora e até quando. Cada membro marca as suas; adultos e administradores marcam as de
-/// qualquer pessoa. Ao marcar, as tarefas da pessoa que caem nesses dias passam a quem vem a seguir na rotação.
+/// Ausências: quem está fora e até quando. Cada membro marca as suas (as das crianças, marca-as um adulto); quem gere
+/// as tarefas marca as de qualquer pessoa, porque mexem nas tarefas da casa: ao marcar, as tarefas da pessoa que caem
+/// nesses dias passam a quem vem a seguir na rotação, e as que não têm a quem passar ficam em pausa até ela voltar.
 /// </summary>
 public static class AbsenceEndpoints
 {
@@ -63,6 +66,7 @@ public static class AbsenceEndpoints
         SaveAbsenceRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
@@ -76,10 +80,9 @@ public static class AbsenceEndpoints
             return error;
         }
 
-        if (request.UserId != me && !role!.Value.CanManageContent())
+        if (await CannotChange(access, householdId, role!.Value, me, request.UserId, ct) is { } refused)
         {
-            return Results.Problem(
-                title: "Só podes marcar as tuas ausências.", statusCode: StatusCodes.Status403Forbidden);
+            return refused;
         }
 
         var member = await db.Memberships.Include(m => m.User)
@@ -111,6 +114,16 @@ public static class AbsenceEndpoints
             });
         }
 
+        // Tranca o membro (dois pedidos iguais em simultâneo não criam duas ausências) e não deixa sobrepor dias.
+        db.Touch(member);
+        if (await db.MemberAbsences.AnyAsync(
+            a => a.HouseholdId == householdId && a.UserId == request.UserId
+                && a.StartDate <= request.EndDate && a.EndDate >= request.StartDate, ct))
+        {
+            return Results.Problem(
+                title: "Já está marcada uma ausência nesses dias.", statusCode: StatusCodes.Status409Conflict);
+        }
+
         var absence = new MemberAbsence
         {
             HouseholdId = householdId,
@@ -123,7 +136,8 @@ public static class AbsenceEndpoints
         };
         db.MemberAbsences.Add(absence);
 
-        // As tarefas que lhe cabiam nesses dias passam a quem vem a seguir na rotação e está cá.
+        // As tarefas que lhe cabiam nesses dias passam a quem vem a seguir na rotação e está cá; as outras ficam em
+        // pausa até ao dia a seguir ao regresso.
         var all = await db.MemberAbsences
             .Where(a => a.HouseholdId == householdId && a.EndDate >= today)
             .ToListAsync(ct);
@@ -131,7 +145,10 @@ public static class AbsenceEndpoints
         var chores = await db.Chores
             .Where(c => c.HouseholdId == householdId && c.CompletedAt == null && c.AssigneeUserId == request.UserId)
             .ToListAsync(ct);
-        var moved = chores.Where(c => c.SkipAway(isAway, today, now)).ToList();
+        var moved = chores.Where(c => c.SkipAway(isAway, today, now) || c.PauseFor(absence, today, now)).ToList();
+        activity.Capture(householdId, me, null, request.UserId == me
+            ? $"vai estar fora de {Day(absence.StartDate)} a {Day(absence.EndDate)}"
+            : $"marcou a ausência de {member.User.DisplayName} de {Day(absence.StartDate)} a {Day(absence.EndDate)}", undoable: false);
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(absence);
@@ -153,6 +170,7 @@ public static class AbsenceEndpoints
         Guid absenceId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
@@ -170,17 +188,46 @@ public static class AbsenceEndpoints
             return Results.NotFound();
         }
 
-        if (absence.UserId != me && !role!.Value.CanManageContent())
+        if (await CannotChange(access, householdId, role!.Value, me, absence.UserId, ct) is { } refused)
         {
-            return Results.Problem(
-                title: "Só podes cancelar as tuas ausências.", statusCode: StatusCodes.Status403Forbidden);
+            return refused;
         }
 
         db.MemberAbsences.Remove(absence);
+        var name = await db.Users.Where(u => u.Id == absence.UserId).Select(u => u.DisplayName).SingleAsync(ct);
+        activity.Capture(householdId, me, null,
+            absence.UserId == me ? "cancelou a sua ausência" : $"cancelou a ausência de {name}", undoable: false);
         await db.SaveChangesAsync(ct);
         await notifier.AbsenceDeleted(householdId, absenceId, ct);
         return Results.NoContent();
     }
+
+    /// <summary>
+    /// As ausências mexem nas tarefas da casa: as dos outros só as marca (ou cancela) quem gere as tarefas; as próprias,
+    /// cada um, menos as crianças (marca-as um adulto).
+    /// </summary>
+    private static async Task<IResult?> CannotChange(
+        HouseholdAccess access, Guid householdId, HouseholdRole role, Guid me, Guid absentUserId, CancellationToken ct)
+    {
+        var manages = await access.GetAccessAsync(householdId, role, HouseholdModule.Chores, ct) >= ModuleAccess.Manage;
+        if (absentUserId != me && !manages)
+        {
+            return Results.Problem(
+                title: "Só quem gere as tarefas marca ou cancela as ausências dos outros.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        if (absentUserId == me && role == HouseholdRole.Child && !manages)
+        {
+            return Results.Problem(
+                title: "As ausências das crianças são marcadas por um adulto da casa.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        return null;
+    }
+
+    private static string Day(DateOnly date) => date.ToString("dd/MM", CultureInfo.InvariantCulture);
 
     private static AbsenceDto ToDto(MemberAbsence a) => new(a.Id, a.HouseholdId, a.UserId, a.StartDate, a.EndDate, a.Reason);
 }

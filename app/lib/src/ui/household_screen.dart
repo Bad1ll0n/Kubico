@@ -43,6 +43,9 @@ class HouseholdScreen extends StatefulWidget {
 class _HouseholdScreenState extends State<HouseholdScreen> {
   HouseholdDetails? _details;
   List<MemberAbsence> _absences = const [];
+
+  /// Os convites que ainda servem (só para quem gere os membros).
+  List<Invite> _invites = const [];
   Object? _error;
   String? _familyCode;
   StreamSubscription<HouseholdEvent>? _events;
@@ -72,10 +75,12 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
         _api.getHousehold(widget.householdId),
         _api.getAbsences(widget.householdId),
       ).wait;
+      final invites = details.myRole.canManageMembers ? await _api.getInvites(widget.householdId) : const <Invite>[];
       if (mounted) {
         setState(() {
           _details = details;
           _absences = absences;
+          _invites = invites;
           _error = null;
         });
       }
@@ -113,7 +118,11 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
       ) ==
       true;
 
-  Future<HouseholdRole?> _pickRole(String title, {HouseholdRole? current}) => showModalBottomSheet<HouseholdRole>(
+  Future<HouseholdRole?> _pickRole(
+    String title, {
+    HouseholdRole? current,
+    List<HouseholdRole> roles = HouseholdRole.values,
+  }) => showModalBottomSheet<HouseholdRole>(
     context: context,
     showDragHandle: true,
     builder: (context) => SafeArea(
@@ -121,7 +130,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(title: Text(title)),
-          for (final role in HouseholdRole.values)
+          for (final role in roles)
             ListTile(
               leading: Icon(_roleIcon(role)),
               title: Text(role.label),
@@ -134,12 +143,15 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
     ),
   );
 
+  /// Não há convites para administrador: depois de a pessoa entrar, passa-se a administração.
   Future<void> _invite() async {
-    final role = await _pickRole('Convidar como…'.tr);
+    final role = await _pickRole('Convidar como…'.tr, roles: HouseholdRole.invitable);
     if (role == null || !mounted) return;
 
     try {
       final invite = await _api.createInvite(widget.householdId, role);
+      if (!mounted) return;
+      await _load();
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -148,6 +160,17 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
     } catch (e) {
       if (mounted) showError(context, e);
     }
+  }
+
+  /// Anula um convite (o link foi parar a quem não devia): deixa de servir já.
+  Future<void> _revokeInvite(Invite invite) async {
+    final confirmed = await _confirm(
+      'Anular o convite ${invite.code}?'.tr,
+      'Quem tiver o código ou o link já não consegue entrar com ele.'.tr,
+      'Anular'.tr,
+    );
+    if (!confirmed) return;
+    await _run(() => _api.revokeInvite(widget.householdId, invite.code), done: 'Convite anulado.'.tr);
   }
 
   Future<void> _changeRole(Member member) async {
@@ -218,8 +241,9 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
         end: range.end,
         reason: reason,
       ),
-      done: '${member.displayName} fica fora ${_period(range.start, range.end)}. As tarefas passam a quem vem a seguir.'
-          .tr,
+      done:
+          '${member.displayName} fica fora ${_period(range.start, range.end)}. As tarefas com rotação passam a quem vem a seguir; as outras esperam que volte.'
+              .tr,
     );
   }
 
@@ -244,7 +268,21 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
     if (pin == null) return;
     await _run(
       () => _api.setChildPin(widget.householdId, member.userId, pin),
-      done: 'O PIN de ${member.displayName} foi mudado.'.tr,
+      done: 'O PIN de ${member.displayName} foi mudado e as sessões abertas terminaram.'.tr,
+    );
+  }
+
+  /// Alguém viu o PIN e entrou noutro aparelho: termina as sessões do perfil em todo o lado.
+  Future<void> _signOutChild(Member member) async {
+    final confirmed = await _confirm(
+      'Terminar as sessões de ${member.displayName}?'.tr,
+      '${member.displayName} sai de todos os telemóveis e tablets e volta a entrar com o código da família e o PIN.'.tr,
+      'Terminar sessões'.tr,
+    );
+    if (!confirmed) return;
+    await _run(
+      () => _api.signOutChild(widget.householdId, member.userId),
+      done: 'As sessões de ${member.displayName} terminaram.'.tr,
     );
   }
 
@@ -265,7 +303,8 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
     if (renew) {
       final confirmed = await _confirm(
         'Gerar um código novo?'.tr,
-        'O código atual deixa de servir para entrar. Quem já entrou continua com a sessão aberta.'.tr,
+        'O código atual deixa de servir e os perfis das crianças saem de todos os aparelhos: voltam a entrar com o código novo.'
+            .tr,
         'Gerar código'.tr,
       );
       if (!confirmed) return;
@@ -340,7 +379,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
             )
           : null,
       body: details == null
-          ? Center(child: _error == null ? const CircularProgressIndicator() : Text(_error.toString()))
+          ? Center(child: _error == null ? const CircularProgressIndicator() : Text(errorText(_error!)))
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
@@ -348,6 +387,10 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                 children: [
                   for (final member in details.members) _memberTile(member, details, isMe: member.userId == me),
                   if (details.myRole.canManageContent) ...[const SizedBox(height: 12), _childrenCard()],
+                  if (details.myRole.canManageMembers && _invites.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _invitesCard(),
+                  ],
                   if (details.myRole.canManageMembers) ...[
                     const SizedBox(height: 12),
                     Card(
@@ -381,7 +424,9 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
   Widget _memberTile(Member member, HouseholdDetails details, {required bool isMe}) {
     final canManage = details.myRole.canManageMembers;
     final absence = _absenceOf(member);
-    final canMarkAbsence = isMe || details.myRole.canManageContent;
+    // As ausências mexem nas tarefas: as dos outros, marca-as quem gere as tarefas; as das crianças, um adulto.
+    final managesChores = details.accessTo(HouseholdModule.chores).canManage;
+    final canMarkAbsence = managesChores || (isMe && details.myRole != HouseholdRole.child);
     final actions = <(String, String, Future<void> Function(Member))>[
       if (canMarkAbsence && absence == null) ('away', 'Marcar ausência'.tr, _markAbsence),
       if (canMarkAbsence && absence != null) ('back', 'Cancelar ausência'.tr, _cancelAbsence),
@@ -389,6 +434,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
       if (!isMe && canManage && !member.isChildProfile && member.role != HouseholdRole.admin)
         ('admin', 'Passar a administração'.tr, _transferAdmin),
       if (member.isChildProfile && details.myRole.canManageContent) ('pin', 'Mudar PIN'.tr, _changePin),
+      if (member.isChildProfile && details.myRole.canManageContent) ('sessions', 'Terminar sessões'.tr, _signOutChild),
       if (!isMe && canManage) ('remove', member.isChildProfile ? 'Apagar perfil'.tr : 'Tirar da casa'.tr, _remove),
     ];
     return Card(
@@ -418,6 +464,36 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                   for (final (key, label, _) in actions) PopupMenuItem(value: key, child: Text(label)),
                 ],
               ),
+      ),
+    );
+  }
+
+  Widget _invitesCard() {
+    final theme = Theme.of(context);
+    final localizations = MaterialLocalizations.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Convites ativos'.tr, style: theme.textTheme.titleMedium),
+            for (final invite in _invites)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('${invite.code} · ${invite.role.label}'),
+                subtitle: Text(
+                  [
+                    'até ${localizations.formatMediumDate(invite.expiresAt)}'.tr,
+                    invite.maxUses == null
+                        ? 'para várias pessoas'.tr
+                        : '${invite.usedCount} de ${invite.maxUses} utilizações'.tr,
+                  ].join(' · '),
+                ),
+                trailing: TextButton(onPressed: () => _revokeInvite(invite), child: Text('Anular'.tr)),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -524,6 +600,8 @@ class _InviteDialog extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text('Entra como ${invite.role.label.toLowerCase()}. Válido até $expires.'.tr, textAlign: TextAlign.center),
+            if (invite.maxUses == 1)
+              Text('Serve para uma pessoa.'.tr, textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
           ],
         ),
       ),
@@ -711,7 +789,8 @@ class _AbsenceReasonDialogState extends State<_AbsenceReasonDialog> {
             Text(_HouseholdScreenState._period(range.start, range.end)),
             const SizedBox(height: 4),
             Text(
-              'Enquanto estiver fora, sai das rotações e as tarefas passam a quem vem a seguir.'.tr,
+              'Enquanto estiver fora, sai das rotações: as tarefas passam a quem vem a seguir e as que não têm a quem passar ficam em pausa até voltar.'
+                  .tr,
               style: Theme.of(context).textTheme.bodySmall,
             ),
             TextField(

@@ -3,6 +3,7 @@ using Kubico.Api.Activity;
 using Kubico.Api.Common;
 using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
+using Kubico.Api.Rewards;
 using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
 using Kubico.Domain.Notifications;
@@ -68,8 +69,10 @@ public static class ChoreHistoryEndpoints
 
         using var buffer = new MemoryStream();
         await photo.CopyToAsync(buffer, ct);
-        var data = buffer.ToArray();
-        if (ChorePhoto.DetectContentType(data) is not { } contentType)
+        // Confirma o tipo pelos bytes e tira os metadados (EXIF com a localização GPS, XMP, textos) antes de guardar.
+        var received = buffer.ToArray();
+        if (ChorePhoto.DetectContentType(received) is not { } contentType
+            || PhotoMetadata.Strip(received, contentType) is not { } data)
         {
             return Invalid("Isto não parece uma foto (JPEG, PNG ou WebP).");
         }
@@ -130,10 +133,15 @@ public static class ChoreHistoryEndpoints
         return Results.Ok(items);
     }
 
-    /// <summary>Não aceitar uma tarefa feita: os pontos deixam de contar e a tarefa volta para quem a fez, para hoje.</summary>
+    /// <summary>
+    /// Não aceitar uma tarefa feita: os pontos deixam de contar e a tarefa volta para quem a fez, para hoje. Se os
+    /// pontos já foram trocados por recompensas, responde 409 (código "points-spent"); com <c>force=true</c>, quem
+    /// gere as tarefas confirma e a pessoa fica a dever esses pontos.
+    /// </summary>
     private static async Task<IResult> Reject(
         Guid householdId,
         Guid completionId,
+        bool? force,
         ClaimsPrincipal principal,
         KubicoDbContext db,
         ActivityLog activity,
@@ -166,10 +174,21 @@ public static class ChoreHistoryEndpoints
 
         var now = clock.GetUtcNow();
         var chore = completion.Chore;
+        var doer = await db.Users.Where(u => u.Id == completion.UserId).Select(u => u.DisplayName).SingleOrDefaultAsync(ct) ?? "antigo membro";
+
+        // Tranca o saldo de quem a fez antes de o ler (um pedido de recompensa em simultâneo não passa).
+        if (completion.Points > 0 && await Points.LockAsync(db, householdId, completion.UserId, ct) is not null && force != true)
+        {
+            var left = await Points.AvailableAsync(db, householdId, completion.UserId, ct) - completion.Points;
+            if (left < 0)
+            {
+                return Points.SpentProblem(doer, -left);
+            }
+        }
+
         completion.RejectedAt = now;
         completion.RejectedByUserId = userId;
         chore.Reopen(completion.UserId, chore.Household.Today(now), now);
-        var doer = await db.Users.Where(u => u.Id == completion.UserId).Select(u => u.DisplayName).SingleOrDefaultAsync(ct) ?? "antigo membro";
         activity.Capture(householdId, userId, HouseholdModule.Chores, $"não aceitou «{chore.Title}», feita por {doer}");
         await db.SaveChangesAsync(ct);
 

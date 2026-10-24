@@ -118,6 +118,9 @@ public class PushDevice
     /// <summary>android, ios ou web.</summary>
     public required string Platform { get; set; }
 
+    /// <summary>A sessão (família de refresh tokens) em que se registou: terminar essa sessão deixa de enviar avisos.</summary>
+    public Guid? SessionId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset LastSeenAt { get; set; }
 }

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Kubico.Api.Common;
+using Kubico.Api.Realtime;
 using Kubico.Domain.Notifications;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -122,11 +123,15 @@ public static class NotificationEndpoints
         return Results.Ok(ToDto(preferences));
     }
 
-    /// <summary>Guarda o token push deste telemóvel. Um token só pertence a uma pessoa (a última que entrou nele).</summary>
+    /// <summary>
+    /// Guarda o token push deste telemóvel, ligado à sessão em que se registou: terminar essa sessão (aqui, noutro
+    /// aparelho ou em todos) deixa de lhe enviar avisos. Um token só pertence a uma pessoa (a última que entrou nele).
+    /// </summary>
     private static async Task<IResult> RegisterDevice(
         RegisterDeviceRequest request, ClaimsPrincipal principal, KubicoDbContext db, TimeProvider clock, CancellationToken ct)
     {
         var userId = principal.GetUserId();
+        var sessionId = HouseholdHub.SessionOf(principal);
         var now = clock.GetUtcNow();
         var device = await db.PushDevices.SingleOrDefaultAsync(d => d.Token == request.Token, ct);
         if (device is null)
@@ -136,6 +141,7 @@ public static class NotificationEndpoints
                 UserId = userId,
                 Token = request.Token,
                 Platform = request.Platform,
+                SessionId = sessionId,
                 CreatedAt = now,
                 LastSeenAt = now,
             });
@@ -144,6 +150,7 @@ public static class NotificationEndpoints
         {
             device.UserId = userId;
             device.Platform = request.Platform;
+            device.SessionId = sessionId;
             device.LastSeenAt = now;
         }
 

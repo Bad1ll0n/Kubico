@@ -160,7 +160,15 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      final updated = await _api.rejectChoreCompletion(widget.household.id, item.id);
+      ChoreHistoryItem updated;
+      try {
+        updated = await _api.rejectChoreCompletion(widget.household.id, item.id);
+      } on ApiException catch (e) {
+        // Os pontos já foram trocados por recompensas: pergunta antes de deixar a pessoa a dever.
+        if (!e.isPointsSpent || !mounted) rethrow;
+        if (!await confirmPointsDebt(context, e)) return;
+        updated = await _api.rejectChoreCompletion(widget.household.id, item.id, force: true);
+      }
       if (!mounted) return;
       setState(() => _items = [for (final i in _items!) i.id == updated.id ? updated : i]);
     } catch (e) {
@@ -204,7 +212,7 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(_error.toString()),
+                        Text(errorText(_error!)),
                         TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
                       ],
                     ),

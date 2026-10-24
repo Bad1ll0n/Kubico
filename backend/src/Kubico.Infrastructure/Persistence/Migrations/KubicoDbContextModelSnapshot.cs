@@ -45,6 +45,14 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<Guid?>("PrivateToUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequiredAccess")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("Summary")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -273,6 +281,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
 
+                    b.Property<int?>("DueDay")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("HouseholdId")
                         .HasColumnType("uuid");
 
@@ -311,6 +322,10 @@ namespace Kubico.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -467,10 +482,18 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("HouseholdId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("MaxUses")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<int>("UsedCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.HasKey("Id");
 
@@ -546,6 +569,10 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)");
 
                     b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
@@ -659,6 +686,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Token")
                         .IsRequired()
                         .HasMaxLength(512)
@@ -668,6 +698,8 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("SessionId");
 
                     b.HasIndex("Token")
                         .IsUnique();
@@ -715,6 +747,11 @@ namespace Kubico.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("AmountCents")
                         .HasColumnType("integer");
+
+                    b.Property<int>("BonusPerChoreCents")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("ChoresDone")
                         .HasColumnType("integer");
@@ -820,6 +857,10 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
@@ -1023,6 +1064,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("FamilyId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("ReplacedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset?>("RevokedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1109,6 +1153,10 @@ namespace Kubico.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("TwoFactorLockedUntil")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 

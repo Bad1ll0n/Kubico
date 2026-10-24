@@ -47,6 +47,9 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
         // A sincronização com calendários externos também (CalendarSyncService, com serviços falsos).
         builder.UseSetting("CalendarSync:Enabled", "false");
 
+        // O limite de pedidos por IP desliga-se aqui (todos os testes vêm do mesmo "IP"); RateLimitTests liga-o.
+        builder.UseSetting("RateLimiting:Enabled", "false");
+
         // Quem lê as mensagens enviadas da ajuda (ver FeedbackTests).
         builder.UseSetting("Support:AdminEmails:0", SupportEmail);
         builder.ConfigureTestServices(services =>

@@ -50,6 +50,14 @@ Map<String, dynamic> _ritaAllowance({bool lastWeekPaid = false}) => {
   ],
 };
 
+/// A semana passada foi paga a meio e depois a Rita fez mais duas tarefas (1,00 € por pagar).
+Map<String, dynamic> _paidEarly() {
+  final allowance = _ritaAllowance(lastWeekPaid: true);
+  final periods = [...(allowance['periods'] as List).cast<Map<String, dynamic>>()];
+  periods[1] = {...periods[1], 'choresDone': 6, 'owedCents': 100};
+  return {...allowance, 'owedCents': 100, 'periods': periods};
+}
+
 class _Server {
   _Server({this.allowances = const []});
 
@@ -144,17 +152,17 @@ void main() {
     expect(find.text('Esta semana'), findsOneWidget);
     expect(find.text('Semana de 12/10 a 18/10'), findsOneWidget);
 
-    // Pagar a semana que ainda não acabou avisa que o resto da semana já não conta.
+    // Pagar a semana que ainda não acabou avisa que o que se fizer depois fica por pagar até ao fim da semana.
     await tester.tap(find.widgetWithText(FilledButton, 'Pagar').first);
     await tester.pumpAndSettle();
-    expect(find.textContaining('já não contam para esta semana'), findsOneWidget);
+    expect(find.textContaining('ficam por pagar e aparecem quando esta semana acabar'), findsOneWidget);
     await tester.tap(find.text('Cancelar'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, 'Pagar').last);
     await tester.pumpAndSettle();
     expect(find.text('Pagar 7,00 € a Rita?'), findsOneWidget);
-    expect(find.textContaining('já não contam'), findsNothing);
+    expect(find.textContaining('ficam por pagar'), findsNothing);
     await tester.tap(find.widgetWithText(FilledButton, 'Pagar').last);
     await tester.pumpAndSettle();
 
@@ -162,6 +170,21 @@ void main() {
     expect(find.text('Mesada de Rita marcada como paga.'), findsOneWidget);
     expect(find.text('Pago'), findsOneWidget);
     expect(find.textContaining('Por pagar'), findsNothing);
+  });
+
+  testWidgets('uma semana paga antes de acabar mostra o que falta e paga-se o resto', (tester) async {
+    final server = _Server(allowances: [_paidEarly()]);
+    await _pump(tester, server, 'Admin');
+
+    expect(find.textContaining('falta pagar 1,00 €'), findsOneWidget);
+    expect(find.text('Por pagar: 1,00 €'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Pagar o resto'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pagar 1,00 € a Rita?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Pagar').last);
+    await tester.pumpAndSettle();
+
+    expect(server.requests.last, 'POST /api/households/h1/allowances/kid/payments {"periodStart":"2026-10-12"}');
   });
 
   testWidgets('a criança vê a sua mesada, sem pagar nem mudar nada', (tester) async {

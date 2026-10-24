@@ -65,6 +65,13 @@ public class AllowancePayment
     public DateOnly PeriodEnd { get; set; }
     public int AmountCents { get; set; }
     public int ChoresDone { get; set; }
+
+    /// <summary>
+    /// O extra por tarefa no momento do pagamento: as tarefas feitas depois (num período pago antes de acabar) ficam
+    /// por pagar a este valor.
+    /// </summary>
+    public int BonusPerChoreCents { get; set; }
+
     public DateTimeOffset PaidAt { get; set; }
     public Guid PaidByUserId { get; set; }
 }

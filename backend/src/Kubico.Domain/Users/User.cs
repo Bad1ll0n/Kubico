@@ -4,9 +4,12 @@ namespace Kubico.Domain.Users;
 /// Uma pessoa que usa a app. Tem conta própria (email e palavra-passe) ou é um perfil de criança: criado por um
 /// adulto numa casa, sem email, entra com o código da família e um PIN.
 /// </summary>
-public class User
+public class User : IVersioned
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+
+    /// <summary>Muda em cada gravação: o mesmo código da 2FA (ou de recuperação) não serve em dois pedidos ao mesmo tempo.</summary>
+    public Guid Version { get; set; }
 
     /// <summary>Null nos perfis de criança.</summary>
     public string? Email { get; set; }

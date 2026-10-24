@@ -14,7 +14,8 @@ public record CalendarFeedDto(string Url, string WebcalUrl);
 
 /// <summary>
 /// Calendário da casa em iCalendar, para ver os eventos no Google Calendar, no Outlook ou no iPhone. Cada membro tem
-/// o seu endereço secreto (pode gerar outro a qualquer momento); quem o tiver vê os eventos, mas não os altera.
+/// o seu endereço secreto (pode gerar outro a qualquer momento); quem o tiver vê os eventos, mas não os altera. O
+/// endereço só serve enquanto o papel do membro tiver acesso ao Calendário: ao perdê-lo, o endereço é apagado.
 /// </summary>
 public static class CalendarFeedEndpoints
 {
@@ -83,13 +84,15 @@ public static class CalendarFeedEndpoints
         return Results.NoContent();
     }
 
-    private static async Task<IResult> GetFeed(string token, KubicoDbContext db, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> GetFeed(
+        string token, KubicoDbContext db, HouseholdAccess access, TimeProvider clock, CancellationToken ct)
     {
         var membership = await db.Memberships.AsNoTracking()
             .Include(m => m.Household)
             .Include(m => m.User)
             .SingleOrDefaultAsync(m => m.CalendarFeedToken == token, ct);
-        if (membership is null)
+        if (membership is null
+            || await access.GetAccessAsync(membership.HouseholdId, membership.Role, HouseholdModule.Calendar, ct) < ModuleAccess.View)
         {
             return Results.NotFound();
         }
@@ -112,5 +115,27 @@ public static class CalendarFeedEndpoints
 
         var ics = new IcsWriter(household, names, membership.User.Language).Write(events, now);
         return Results.Text(ics, "text/calendar", Encoding.UTF8);
+    }
+
+    /// <summary>Apaga os endereços de calendário dos membros escolhidos (deixam de servir já).</summary>
+    public static Task RevokeFeedsAsync(
+        KubicoDbContext db, System.Linq.Expressions.Expression<Func<Membership, bool>> which, CancellationToken ct) =>
+        db.Memberships.Where(which).Where(m => m.CalendarFeedToken != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.CalendarFeedToken, (string?)null), ct);
+
+    /// <summary>
+    /// Depois de mudar papéis ou permissões: quem ficou sem acesso ao Calendário perde o endereço (senão o calendário
+    /// do telemóvel continuava a mostrar tudo).
+    /// </summary>
+    public static async Task RevokeFeedsWithoutAccessAsync(
+        KubicoDbContext db, HouseholdAccess access, Guid householdId, CancellationToken ct)
+    {
+        foreach (var role in ModulePermissions.ConfigurableRoles)
+        {
+            if (await access.GetAccessAsync(householdId, role, HouseholdModule.Calendar, ct) < ModuleAccess.View)
+            {
+                await RevokeFeedsAsync(db, m => m.HouseholdId == householdId && m.Role == role, ct);
+            }
+        }
     }
 }

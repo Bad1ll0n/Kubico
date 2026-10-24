@@ -6,6 +6,12 @@ public class JwtOptions
 {
     public const string SectionName = "Jwt";
 
+    /// <summary>
+    /// A chave de desenvolvimento (em appsettings.Development.json, que está no repositório): só serve em Development.
+    /// Noutro ambiente a API não arranca com ela.
+    /// </summary>
+    public const string DevelopmentSigningKey = "dev-only-signing-key-change-me-in-production-0123456789";
+
     [Required]
     public string Issuer { get; set; } = "kubico";
 
@@ -26,4 +32,11 @@ public class JwtOptions
     /// <summary>Quanto tempo uma sessão pode estar parada antes de pedir a palavra-passe outra vez.</summary>
     [Range(1, 365)]
     public int RefreshTokenLifetimeDays { get; set; } = 60;
+
+    /// <summary>
+    /// O mesmo, nas sessões da app web (dispositivo "web"): o refresh token fica no armazenamento do browser, por isso
+    /// dura menos.
+    /// </summary>
+    [Range(1, 365)]
+    public int WebRefreshTokenLifetimeDays { get; set; } = 14;
 }

@@ -97,6 +97,15 @@ class _HomeScreenState extends State<HomeScreen> {
       session.refresh().ignore();
       return;
     }
+    if (event is HouseholdDeleted) {
+      // Saiu o último membro com conta (noutro aparelho): a casa já não existe.
+      final name = event.name.isNotEmpty
+          ? event.name
+          : session.households.where((h) => h.id == event.householdId).firstOrNull?.name ?? '';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('A casa «$name» foi apagada.'.tr)));
+      session.householdLost(event.householdId).ignore();
+      return;
+    }
     if (event is! MembersChanged) return;
     if (event.removedUserId != null && event.removedUserId == session.user?.id) {
       final name = session.households.where((h) => h.id == event.householdId).firstOrNull?.name;
@@ -130,23 +139,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _signOut(SessionController session, {required bool everywhere}) async {
+    var resetFeeds = false;
     if (everywhere) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Terminar sessão em todos os dispositivos?'.tr),
-          content: Text(
-            'Vais ter de entrar outra vez em todos os telemóveis e computadores. '
-                    'Útil se perdeste um telemóvel ou entraste num computador que não é teu.'
-                .tr,
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancelar'.tr)),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text('Terminar sessões'.tr)),
-          ],
-        ),
-      );
-      if (confirmed != true || !mounted) return;
+      final answer = await showDialog<bool>(context: context, builder: (_) => const _SignOutEverywhereDialog());
+      if (answer == null || !mounted) return;
+      resetFeeds = answer;
     }
 
     final realtime = context.read<HouseholdRealtime>();
@@ -156,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       // Ainda com sessão: o telemóvel deixa de receber os avisos desta conta.
       await push.unregister();
-      await (everywhere ? session.signOutEverywhere() : session.signOut());
+      await (everywhere ? session.signOutEverywhere(resetCalendarFeeds: resetFeeds) : session.signOut());
     } catch (e) {
       if (mounted) showError(context, e);
       return;
@@ -334,6 +331,45 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
   }
+}
+
+/// Confirmar "terminar sessão em todos os dispositivos", com a opção de gerar também endereços novos para o
+/// calendário subscrito (o de um telemóvel perdido continuaria a mostrar os eventos). Devolve essa escolha.
+class _SignOutEverywhereDialog extends StatefulWidget {
+  const _SignOutEverywhereDialog();
+
+  @override
+  State<_SignOutEverywhereDialog> createState() => _SignOutEverywhereDialogState();
+}
+
+class _SignOutEverywhereDialogState extends State<_SignOutEverywhereDialog> {
+  var _resetFeeds = false;
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('Terminar sessão em todos os dispositivos?'.tr),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Vais ter de entrar outra vez em todos os telemóveis e computadores. '
+                  'Útil se perdeste um telemóvel ou entraste num computador que não é teu.'
+              .tr,
+        ),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _resetFeeds,
+          onChanged: (value) => setState(() => _resetFeeds = value ?? false),
+          title: Text('Gerar também endereços novos para o calendário subscrito'.tr),
+          subtitle: Text('Os calendários que o subscreveram deixam de receber os eventos.'.tr),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
+      FilledButton(onPressed: () => Navigator.pop(context, _resetFeeds), child: Text('Terminar sessões'.tr)),
+    ],
+  );
 }
 
 class _HouseholdSwitcher extends StatelessWidget {

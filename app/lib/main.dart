@@ -32,6 +32,13 @@ Future<void> main() async {
   final shopping = ShoppingRepository(api: api, store: preferences)..restore();
   final notifications = NotificationCenter(api: api, realtime: realtime);
 
+  // A sessão acabou (aqui ou noutro lado): o que ficou guardado neste aparelho sai.
+  session.onSessionEnded = () async {
+    await realtime.disconnect();
+    await shopping.clear();
+    notifications.clear();
+  };
+
   // Avisos fora da app (Firebase, no Android e na web). Arranca em paralelo para não atrasar a abertura da app.
   final push = PushRegistration(api: api, source: createPushTokenSource());
 

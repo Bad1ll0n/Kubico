@@ -94,10 +94,16 @@ class _ChoreEditorState extends State<_ChoreEditor> {
   }
 
   void _addStep() => setState(() {
-    // Uma rotina é quase sempre de todos os dias.
-    if (_steps.isEmpty && _recurrence == ChoreRecurrence.none) _recurrence = ChoreRecurrence.daily;
+    // Uma rotina é quase sempre de todos os dias (a começar hoje, para aparecer nas tarefas do dia).
+    if (_steps.isEmpty && _recurrence == ChoreRecurrence.none) _setRecurrence(ChoreRecurrence.daily);
     _steps.add(TextEditingController());
   });
+
+  /// Uma tarefa que se repete tem sempre prazo: sem ele, começa hoje.
+  void _setRecurrence(ChoreRecurrence recurrence) {
+    _recurrence = recurrence;
+    if (recurrence != ChoreRecurrence.none) _dueDate ??= DateUtils.dateOnly(DateTime.now());
+  }
 
   void _removeStep(int index) => setState(() => _steps.removeAt(index).dispose());
 
@@ -192,7 +198,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
               initialValue: _recurrence,
               decoration: InputDecoration(labelText: 'Repetição'.tr),
               items: [for (final r in ChoreRecurrence.values) DropdownMenuItem(value: r, child: Text(r.label))],
-              onChanged: (value) => setState(() => _recurrence = value ?? ChoreRecurrence.none),
+              onChanged: (value) => setState(() => _setRecurrence(value ?? ChoreRecurrence.none)),
             ),
             const SizedBox(height: 12),
             if (canRotate)

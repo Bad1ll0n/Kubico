@@ -163,6 +163,15 @@ public static partial class Texts
 
     private static readonly Dictionary<string, string> Catalog = new()
     {
+        // Pedidos inválidos, concorrência e limites
+        ["Pedido inválido."] = "Invalid request.",
+        ["Alguém mudou isto ao mesmo tempo. Atualiza e tenta outra vez."] =
+            "Someone changed this at the same time. Refresh and try again.",
+        ["Demasiados pedidos. Tenta outra vez daqui a {0} segundos."] = "Too many requests. Try again in {0} seconds.",
+        ["Demasiadas tentativas erradas. Tenta outra vez daqui a {0} minutos."] = "Too many wrong attempts. Try again in {0} minutes.",
+        ["Demasiadas tentativas erradas. Tenta outra vez daqui a um minuto."] = "Too many wrong attempts. Try again in a minute.",
+        ["Demasiados códigos errados. Tenta outra vez daqui a {0} minutos."] = "Too many wrong codes. Try again in {0} minutes.",
+
         // Histórico de alterações
         ["Esta alteração não se pode desfazer."] = "This change can't be undone.",
         ["Esta alteração já foi desfeita."] = "This change has already been undone.",
@@ -171,6 +180,7 @@ public static partial class Texts
         ["Entretanto houve outras alterações a isto. Desfaz primeiro as mais recentes."] =
             "There have been other changes to this since. Undo the most recent ones first.",
         ["desfez: {*0}"] = "undid: {0}",
+        ["Já não tens acesso para desfazer esta alteração."] = "You no longer have access to undo this change.",
 
         // Conta, sessão e verificação em dois passos
         ["Os perfis de criança entram com o PIN e não têm verificação em dois passos."] =
@@ -191,6 +201,8 @@ public static partial class Texts
             "Invalid family code. Ask an adult in the household for it.",
         ["Demasiados PINs errados. Tenta outra vez daqui a {0} minutos."] = "Too many wrong PINs. Try again in {0} minutes.",
         ["Escolhe português (pt) ou inglês (en)."] = "Choose Portuguese (pt) or English (en).",
+        ["Antes de apagares a conta, passa a administração de «{0}» a um adulto."] =
+            "Before you delete your account, hand over the administration of “{0}” to an adult.",
 
         // Calendário
         ["Indica um intervalo de datas válido, com {0} dias no máximo."] = "Choose a valid date range, of at most {0} days.",
@@ -219,6 +231,8 @@ public static partial class Texts
             "Participants and rides must be members of this household.",
         ["As datas têm de estar entre 1900 e 2200."] = "Dates must be between 1900 and 2200.",
         ["Participantes: {0}"] = "Participants: {0}",
+        ["Uma criança não pode levar nem ir buscar: escolhe um adulto."] = "A child can't drop off or pick up: choose an adult.",
+        ["O texto tem caracteres que não se podem usar."] = "The text has characters that can't be used.",
         ["Leva: {0}"] = "Drops off: {0}",
         ["Vai buscar: {0}"] = "Picks up: {0}",
 
@@ -287,12 +301,26 @@ public static partial class Texts
             "The Apple ID or the app password isn't right. Make sure you're using an app-specific password.",
         ["Não foi possível ligar ao iCloud agora. Tenta outra vez daqui a pouco."] =
             "Couldn't connect to iCloud right now. Try again shortly.",
+        ["Confirma a ligação"] = "Confirm the connection",
+        ["{0} quer mostrar os eventos da casa «{1}» do Kubico no calendário «{2}» da conta {3}, e o que mudar lá muda também no Kubico. Só confirma se foste tu a pedir esta ligação."] =
+            "{0} wants to show the events of the Kubico household “{1}” in the “{2}” calendar of the {3} account, and changes made there will also change Kubico. Only confirm if you asked for this connection.",
+        ["Ligar"] = "Connect",
+        ["Cancelar"] = "Cancel",
 
         // Tarefas
         ["criou a tarefa «{0}»"] = "created the chore “{0}”",
         ["mudou a tarefa «{0}»"] = "changed the chore “{0}”",
         ["apagou a tarefa «{0}»"] = "deleted the chore “{0}”",
         ["fez «{0}»"] = "did “{0}”",
+        ["marcou «{0}» como feita por {1}"] = "marked “{0}” as done by {1}",
+        ["Esta tarefa já está feita. Volta a estar disponível a {0}."] = "This chore is already done. It'll be available again on {0}.",
+        ["Quem fez a tarefa tem de ser membro desta casa."] = "The person who did the chore must be a member of this household.",
+        ["Só quem gere as tarefas pode marcar uma tarefa como feita por outra pessoa."] =
+            "Only people who manage chores can mark a chore as done by someone else.",
+        ["Essa repetição não existe."] = "That repetition doesn't exist.",
+        ["Essa altura do dia não existe."] = "That time of day doesn't exist.",
+        ["Os pontos desta tarefa já foram trocados: {0} ficaria a dever {1} pontos."] =
+            "The points for this chore have already been spent: {0} would owe {1} points.",
         ["não aceitou «{0}», feita por {1}"] = "didn't accept “{0}”, done by {1}",
         ["não aceitou «{0}», feita por antigo membro"] = "didn't accept “{0}”, done by a former member",
         ["Tarefa para ti: {0} ({1} está fora)"] = "A chore for you: {0} ({1} is away)",
@@ -334,6 +362,27 @@ public static partial class Texts
 
         // Casas, membros e ausências
         ["Só podes marcar as tuas ausências."] = "You can only set your own absences.",
+        ["Só quem gere as tarefas marca ou cancela as ausências dos outros."] =
+            "Only people who manage chores can set or cancel other people's absences.",
+        ["As ausências das crianças são marcadas por um adulto da casa."] = "Children's absences are set by an adult in the household.",
+        ["Já está marcada uma ausência nesses dias."] = "An absence is already set for those days.",
+        ["vai estar fora de {0} a {1}"] = "will be away from {0} to {1}",
+        ["marcou a ausência de {0} de {1} a {2}"] = "set {0}'s absence from {1} to {2}",
+        ["cancelou a sua ausência"] = "cancelled their absence",
+        ["cancelou a ausência de {0}"] = "cancelled {0}'s absence",
+        ["mudou as permissões dos Adultos"] = "changed the Adults' permissions",
+        ["mudou as permissões das Crianças"] = "changed the Children's permissions",
+        ["mudou as permissões dos Convidados"] = "changed the Guests' permissions",
+        ["mudou o PIN de {0}"] = "changed {0}'s PIN",
+        ["terminou as sessões de {0}"] = "signed {0} out on every device",
+        ["renovou o código da família"] = "renewed the family code",
+        ["anulou o convite {0}"] = "cancelled the invite {0}",
+        ["Esse papel não existe."] = "That role doesn't exist.",
+        ["Não se convida para administrador: depois de a pessoa entrar, usa «Passar a administração»."] =
+            "You can't invite someone as admin: once they've joined, use “Hand over administration”.",
+        ["O convite pode servir para 1 a 50 pessoas."] = "The invite can be used by 1 to 50 people.",
+        ["A data de nascimento não pode ser no futuro, e um perfil de criança é para quem tem menos de 18 anos."] =
+            "The date of birth can't be in the future, and a child profile is for people under 18.",
         ["Escolhe um membro desta casa."] = "Choose a member of this household.",
         ["Indica até quando (no máximo um ano, e não antes do primeiro dia)."] =
             "Choose until when (at most a year, and not before the first day).",
@@ -422,6 +471,18 @@ public static partial class Texts
         ["mudou a recompensa «{0}»"] = "changed the reward “{0}”",
         ["apagou a recompensa «{0}»"] = "deleted the reward “{0}”",
         ["Faltam {0} pontos para esta recompensa."] = "You need {0} more points for this reward.",
+        ["Os pontos de {0} já não chegam para este pedido."] = "{0} no longer has enough points for this request.",
+        ["pediu «{0}»"] = "asked for “{0}”",
+        ["aprovou «{0}» a {1}"] = "approved “{0}” for {1}",
+        ["recusou «{0}» a {1}"] = "declined “{0}” for {1}",
+        ["cancelou o pedido «{0}»"] = "cancelled the request “{0}”",
+        ["cancelou o pedido «{0}» de {1}"] = "cancelled {1}'s request “{0}”",
+        ["definiu a mesada de {0}"] = "set {0}'s allowance",
+        ["acabou com a mesada de {0}"] = "stopped {0}'s allowance",
+        ["pagou a mesada de {0}: {1},{2} €"] = "paid {0}'s allowance: €{1}.{2}",
+        ["pagou o resto da mesada de {0}: {1},{2} €"] = "paid the rest of {0}'s allowance: €{1}.{2}",
+        ["anulou um pagamento da mesada de {0}"] = "cancelled a payment of {0}'s allowance",
+        ["Recebeste o resto da mesada: {0},{1} €"] = "You got the rest of your allowance: €{0}.{1}",
         ["{0} pediu: {1}"] = "{0} asked for: {1}",
         ["{0} pontos. Aprova ou recusa na app."] = "{0} points. Approve or decline in the app.",
         ["Aprovado: {0}"] = "Approved: {0}",
@@ -447,6 +508,7 @@ public static partial class Texts
         ["criou a lista «{0}»"] = "created the list “{0}”",
         ["apagou a lista «{0}»"] = "deleted the list “{0}”",
         ["Este artigo já existe noutra lista."] = "This item already exists in another list.",
+        ["O nome é obrigatório."] = "The name is required.",
         ["pôs «{0}» na lista «{1}»"] = "added “{0}” to the list “{1}”",
         ["marcou «{0}» como comprado"] = "marked “{0}” as bought",
         ["tirou «{0}» da lista «{1}»"] = "removed “{0}” from the list “{1}”",

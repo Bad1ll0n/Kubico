@@ -19,7 +19,11 @@ enum HouseholdRole {
   bool get canManageContent => this == admin || this == adult;
   bool get canManageMembers => this == admin;
 
-  static HouseholdRole fromApi(String value) => values.firstWhere((r) => r.apiValue == value, orElse: () => guest);
+  /// Os papéis com que se convida: para administrador não há convites (passa-se a administração depois).
+  static const invitable = [adult, child, guest];
+
+  /// Um valor desconhecido (de uma versão nova da API, ou estragado) fica como o papel com menos acesso.
+  static HouseholdRole fromApi(Object? value) => values.firstWhere((r) => r.apiValue == value, orElse: () => guest);
 }
 
 /// As áreas da app cujo acesso o administrador escolhe por papel.
@@ -46,7 +50,7 @@ enum HouseholdModule {
       if (participateMeans != null || a != ModuleAccess.participate) a,
   ];
 
-  static HouseholdModule? fromApi(String value) => values.where((m) => m.apiValue == value).firstOrNull;
+  static HouseholdModule? fromApi(Object? value) => values.where((m) => m.apiValue == value).firstOrNull;
 }
 
 /// O que um papel pode fazer numa área, do menos para o mais.
@@ -67,7 +71,7 @@ enum ModuleAccess {
   bool get canParticipate => index >= participate.index;
   bool get canManage => this == manage;
 
-  static ModuleAccess fromApi(String value) => values.firstWhere((a) => a.apiValue == value, orElse: () => none);
+  static ModuleAccess fromApi(Object? value) => values.firstWhere((a) => a.apiValue == value, orElse: () => none);
 
   /// O habitual (igual ao do servidor): adultos gerem tudo; crianças e convidados usam, e no calendário só veem.
   static ModuleAccess defaultFor(HouseholdRole role, HouseholdModule module) => role.canManageContent
@@ -430,6 +434,7 @@ class HouseholdDetails {
     required this.timeZoneId,
     required this.myRole,
     required this.members,
+    this.myAccess = const {},
   });
 
   final String id;
@@ -437,6 +442,11 @@ class HouseholdDetails {
   final String timeZoneId;
   final HouseholdRole myRole;
   final List<Member> members;
+
+  /// O que o meu papel me deixa fazer em cada área (o habitual, se não vier).
+  final Map<HouseholdModule, ModuleAccess> myAccess;
+
+  ModuleAccess accessTo(HouseholdModule module) => myAccess[module] ?? ModuleAccess.defaultFor(myRole, module);
 
   Member? member(String? userId) {
     for (final m in members) {
@@ -449,22 +459,72 @@ class HouseholdDetails {
     id: json['id'] as String,
     name: json['name'] as String,
     timeZoneId: json['timeZoneId'] as String? ?? 'Europe/Lisbon',
-    myRole: HouseholdRole.fromApi(json['myRole'] as String),
+    myRole: HouseholdRole.fromApi(json['myRole']),
     members: (json['members'] as List).map((m) => Member.fromJson(m as Map<String, dynamic>)).toList(),
+    myAccess: ModuleAccess.parse(json['myAccess'], HouseholdRole.fromApi(json['myRole'])),
   );
 }
 
 class Invite {
-  const Invite({required this.code, required this.role, required this.expiresAt});
+  const Invite({required this.code, required this.role, required this.expiresAt, this.maxUses, this.usedCount = 0});
 
   final String code;
   final HouseholdRole role;
   final DateTime expiresAt;
 
+  /// Quantas pessoas podem entrar com ele (null = sem limite até expirar); [usedCount] já entraram.
+  final int? maxUses;
+  final int usedCount;
+
   factory Invite.fromJson(Map<String, dynamic> json) => Invite(
     code: json['code'] as String,
-    role: HouseholdRole.fromApi(json['role'] as String),
+    role: HouseholdRole.fromApi(json['role']),
     expiresAt: DateTime.parse(json['expiresAt'] as String).toLocal(),
+    maxUses: json['maxUses'] as int?,
+    usedCount: json['usedCount'] as int? ?? 0,
+  );
+}
+
+/// O que acontece a uma casa se a conta for apagada.
+enum AccountDeletionOutcome {
+  /// Mais ninguém lá tem conta: a casa é apagada.
+  deleted('Deleted'),
+
+  /// A administração passa para outra pessoa ([AccountDeletionHousehold.successorName]).
+  adminPassesTo('AdminPassesTo'),
+
+  /// És o único administrador e não há outro adulto: passa a administração antes.
+  blocked('Blocked'),
+
+  /// Sais, e a casa continua como está.
+  leaves('Leaves');
+
+  const AccountDeletionOutcome(this.apiValue);
+
+  final String apiValue;
+
+  static AccountDeletionOutcome fromApi(Object? value) =>
+      values.firstWhere((o) => o.apiValue == value, orElse: () => leaves);
+}
+
+class AccountDeletionHousehold {
+  const AccountDeletionHousehold({
+    required this.householdId,
+    required this.householdName,
+    required this.outcome,
+    this.successorName,
+  });
+
+  final String householdId;
+  final String householdName;
+  final AccountDeletionOutcome outcome;
+  final String? successorName;
+
+  factory AccountDeletionHousehold.fromJson(Map<String, dynamic> json) => AccountDeletionHousehold(
+    householdId: json['householdId'] as String,
+    householdName: json['householdName'] as String,
+    outcome: AccountDeletionOutcome.fromApi(json['outcome']),
+    successorName: json['successorName'] as String?,
   );
 }
 
@@ -642,7 +702,7 @@ enum ChoreRecurrence {
 
   String get label => _label.tr;
 
-  static ChoreRecurrence fromApi(String value) => values.firstWhere((r) => r.apiValue == value, orElse: () => none);
+  static ChoreRecurrence fromApi(Object? value) => values.firstWhere((r) => r.apiValue == value, orElse: () => none);
 }
 
 /// Data sem hora, no formato da API (yyyy-MM-dd).
@@ -667,6 +727,7 @@ class Chore {
     this.steps = const [],
     this.doneSteps = const [],
     this.requiresPhoto = false,
+    this.availableFrom,
   });
 
   final String id;
@@ -693,6 +754,16 @@ class Chore {
   /// Para concluir é preciso uma foto do trabalho feito.
   final bool requiresPhoto;
 
+  /// Numa tarefa que se repete, desde quando se pode fazer a ocorrência atual (cada uma faz-se uma vez; não se
+  /// adiantam as seguintes). Null nas que não se repetem.
+  final DateTime? availableFrom;
+
+  /// Se já se pode concluir hoje.
+  bool isAvailableOn(DateTime today) {
+    final from = availableFrom;
+    return from == null || !DateTime(today.year, today.month, today.day).isBefore(from);
+  }
+
   bool get rotates => rotationUserIds.isNotEmpty;
   bool get isRoutine => steps.isNotEmpty;
 
@@ -712,6 +783,7 @@ class Chore {
     steps: steps,
     doneSteps: doneSteps ?? this.doneSteps,
     requiresPhoto: requiresPhoto,
+    availableFrom: availableFrom,
   );
 
   factory Chore.fromJson(Map<String, dynamic> json) => Chore(
@@ -721,15 +793,16 @@ class Chore {
     notes: json['notes'] as String?,
     points: json['points'] as int,
     dueDate: json['dueDate'] == null ? null : DateTime.parse(json['dueDate'] as String),
-    recurrence: ChoreRecurrence.fromApi(json['recurrence'] as String),
+    recurrence: ChoreRecurrence.fromApi(json['recurrence']),
     assigneeUserId: json['assigneeUserId'] as String?,
     rotationUserIds: (json['rotationUserIds'] as List).cast<String>(),
     isDone: json['isDone'] as bool,
     updatedAt: DateTime.parse(json['updatedAt'] as String),
-    timeOfDay: ChoreTimeOfDay.fromApi(json['timeOfDay'] as String?),
+    timeOfDay: ChoreTimeOfDay.fromApi(json['timeOfDay']),
     steps: (json['steps'] as List?)?.cast<String>() ?? const [],
     doneSteps: (json['doneSteps'] as List?)?.cast<int>() ?? const [],
     requiresPhoto: json['requiresPhoto'] as bool? ?? false,
+    availableFrom: json['availableFrom'] == null ? null : DateTime.parse(json['availableFrom'] as String),
   );
 }
 
@@ -780,7 +853,7 @@ enum ChoreTimeOfDay {
 
   String get label => _label.tr;
 
-  static ChoreTimeOfDay fromApi(String? value) => values.firstWhere((t) => t.apiValue == value, orElse: () => any);
+  static ChoreTimeOfDay fromApi(Object? value) => values.firstWhere((t) => t.apiValue == value, orElse: () => any);
 }
 
 /// Dados para criar ou editar uma tarefa.
@@ -1396,15 +1469,21 @@ class AllowancePeriodEntry {
     required this.isCurrent,
     this.paymentId,
     this.paidAt,
+    this.owedCents = 0,
   });
 
   final DateTime start;
   final DateTime end;
   final int choresDone;
+
+  /// O valor do período (nos pagos, o que se pagou).
   final int amountCents;
   final bool isCurrent;
   final String? paymentId;
   final DateTime? paidAt;
+
+  /// O que ainda falta pagar: tudo, se não foi pago; num pago antes de acabar, o extra das tarefas feitas depois.
+  final int owedCents;
 
   bool get isPaid => paidAt != null;
 
@@ -1416,6 +1495,7 @@ class AllowancePeriodEntry {
     isCurrent: json['isCurrent'] as bool,
     paymentId: json['paymentId'] as String?,
     paidAt: json['paidAt'] == null ? null : DateTime.parse(json['paidAt'] as String).toLocal(),
+    owedCents: json['owedCents'] as int? ?? 0,
   );
 }
 

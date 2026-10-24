@@ -354,7 +354,7 @@ class _CalendarViewState extends State<CalendarView> {
           : Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_error.toString()),
+                Text(errorText(_error!)),
                 TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
               ],
             ),

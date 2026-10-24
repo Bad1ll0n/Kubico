@@ -34,6 +34,9 @@ public static class HouseholdEvents
     /// <summary>Alguém saiu ou foi tirado da casa. Vai também para o canal pessoal dessa pessoa.</summary>
     public const string MemberDeleted = "MemberDeleted";
 
+    /// <summary>A casa foi apagada (saiu o último membro com conta). Leva o id e o nome; vai para o canal de cada membro.</summary>
+    public const string HouseholdDeleted = "HouseholdDeleted";
+
     /// <summary>Um aviso pessoal novo (vai só para o canal da pessoa, não para a casa toda).</summary>
     public const string NotificationCreated = "NotificationCreated";
 
@@ -87,11 +90,14 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub, HouseholdGroups gr
     public Task AbsenceDeleted(Guid householdId, Guid absenceId, CancellationToken ct) =>
         Group(householdId).SendAsync(HouseholdEvents.AbsenceDeleted, absenceId, ct);
 
-    /// <summary>O papel pode ter mudado: as ligações da pessoa passam primeiro para os grupos das áreas que vê agora.</summary>
+    /// <summary>
+    /// O papel pode ter mudado: as ligações da pessoa passam primeiro para os grupos das áreas que vê agora. Vai para
+    /// a casa toda, por isso sem a data de nascimento (quem gere os perfis lê-a da casa).
+    /// </summary>
     public async Task MemberUpserted(Guid householdId, MemberDto member, CancellationToken ct)
     {
         await groups.RefreshAsync(householdId, ct, member.UserId);
-        await Group(householdId).SendAsync(HouseholdEvents.MemberUpserted, householdId, member, ct);
+        await Group(householdId).SendAsync(HouseholdEvents.MemberUpserted, householdId, member with { BirthDate = null }, ct);
     }
 
     /// <summary>Depois de avisar, as ligações de quem saiu deixam os grupos da casa.</summary>
@@ -100,6 +106,15 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub, HouseholdGroups gr
         await Group(householdId).SendAsync(HouseholdEvents.MemberDeleted, householdId, userId, ct);
         await User(userId).SendAsync(HouseholdEvents.MemberDeleted, householdId, userId, ct);
         await groups.RefreshAsync(householdId, ct, userId);
+    }
+
+    /// <summary>A casa foi apagada: cada membro (também os perfis de criança, noutros aparelhos) fica a saber.</summary>
+    public async Task HouseholdDeleted(Guid householdId, string name, IEnumerable<Guid> memberIds, CancellationToken ct)
+    {
+        foreach (var userId in memberIds)
+        {
+            await User(userId).SendAsync(HouseholdEvents.HouseholdDeleted, householdId, name, ct);
+        }
     }
 
     public async Task PermissionsChanged(Guid householdId, CancellationToken ct)

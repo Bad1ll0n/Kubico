@@ -19,6 +19,15 @@ public class ActivityEntry
     /// <summary>A área (compras, tarefas…); null nas alterações à casa e aos membros.</summary>
     public HouseholdModule? Module { get; set; }
 
+    /// <summary>
+    /// O acesso à área que a alteração pediu (usar ou gerir). Para a desfazer é preciso tê-lo ainda: quem deixou de
+    /// gerir o calendário já não desfaz a criação de um evento.
+    /// </summary>
+    public ModuleAccess RequiredAccess { get; set; } = ModuleAccess.Manage;
+
+    /// <summary>Alterações sobre uma pessoa que só ela e quem gere a área podem ver (por exemplo, a mesada).</summary>
+    public Guid? PrivateToUserId { get; set; }
+
     /// <summary>O que aconteceu, para mostrar depois do nome: "adicionou «Leite» (Supermercado)".</summary>
     public required string Summary { get; set; }
 

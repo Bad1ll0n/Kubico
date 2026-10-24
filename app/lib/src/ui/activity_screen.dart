@@ -65,7 +65,15 @@ class _ActivityScreenState extends State<ActivityScreen> {
 
   Future<void> _undo(ActivityItem item) async {
     try {
-      await _api.undoActivity(_householdId, item.id);
+      try {
+        await _api.undoActivity(_householdId, item.id);
+      } on ApiException catch (e) {
+        // Os pontos já foram trocados: só quem gere a área pode continuar (a pessoa fica a dever).
+        final manages = item.module != null && widget.household.accessTo(item.module!).canManage;
+        if (!e.isPointsSpent || !manages || !mounted) rethrow;
+        if (!await confirmPointsDebt(context, e)) return;
+        await _api.undoActivity(_householdId, item.id, force: true);
+      }
       await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -91,7 +99,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(_error.toString()),
+                        Text(errorText(_error!)),
                         TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
                       ],
                     ),

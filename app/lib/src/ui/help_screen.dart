@@ -24,8 +24,9 @@ List<(String, String)> get helpTopics => [
   ),
   (
     'O que acontece quando alguém vai de férias?'.tr,
-    'Marca a ausência no menu ao lado do nome. Enquanto estiver fora, as rotações saltam essa pessoa e as tarefas '
-            'que lhe cabiam passam a quem vem a seguir.'
+    'Marca a ausência no menu ao lado do nome (as das crianças, marca-as um adulto). Enquanto estiver fora, as '
+            'rotações saltam essa pessoa e as tarefas que lhe cabiam passam a quem vem a seguir; as que não têm a quem '
+            'passar ficam em pausa até ela voltar.'
         .tr,
   ),
   (
@@ -236,7 +237,7 @@ class _FeedbackInboxScreenState extends State<FeedbackInboxScreen> {
     return Scaffold(
       appBar: AppBar(title: Text('Mensagens recebidas'.tr)),
       body: items == null
-          ? Center(child: _error == null ? const CircularProgressIndicator() : Text(_error.toString()))
+          ? Center(child: _error == null ? const CircularProgressIndicator() : Text(errorText(_error!)))
           : items.isEmpty
           ? Center(child: Text('Ainda não chegou nenhuma mensagem.'.tr))
           : RefreshIndicator(

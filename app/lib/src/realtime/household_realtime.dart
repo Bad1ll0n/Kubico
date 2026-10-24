@@ -77,6 +77,13 @@ class MembersChanged extends HouseholdEvent {
   final String? removedUserId;
 }
 
+/// A casa foi apagada (saiu o último membro com conta). Chega pelo canal pessoal de cada membro.
+class HouseholdDeleted extends HouseholdEvent {
+  const HouseholdDeleted(this.householdId, this.name);
+  final String householdId;
+  final String name;
+}
+
 /// O administrador mudou o que cada papel pode fazer: a app volta a ler o acesso às áreas.
 class PermissionsChanged extends HouseholdEvent {
   const PermissionsChanged(this.householdId);
@@ -169,6 +176,10 @@ class HouseholdRealtime {
     connection.on('AllowanceChanged', (args) => _emit(args, (a) => AllowanceChanged(a[0] as String)));
 
     connection.on('PermissionsChanged', (args) => _emit(args, (a) => PermissionsChanged(a[0] as String)));
+    connection.on(
+      'HouseholdDeleted',
+      (args) => _emit(args, (a) => HouseholdDeleted(a[0] as String, a.length > 1 ? a[1] as String? ?? '' : '')),
+    );
 
     for (final name in ['AbsenceUpserted', 'AbsenceDeleted']) {
       connection.on(name, (args) => _emit(args, (_) => const AbsencesChanged()));

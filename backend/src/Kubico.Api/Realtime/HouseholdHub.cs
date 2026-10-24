@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Security.Claims;
+using Kubico.Api.Auth;
 using Kubico.Api.Common;
 using Kubico.Domain.Households;
 using Microsoft.AspNetCore.Authorization;
@@ -9,10 +11,11 @@ namespace Kubico.Api.Realtime;
 /// <summary>
 /// Canal de tempo real de um agregado. Cada cliente entra no grupo dos agregados que está a ver (membros, ausências)
 /// e nos grupos das áreas a que tem acesso (compras, tarefas, calendário, recompensas), e recebe as alterações feitas
-/// pelos outros membros.
+/// pelos outros membros. Só liga quem tem a sessão ativa; a ligação fecha quando o token expira (o cliente volta a
+/// ligar com um novo) e logo que a sessão termina (noutro dispositivo, ao mudar o PIN, ao apagar a conta…).
 /// </summary>
 [Authorize]
-public class HouseholdHub(HouseholdAccess access, HubConnections connections, HouseholdGroups groups) : Hub
+public class HouseholdHub(HouseholdAccess access, HubConnections connections, HouseholdGroups groups, SessionService sessions) : Hub
 {
     public const string Path = "/hubs/household";
 
@@ -27,10 +30,22 @@ public class HouseholdHub(HouseholdAccess access, HubConnections connections, Ho
     public override async Task OnConnectedAsync()
     {
         var userId = Context.User!.GetUserId();
-        connections.Connected(Context.ConnectionId, userId);
+        var sessionId = SessionOf(Context.User!);
+        if (!await sessions.IsActiveAsync(userId, sessionId, Context.ConnectionAborted))
+        {
+            // Um token de acesso ainda válido de uma sessão que já terminou não volta a ligar.
+            Context.Abort();
+            return;
+        }
+
+        connections.Connected(Context, userId, sessionId);
         await Groups.AddToGroupAsync(Context.ConnectionId, UserGroupName(userId));
         await base.OnConnectedAsync();
     }
+
+    /// <summary>A sessão (família de refresh tokens) do token com que ligou.</summary>
+    public static Guid? SessionOf(ClaimsPrincipal user) =>
+        Guid.TryParse(user.FindFirstValue(TokenService.SessionClaim), out var sid) ? sid : null;
 
     public override Task OnDisconnectedAsync(Exception? exception)
     {
@@ -58,12 +73,32 @@ public class HouseholdHub(HouseholdAccess access, HubConnections connections, Ho
     }
 }
 
-/// <summary>Que ligações estão abertas, de quem, e em que casas entraram (para mudar os grupos quando o acesso muda).</summary>
+/// <summary>
+/// Que ligações estão abertas, de quem, de que sessão e em que casas entraram: para mudar os grupos quando o acesso
+/// muda, e para fechar as de uma sessão que terminou.
+/// </summary>
 public sealed class HubConnections
 {
-    private readonly ConcurrentDictionary<string, (Guid UserId, ConcurrentDictionary<Guid, byte> Households)> _connections = new();
+    private readonly ConcurrentDictionary<string, Connection> _connections = new();
 
-    public void Connected(string connectionId, Guid userId) => _connections[connectionId] = (userId, new());
+    /// <summary>Uma ligação aberta: de quem, de que sessão (o <c>sid</c> do token) e em que casas entrou.</summary>
+    public sealed record Connection(Guid UserId, Guid? SessionId, HubCallerContext Context)
+    {
+        public ConcurrentDictionary<Guid, byte> Households { get; } = new();
+    }
+
+    public void Connected(HubCallerContext context, Guid userId, Guid? sessionId) =>
+        _connections[context.ConnectionId] = new Connection(userId, sessionId, context);
+
+    /// <summary>Fecha já as ligações escolhidas (sessão terminada, PIN mudado, conta apagada).</summary>
+    public void Abort(Func<Connection, bool> which)
+    {
+        foreach (var (id, connection) in _connections.Where(c => which(c.Value)).ToList())
+        {
+            _connections.TryRemove(id, out _);
+            connection.Context.Abort();
+        }
+    }
 
     public void Disconnected(string connectionId) => _connections.TryRemove(connectionId, out _);
 

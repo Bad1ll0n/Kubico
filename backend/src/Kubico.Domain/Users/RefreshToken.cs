@@ -25,5 +25,11 @@ public class RefreshToken
     /// <summary>Quando foi trocado por outro ou revogado (terminar sessão). Um token revogado não serve.</summary>
     public DateTimeOffset? RevokedAt { get; set; }
 
+    /// <summary>
+    /// Quando foi trocado por um novo (renovação). Um pedido que já estava a caminho antes desse instante (duas abas a
+    /// renovar ao mesmo tempo) recebe também um par novo; depois disso, voltar a usá-lo é sinal de roubo.
+    /// </summary>
+    public DateTimeOffset? ReplacedAt { get; set; }
+
     public bool IsActive(DateTimeOffset now) => RevokedAt is null && now < ExpiresAt;
 }

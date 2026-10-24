@@ -29,6 +29,16 @@ public record TwoFactorEnabledDto(IReadOnlyList<string> RecoveryCodes);
 
 public record DisableTwoFactorRequest([property: Required] string Password, [property: Required] string Code);
 
+/// <summary>Começar a ligar a 2FA pede a palavra-passe: quem só tem uma sessão aberta não tranca a pessoa fora da conta.</summary>
+public record TwoFactorSetupRequest([property: Required] string Password);
+
+/// <summary>
+/// O que acontece a cada casa se a conta for apagada: <c>Deleted</c> (mais ninguém tem conta: a casa é apagada),
+/// <c>AdminPassesTo</c> (a administração passa para <c>SuccessorName</c>), <c>Blocked</c> (é o único administrador e não
+/// há outro adulto: tem de passar a administração antes) ou <c>Leaves</c> (sai, e a casa continua como está).
+/// </summary>
+public record AccountDeletionHouseholdDto(Guid HouseholdId, string HouseholdName, string Outcome, string? SuccessorName);
+
 /// <summary>"pt" ou "en".</summary>
 public record LanguageRequest([property: Required] string Language);
 
@@ -48,12 +58,15 @@ public static class AccountEndpoints
     public static RouteGroupBuilder MapAccountEndpoints(this RouteGroupBuilder api)
     {
         var account = api.MapGroup("/account").WithTags("Auth").RequireAuthorization();
-        account.MapGet("/export", Export);
-        account.MapDelete("/", DeleteAccount);
+
+        // Ações sensíveis: só com a sessão ativa (terminar a sessão noutro lado corta-as logo).
+        account.MapGet("/export", Export).RequireActiveSession();
+        account.MapGet("/deletion", DeletionPreview);
+        account.MapDelete("/", DeleteAccount).RequireActiveSession();
         account.MapGet("/2fa", GetTwoFactor);
-        account.MapPost("/2fa/setup", SetUpTwoFactor);
-        account.MapPost("/2fa/enable", EnableTwoFactor);
-        account.MapPost("/2fa/disable", DisableTwoFactor);
+        account.MapPost("/2fa/setup", SetUpTwoFactor).RequireActiveSession();
+        account.MapPost("/2fa/enable", EnableTwoFactor).RequireActiveSession();
+        account.MapPost("/2fa/disable", DisableTwoFactor).RequireActiveSession();
         account.MapPut("/language", SetLanguage);
         return api;
     }
@@ -190,9 +203,19 @@ public static class AccountEndpoints
             : Results.Ok(new TwoFactorStatusDto(user.TwoFactorEnabled, user.RecoveryCodeHashes.Count));
     }
 
-    /// <summary>Começa a ligar a verificação em dois passos: um segredo novo para a app de autenticação.</summary>
+    /// <summary>
+    /// Começa a ligar a verificação em dois passos: um segredo novo para a app de autenticação. Pede a palavra-passe
+    /// (com o limite de tentativas da entrada).
+    /// </summary>
     private static async Task<IResult> SetUpTwoFactor(
-        ClaimsPrincipal principal, KubicoDbContext db, TwoFactorService twoFactor, CancellationToken ct)
+        TwoFactorSetupRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        TwoFactorService twoFactor,
+        IPasswordHasher<User> hasher,
+        LoginThrottle throttle,
+        HttpContext http,
+        CancellationToken ct)
     {
         var userId = principal.GetUserId();
         var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
@@ -214,17 +237,26 @@ public static class AccountEndpoints
                 title: "A verificação em dois passos já está ligada.", statusCode: StatusCodes.Status409Conflict);
         }
 
+        if (AuthEndpoints.CheckPassword(throttle, hasher, http, user, request.Password) is { } wrong)
+        {
+            return wrong;
+        }
+
         var secret = twoFactor.BeginSetup(user);
         await db.SaveChangesAsync(ct);
         return Results.Ok(new TwoFactorSetupDto(secret, Totp.SetupUri(secret, user.Email!)));
     }
 
-    /// <summary>Confirma com um código da app: fica ligada e recebe os códigos de recuperação.</summary>
+    /// <summary>
+    /// Confirma com um código da app: fica ligada e recebe os códigos de recuperação. As outras sessões terminam (só
+    /// fica esta).
+    /// </summary>
     private static async Task<IResult> EnableTwoFactor(
         TwoFactorCodeRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
         TwoFactorService twoFactor,
+        SessionService sessions,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -243,16 +275,23 @@ public static class AccountEndpoints
         }
 
         await db.SaveChangesAsync(ct);
+        await sessions.SignOutEverywhereAsync(userId, ct, keep: HouseholdHub.SessionOf(principal));
         return Results.Ok(new TwoFactorEnabledDto(codes));
     }
 
-    /// <summary>Desliga (pede a palavra-passe e um código da app ou de recuperação).</summary>
+    /// <summary>
+    /// Desliga (pede a palavra-passe e um código da app ou de recuperação, com os mesmos limites de tentativas da
+    /// entrada). As outras sessões terminam.
+    /// </summary>
     private static async Task<IResult> DisableTwoFactor(
         DisableTwoFactorRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
         IPasswordHasher<User> hasher,
         TwoFactorService twoFactor,
+        LoginThrottle throttle,
+        SessionService sessions,
+        HttpContext http,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -263,19 +302,76 @@ public static class AccountEndpoints
             return Results.Unauthorized();
         }
 
-        if (hasher.VerifyHashedPassword(user, user.PasswordHash, request.Password) == PasswordVerificationResult.Failed)
+        if (AuthEndpoints.CheckPassword(throttle, hasher, http, user, request.Password) is { } wrong)
         {
-            return Results.Problem(title: "A palavra-passe não está certa.", statusCode: StatusCodes.Status400BadRequest);
+            return wrong;
         }
 
-        if (!twoFactor.Verify(user, request.Code, clock.GetUtcNow()))
+        if (!user.TwoFactorEnabled)
         {
-            return Results.Problem(title: "O código não está certo.", statusCode: StatusCodes.Status400BadRequest);
+            return Results.NoContent();
+        }
+
+        if (await AuthEndpoints.CheckTwoFactorAsync(
+            db, twoFactor, user, request.Code, clock.GetUtcNow(), ct, StatusCodes.Status400BadRequest) is { } refused)
+        {
+            return refused;
         }
 
         TwoFactorService.Disable(user);
         await db.SaveChangesAsync(ct);
+        await sessions.SignOutEverywhereAsync(userId, ct, keep: HouseholdHub.SessionOf(principal));
         return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Antes de apagar a conta: o que acontece a cada casa (para a app dizer quem fica a administrar, ou que é preciso
+    /// passar a administração primeiro).
+    /// </summary>
+    private static async Task<IResult> DeletionPreview(ClaimsPrincipal principal, KubicoDbContext db, CancellationToken ct)
+    {
+        var plan = await PlanDeletionAsync(db, principal.GetUserId(), ct);
+        return Results.Ok(plan.Select(p => new AccountDeletionHouseholdDto(
+            p.Membership.HouseholdId, p.Membership.Household.Name, p.Outcome, p.Successor?.User.DisplayName)));
+    }
+
+    /// <summary>
+    /// Para cada casa: apagá-la (mais ninguém tem conta), passar a administração ao adulto que está lá há mais tempo,
+    /// ou recusar (é o único administrador e não há adultos: a administração nunca passa para um convidado ou uma
+    /// criança).
+    /// </summary>
+    private static async Task<List<(Membership Membership, string Outcome, Membership? Successor)>> PlanDeletionAsync(
+        KubicoDbContext db, Guid userId, CancellationToken ct)
+    {
+        var plan = new List<(Membership, string, Membership?)>();
+        var mine = await db.Memberships.Include(m => m.User).Include(m => m.Household)
+            .Where(m => m.UserId == userId).OrderBy(m => m.Household.Name).ToListAsync(ct);
+        foreach (var membership in mine)
+        {
+            var others = await db.Memberships
+                .Include(m => m.User)
+                .Where(m => m.HouseholdId == membership.HouseholdId && m.UserId != userId && m.User.ManagedByHouseholdId == null)
+                .OrderBy(m => m.JoinedAt)
+                .ToListAsync(ct);
+            if (others.Count == 0)
+            {
+                plan.Add((membership, "Deleted", null));
+            }
+            else if (membership.Role != HouseholdRole.Admin || others.Any(m => m.Role == HouseholdRole.Admin))
+            {
+                plan.Add((membership, "Leaves", null));
+            }
+            else if (others.FirstOrDefault(m => m.Role == HouseholdRole.Adult) is { } adult)
+            {
+                plan.Add((membership, "AdminPassesTo", adult));
+            }
+            else
+            {
+                plan.Add((membership, "Blocked", null));
+            }
+        }
+
+        return plan;
     }
 
     /// <summary>Apaga a conta (pede a palavra-passe outra vez). Um perfil de criança é apagado por um adulto da casa.</summary>
@@ -284,8 +380,11 @@ public static class AccountEndpoints
         ClaimsPrincipal principal,
         KubicoDbContext db,
         IPasswordHasher<User> hasher,
+        LoginThrottle throttle,
         MembershipService memberships,
+        SessionService sessions,
         HouseholdNotifier notifier,
+        HttpContext http,
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
@@ -301,37 +400,42 @@ public static class AccountEndpoints
                 title: "Um perfil de criança é apagado por um adulto da casa.", statusCode: StatusCodes.Status403Forbidden);
         }
 
-        if (hasher.VerifyHashedPassword(user, user.PasswordHash, request.Password) == PasswordVerificationResult.Failed)
+        if (AuthEndpoints.CheckPassword(throttle, hasher, http, user, request.Password) is { } wrong)
         {
-            return Results.Problem(title: "A palavra-passe não está certa.", statusCode: StatusCodes.Status400BadRequest);
+            return wrong;
         }
 
-        var mine = await db.Memberships.Include(m => m.User).Where(m => m.UserId == userId).ToListAsync(ct);
-        foreach (var membership in mine)
+        // Primeiro confirma-se tudo (nada muda se alguma casa ficasse sem administrador adulto).
+        var plan = await PlanDeletionAsync(db, userId, ct);
+        if (plan.FirstOrDefault(p => p.Outcome == "Blocked") is { Membership: { } blocked })
         {
-            var others = await db.Memberships
-                .Include(m => m.User)
-                .Where(m => m.HouseholdId == membership.HouseholdId && m.UserId != userId && m.User.ManagedByHouseholdId == null)
-                .OrderBy(m => m.JoinedAt)
-                .ToListAsync(ct);
-            if (others.Count == 0)
+            return Results.Problem(
+                title: $"Antes de apagares a conta, passa a administração de «{blocked.Household.Name}» a um adulto.",
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        foreach (var (membership, outcome, successor) in plan)
+        {
+            if (outcome == "Deleted")
             {
                 // Mais ninguém com conta: a casa (e os perfis de criança) vão com ela.
                 await memberships.DeleteHouseholdAsync(membership.HouseholdId, ct);
                 continue;
             }
 
-            if (membership.Role == HouseholdRole.Admin && others.All(m => m.Role != HouseholdRole.Admin))
+            if (successor is not null)
             {
-                // A casa fica sempre com um administrador: o adulto que está lá há mais tempo (ou quem estiver).
-                var next = others.FirstOrDefault(m => m.Role == HouseholdRole.Adult) ?? others[0];
-                next.Role = HouseholdRole.Admin;
+                // A casa fica sempre com um administrador: o adulto que está lá há mais tempo.
+                successor.Role = HouseholdRole.Admin;
                 await db.SaveChangesAsync(ct);
-                await notifier.MemberUpserted(membership.HouseholdId, MemberEndpoints.ToDto(next), ct);
+                await notifier.MemberUpserted(membership.HouseholdId, MemberEndpoints.ToDto(successor), ct);
             }
 
             await memberships.RemoveAsync(membership, ct);
         }
+
+        // As ligações de tempo real e os telemóveis desta conta deixam de receber já.
+        await sessions.SignOutEverywhereAsync(userId, ct);
 
         // As fotos que enviou saem do histórico; o resto (sessões, avisos, telemóveis, sugestões) vai com a conta.
         var photos = await db.ChorePhotos.Where(p => p.UploadedByUserId == userId).Select(p => p.Id).ToListAsync(ct);

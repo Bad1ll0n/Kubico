@@ -1,15 +1,18 @@
-# Ambiente local completo: PostgreSQL + API.
+# Ambiente completo: PostgreSQL + API, em modo Production (como num servidor).
+#   cp .env.example .env    # e preencher os segredos (o .env não entra no Git)
 #   docker compose up --build
-# A API fica em http://localhost:5281 (Swagger/OpenAPI em /openapi/v1.json).
+# A API fica em http://localhost:5281. As portas só se abrem neste computador (127.0.0.1); num servidor, a API fica
+# atrás de um proxy com HTTPS (ver CLAUDE.md, "Produção") e o PostgreSQL nunca fica exposto.
 services:
   db:
     image: postgres:17
     environment:
       POSTGRES_DB: kubico
       POSTGRES_USER: kubico
-      POSTGRES_PASSWORD: kubico
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD no .env}
+    # Só para ver a base com um cliente local; tira esta linha num servidor.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - kubico-db:/var/lib/postgresql/data
     healthcheck:
@@ -24,11 +27,17 @@ services:
       db:
         condition: service_healthy
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__Kubico: "Host=db;Port=5432;Database=kubico;Username=kubico;Password=kubico"
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Kubico: "Host=db;Port=5432;Database=kubico;Username=kubico;Password=${POSTGRES_PASSWORD}"
       Database__MigrateOnStartup: "true"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?Falta JWT_SIGNING_KEY no .env}
+      DataProtection__MasterKey: ${DATA_PROTECTION_MASTER_KEY:?Falta DATA_PROTECTION_MASTER_KEY no .env}
+      PublicBaseUrl: ${PUBLIC_BASE_URL:-http://localhost:5281}
+      Cors__AllowedOrigins__0: ${APP_ORIGIN:-http://localhost:8080}
+      # Sem HTTPS neste ambiente local; num servidor, o proxy trata do HTTPS e isto fica a true.
+      Https__Enforce: ${HTTPS_ENFORCE:-false}
     ports:
-      - "5281:8080"
+      - "127.0.0.1:5281:8080"
 
 volumes:
   kubico-db:

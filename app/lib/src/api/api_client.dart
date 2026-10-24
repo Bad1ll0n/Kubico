@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../l10n/strings.dart';
@@ -20,14 +20,19 @@ class TwoFactorRequired implements Exception {
   String toString() => 'Falta o código da verificação em dois passos.'.tr;
 }
 
-/// Erro devolvido pela API, já com uma mensagem pronta a mostrar ao utilizador.
+/// Erro devolvido pela API, já com uma mensagem pronta a mostrar ao utilizador. [code] é o código que alguns erros
+/// trazem para a app decidir o que fazer (por exemplo, "points-spent": pede-se confirmação e repete-se com force).
 class ApiException implements Exception {
-  const ApiException(this.statusCode, this.message);
+  const ApiException(this.statusCode, this.message, {this.code});
 
   final int statusCode;
   final String message;
+  final String? code;
 
   bool get isUnauthorized => statusCode == 401;
+
+  /// Desfazer ou não aceitar uma tarefa cujos pontos já foram trocados (pode-se confirmar com force).
+  bool get isPointsSpent => code == 'points-spent';
 
   @override
   String toString() => message;
@@ -84,9 +89,9 @@ class ApiClient {
     return (enabled: json['enabled'] as bool, recoveryCodesLeft: json['recoveryCodesLeft'] as int);
   }
 
-  /// Começa a ligar: o segredo (para escrever à mão) e o endereço para o código QR.
-  Future<(String, String)> setUpTwoFactor() async {
-    final json = await _send('POST', '/api/account/2fa/setup') as Map<String, dynamic>;
+  /// Começa a ligar (pede a palavra-passe): o segredo (para escrever à mão) e o endereço para o código QR.
+  Future<(String, String)> setUpTwoFactor(String password) async {
+    final json = await _send('POST', '/api/account/2fa/setup', body: {'password': password}) as Map<String, dynamic>;
     return (json['secret'] as String, json['uri'] as String);
   }
 
@@ -106,8 +111,10 @@ class ApiClient {
   /// Termina a sessão deste dispositivo.
   Future<void> logout(String refreshToken) => _send('POST', '/api/auth/logout', body: {'refreshToken': refreshToken});
 
-  /// Termina a sessão em todos os dispositivos.
-  Future<void> logoutEverywhere() => _send('POST', '/api/auth/logout-all');
+  /// Termina a sessão em todos os dispositivos. Com [resetCalendarFeeds], os endereços de calendário subscritos
+  /// também deixam de servir.
+  Future<void> logoutEverywhere({bool resetCalendarFeeds = false}) =>
+      _send('POST', '/api/auth/logout-all', body: resetCalendarFeeds ? {'resetCalendarFeeds': true} : null);
 
   /// Os dispositivos com sessão iniciada (o deste vem marcado).
   Future<List<DeviceSession>> getSessions() async => [
@@ -130,6 +137,12 @@ class ApiClient {
   /// Apaga a conta (confirma com a palavra-passe).
   Future<void> deleteAccount(String password) => _send('DELETE', '/api/account', body: {'password': password});
 
+  /// O que acontece a cada casa se a conta for apagada (quem fica a administrar, ou se é preciso passar antes).
+  Future<List<AccountDeletionHousehold>> getAccountDeletion() async => [
+    for (final h in await _send('GET', '/api/account/deletion') as List)
+      AccountDeletionHousehold.fromJson(h as Map<String, dynamic>),
+  ];
+
   // --- Agregados ---
 
   /// Cria a casa; com [template], já vem com as listas, tarefas e recompensas desse modelo.
@@ -150,6 +163,16 @@ class ApiClient {
 
   Future<Invite> createInvite(String householdId, HouseholdRole role) async =>
       Invite.fromJson(await _send('POST', '/api/households/$householdId/invites', body: {'role': role.apiValue}));
+
+  /// Os convites que ainda servem (só para quem gere os membros).
+  Future<List<Invite>> getInvites(String householdId) async => [
+    for (final i in await _send('GET', '/api/households/$householdId/invites') as List)
+      Invite.fromJson(i as Map<String, dynamic>),
+  ];
+
+  /// Anula um convite: deixa de servir já.
+  Future<void> revokeInvite(String householdId, String code) =>
+      _send('DELETE', '/api/households/$householdId/invites/${Uri.encodeComponent(code)}');
 
   Future<InvitePreview> previewInvite(String code) async => InvitePreview.fromJson(
     await _send('GET', '/api/invites/${Uri.encodeComponent(code.trim())}') as Map<String, dynamic>,
@@ -238,6 +261,10 @@ class ApiClient {
   Future<void> setChildPin(String householdId, String userId, String pin) =>
       _send('PUT', '/api/households/$householdId/children/$userId/pin', body: {'pin': pin});
 
+  /// Termina as sessões de um perfil de criança em todos os aparelhos.
+  Future<void> signOutChild(String householdId, String userId) =>
+      _send('POST', '/api/households/$householdId/children/$userId/sign-out');
+
   /// O código da família, com que as crianças entram nos seus perfis (é criado no primeiro pedido).
   Future<String> getFamilyCode(String householdId) async =>
       (await _send('POST', '/api/households/$householdId/family-code') as Map<String, dynamic>)['code'] as String;
@@ -260,9 +287,7 @@ class ApiClient {
   // --- Listas de compras ---
 
   Future<List<ShoppingList>> getLists(String householdId) async =>
-      (await _send('GET', '/api/households/$householdId/lists') as List)
-          .map((l) => ShoppingList.fromJson(l as Map<String, dynamic>))
-          .toList();
+      _readable(await _send('GET', '/api/households/$householdId/lists'), ShoppingList.fromJson);
 
   Future<ShoppingList> createList(String householdId, String name) async =>
       ShoppingList.fromJson(await _send('POST', '/api/households/$householdId/lists', body: {'name': name}));
@@ -271,9 +296,7 @@ class ApiClient {
       _send('DELETE', '/api/households/$householdId/lists/$listId');
 
   Future<List<ShoppingItem>> getItems(String householdId, String listId) async =>
-      (await _send('GET', _itemsPath(householdId, listId)) as List)
-          .map((i) => ShoppingItem.fromJson(i as Map<String, dynamic>))
-          .toList();
+      _readable(await _send('GET', _itemsPath(householdId, listId)), ShoppingItem.fromJson);
 
   /// [id] é gerado na app quando o artigo foi criado sem rede: reenviar não o duplica.
   Future<ShoppingItem> addItem(
@@ -322,9 +345,7 @@ class ApiClient {
   // --- Tarefas ---
 
   Future<List<Chore>> getChores(String householdId) async =>
-      (await _send('GET', '/api/households/$householdId/chores') as List)
-          .map((c) => Chore.fromJson(c as Map<String, dynamic>))
-          .toList();
+      _readable(await _send('GET', '/api/households/$householdId/chores'), Chore.fromJson);
 
   Future<Chore> createChore(String householdId, ChoreDraft draft) async =>
       Chore.fromJson(await _send('POST', '/api/households/$householdId/chores', body: draft.toJson()));
@@ -336,11 +357,18 @@ class ApiClient {
       _send('DELETE', '/api/households/$householdId/chores/$choreId');
 
   /// Conclui a tarefa e devolve a versão atualizada e os pontos ganhos. [photoId]: a foto de prova já enviada.
-  Future<(Chore, int)> completeChore(String householdId, String choreId, {String? photoId}) async {
+  /// [doneByUserId]: quem gere as tarefas diz quem a fez (é para essa pessoa que vão os pontos).
+  Future<(Chore, int)> completeChore(
+    String householdId,
+    String choreId, {
+    String? photoId,
+    String? doneByUserId,
+  }) async {
+    final body = {'photoId': ?photoId, 'doneByUserId': ?doneByUserId};
     final json = await _send(
       'POST',
       '/api/households/$householdId/chores/$choreId/complete',
-      body: photoId == null ? null : {'photoId': photoId},
+      body: body.isEmpty ? null : body,
     ) as Map<String, dynamic>;
     return (Chore.fromJson(json['chore'] as Map<String, dynamic>), json['pointsEarned'] as int);
   }
@@ -363,10 +391,14 @@ class ApiClient {
       ChoreHistoryItem.fromJson(i as Map<String, dynamic>),
   ];
 
-  /// Não aceita uma tarefa feita: os pontos deixam de contar e a tarefa volta para quem a fez.
-  Future<ChoreHistoryItem> rejectChoreCompletion(String householdId, String completionId) async =>
+  /// Não aceita uma tarefa feita: os pontos deixam de contar e a tarefa volta para quem a fez. Com [force], aceita
+  /// que a pessoa fique a dever pontos já trocados.
+  Future<ChoreHistoryItem> rejectChoreCompletion(String householdId, String completionId, {bool force = false}) async =>
       ChoreHistoryItem.fromJson(
-        await _send('POST', '/api/households/$householdId/chores/completions/$completionId/reject'),
+        await _send(
+          'POST',
+          '/api/households/$householdId/chores/completions/$completionId/reject${force ? '?force=true' : ''}',
+        ),
       );
 
   /// Marca ou desmarca um passo de uma rotina. Se era o último, a rotina fica concluída ([completed]) e dá pontos.
@@ -400,9 +432,10 @@ class ApiClient {
       ActivityItem.fromJson(a as Map<String, dynamic>),
   ];
 
-  /// Desfaz uma alteração (o que foi criado sai, o que mudou ou foi apagado volta ao que era).
-  Future<void> undoActivity(String householdId, int entryId) =>
-      _send('POST', '/api/households/$householdId/activity/$entryId/undo');
+  /// Desfaz uma alteração (o que foi criado sai, o que mudou ou foi apagado volta ao que era). Com [force], quem
+  /// gere a área aceita que alguém fique a dever pontos já trocados.
+  Future<void> undoActivity(String householdId, int entryId, {bool force = false}) =>
+      _send('POST', '/api/households/$householdId/activity/$entryId/undo${force ? '?force=true' : ''}');
 
   // --- Mesada ---
 
@@ -623,7 +656,26 @@ class ApiClient {
       if (await renew()) return _execute(method, path, body: body, upload: upload, retry: false);
     }
 
-    throw ApiException(response.statusCode, _errorMessage(response.statusCode, _decode(response.bodyBytes)));
+    final problem = _decode(response.bodyBytes);
+    throw ApiException(
+      response.statusCode,
+      _errorMessage(response.statusCode, problem),
+      code: problem is Map<String, dynamic> && problem['code'] is String ? problem['code'] as String : null,
+    );
+  }
+
+  /// Lê uma lista e deixa de fora o que não se consegue ler (um valor estragado, ou de uma versão nova da API), em
+  /// vez de falhar o ecrã todo.
+  static List<T> _readable<T>(Object? json, T Function(Map<String, dynamic> json) read) {
+    final result = <T>[];
+    for (final item in json as List) {
+      try {
+        result.add(read(item as Map<String, dynamic>));
+      } catch (e) {
+        debugPrint('Kubico: registo que não se consegue ler ($e)');
+      }
+    }
+    return result;
   }
 
   static dynamic _decode(List<int> bytes) {

@@ -217,6 +217,7 @@ public static class RewardEndpoints
         Guid rewardId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
@@ -238,11 +239,13 @@ public static class RewardEndpoints
             return Results.NotFound();
         }
 
-        var balance = (await Balances(db, householdId, ct)).Single(p => p.UserId == userId);
-        if (balance.Available < reward.Cost)
+        // Tranca o saldo antes de o ler: dois pedidos em simultâneo não gastam os mesmos pontos.
+        await Points.LockAsync(db, householdId, userId, ct);
+        var available = await Points.AvailableAsync(db, householdId, userId, ct);
+        if (available < reward.Cost)
         {
             return Results.Problem(
-                title: $"Faltam {reward.Cost - balance.Available} pontos para esta recompensa.",
+                title: $"Faltam {reward.Cost - available} pontos para esta recompensa.",
                 statusCode: StatusCodes.Status409Conflict);
         }
 
@@ -264,6 +267,8 @@ public static class RewardEndpoints
         }
 
         db.RewardRedemptions.Add(redemption);
+        activity.Capture(householdId, userId, HouseholdModule.Rewards, $"pediu «{reward.Title}»", undoable: false,
+            access: ModuleAccess.Participate);
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(redemption);
@@ -293,24 +298,26 @@ public static class RewardEndpoints
         Guid redemptionId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct) =>
-        Decide(approve: true, householdId, redemptionId, principal, db, access, notifier, notifications, clock, ct);
+        Decide(approve: true, householdId, redemptionId, principal, db, activity, access, notifier, notifications, clock, ct);
 
     private static Task<IResult> Reject(
         Guid householdId,
         Guid redemptionId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct) =>
-        Decide(approve: false, householdId, redemptionId, principal, db, access, notifier, notifications, clock, ct);
+        Decide(approve: false, householdId, redemptionId, principal, db, activity, access, notifier, notifications, clock, ct);
 
     private static async Task<IResult> Decide(
         bool approve,
@@ -318,6 +325,7 @@ public static class RewardEndpoints
         Guid redemptionId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         NotificationService notifications,
@@ -344,7 +352,24 @@ public static class RewardEndpoints
             return AlreadyDecided();
         }
 
+        var name = await db.Users.Where(u => u.Id == redemption.UserId).Select(u => u.DisplayName).SingleOrDefaultAsync(ct)
+            ?? "antigo membro";
+        if (approve)
+        {
+            // Os pontos estão reservados desde o pedido; entretanto o saldo pode ter descido (uma tarefa que não foi
+            // aceite). Aprovar não o deixa negativo.
+            await Points.LockAsync(db, householdId, redemption.UserId, ct);
+            if (await Points.AvailableAsync(db, householdId, redemption.UserId, ct) < 0)
+            {
+                return Results.Problem(
+                    title: $"Os pontos de {name} já não chegam para este pedido.", statusCode: StatusCodes.Status409Conflict);
+            }
+        }
+
         redemption.Decide(approve, userId, clock.GetUtcNow());
+        activity.Capture(householdId, userId, HouseholdModule.Rewards,
+            approve ? $"aprovou «{redemption.RewardTitle}» a {name}" : $"recusou «{redemption.RewardTitle}» a {name}",
+            undoable: false);
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(redemption);
@@ -367,6 +392,7 @@ public static class RewardEndpoints
         Guid redemptionId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
@@ -399,6 +425,19 @@ public static class RewardEndpoints
         }
 
         db.RewardRedemptions.Remove(redemption);
+        if (redemption.UserId == userId)
+        {
+            activity.Capture(householdId, userId, HouseholdModule.Rewards, $"cancelou o pedido «{redemption.RewardTitle}»",
+                undoable: false, access: ModuleAccess.Participate);
+        }
+        else
+        {
+            var name = await db.Users.Where(u => u.Id == redemption.UserId).Select(u => u.DisplayName).SingleOrDefaultAsync(ct)
+                ?? "antigo membro";
+            activity.Capture(householdId, userId, HouseholdModule.Rewards,
+                $"cancelou o pedido «{redemption.RewardTitle}» de {name}", undoable: false);
+        }
+
         await db.SaveChangesAsync(ct);
         await notifier.RedemptionDeleted(householdId, redemptionId, ct);
         return Results.NoContent();

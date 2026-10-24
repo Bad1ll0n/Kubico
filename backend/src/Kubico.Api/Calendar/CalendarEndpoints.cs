@@ -142,7 +142,12 @@ public static class CalendarEndpoints
             .ThenByDescending(o => o.IsAllDay)
             .ThenBy(o => o.Event.Title, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
-        var conflicts = CalendarConflicts.Find(occurrences);
+
+        // Quem está fora (ausências) também não está disponível.
+        var absences = await db.MemberAbsences.AsNoTracking()
+            .Where(a => a.HouseholdId == householdId && a.StartDate <= windowLast && a.EndDate >= windowFirst)
+            .ToListAsync(ct);
+        var conflicts = CalendarConflicts.Find(occurrences, MemberAbsence.Checker(absences), zone);
 
         var rangeStart = ZonedTime.StartOfDay(first, zone);
         var rangeEnd = ZonedTime.StartOfDay(last.AddDays(1), zone);
@@ -184,6 +189,7 @@ public static class CalendarEndpoints
         }
 
         var now = clock.GetUtcNow();
+        var zone = (await db.Households.AsNoTracking().SingleAsync(h => h.Id == householdId, ct)).TimeZone;
         var calendarEvent = new CalendarEvent
         {
             HouseholdId = householdId,
@@ -191,7 +197,7 @@ public static class CalendarEndpoints
             CreatedByUserId = userId,
             CreatedAt = now,
         };
-        Apply(calendarEvent, request, now);
+        Apply(calendarEvent, request, now, zone);
 
         db.CalendarEvents.Add(calendarEvent);
         activity.Capture(householdId, userId, HouseholdModule.Calendar, $"criou o evento «{calendarEvent.Title}»");
@@ -243,7 +249,8 @@ public static class CalendarEndpoints
         }
 
         var before = Involved(calendarEvent);
-        var removed = await UpdateSeries(db, calendarEvent, request, clock.GetUtcNow(), ct);
+        var zone = (await db.Households.AsNoTracking().SingleAsync(h => h.Id == householdId, ct)).TimeZone;
+        var removed = await UpdateSeries(db, calendarEvent, request, clock.GetUtcNow(), zone, ct);
         activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Calendar, $"mudou o evento «{calendarEvent.Title}»");
         await db.SaveChangesAsync(ct);
 
@@ -333,7 +340,7 @@ public static class CalendarEndpoints
         if (following && !series.EndBefore(date, zone))
         {
             // É a primeira ocorrência: "esta e as seguintes" é a série toda.
-            var removedAll = await UpdateSeries(db, series, request, now, ct);
+            var removedAll = await UpdateSeries(db, series, request, now, zone, ct);
             activity.Capture(householdId, userId, HouseholdModule.Calendar, $"mudou «{series.Title}» a partir de {date:dd/MM}");
             await db.SaveChangesAsync(ct);
             var seriesDto = ToDto(series);
@@ -357,7 +364,7 @@ public static class CalendarEndpoints
                 CreatedByUserId = userId,
                 CreatedAt = now,
             };
-            Apply(changed, request, now);
+            Apply(changed, request, now, zone);
         }
         else
         {
@@ -374,7 +381,7 @@ public static class CalendarEndpoints
                 CreatedByUserId = userId,
                 CreatedAt = now,
             };
-            Apply(changed, request with { Recurrence = null }, now);
+            Apply(changed, request with { Recurrence = null }, now, zone);
             series.Exclude(date);
         }
 
@@ -469,10 +476,11 @@ public static class CalendarEndpoints
     /// dias deixam de corresponder às ocorrências; devolve os ids das exceções apagadas.
     /// </summary>
     private static async Task<List<Guid>> UpdateSeries(
-        KubicoDbContext db, CalendarEvent calendarEvent, SaveEventRequest request, DateTimeOffset now, CancellationToken ct)
+        KubicoDbContext db, CalendarEvent calendarEvent, SaveEventRequest request, DateTimeOffset now, TimeZoneInfo zone,
+        CancellationToken ct)
     {
         var schedule = (calendarEvent.StartsAt, calendarEvent.StartDate, calendarEvent.Recurrence);
-        Apply(calendarEvent, request, now);
+        Apply(calendarEvent, request, now, zone);
         if (schedule == (calendarEvent.StartsAt, calendarEvent.StartDate, calendarEvent.Recurrence))
         {
             return [];
@@ -591,6 +599,14 @@ public static class CalendarEndpoints
             errors["Recurrence"] = ["Esta repetição não é válida ou ainda não é suportada."];
         }
 
+        // Caracteres de controlo (um CR sozinho, por exemplo) partiam o calendário subscrito (ICS); nas notas, só as
+        // mudanças de linha e os tabs.
+        if (HasControl(request.Title) || HasControl(request.Location)
+            || HasControl(request.Notes?.Replace("\r\n", "\n"), allowed: ['\n', '\t']))
+        {
+            errors["Title"] = ["O texto tem caracteres que não se podem usar."];
+        }
+
         var referenced = (request.ParticipantUserIds ?? [])
             .Select(id => (Guid?)id)
             .Append(request.DropOffUserId)
@@ -601,10 +617,16 @@ public static class CalendarEndpoints
         if (referenced.Count > 0)
         {
             var members = await db.Memberships
-                .CountAsync(m => m.HouseholdId == householdId && referenced.Contains(m.UserId), ct);
-            if (members != referenced.Count)
+                .Where(m => m.HouseholdId == householdId && referenced.Contains(m.UserId))
+                .Select(m => new { m.UserId, m.Role })
+                .ToListAsync(ct);
+            if (members.Count != referenced.Count)
             {
                 errors["ParticipantUserIds"] = ["Os participantes e as boleias têm de ser membros desta casa."];
+            }
+            else if (members.Any(m => m.Role == HouseholdRole.Child && (m.UserId == request.DropOffUserId || m.UserId == request.PickUpUserId)))
+            {
+                errors["DropOffUserId"] = ["Uma criança não pode levar nem ir buscar: escolhe um adulto."];
             }
         }
 
@@ -615,10 +637,16 @@ public static class CalendarEndpoints
 
     private static bool IsSupported(DateOnly date) => date.Year is >= 1900 and <= 2200;
 
-    private static void Apply(CalendarEvent calendarEvent, SaveEventRequest request, DateTimeOffset now)
+    private static bool HasControl(string? text, char[]? allowed = null) =>
+        text is not null && text.Any(c => char.IsControl(c) && (allowed is null || !allowed.Contains(c)));
+
+    /// <summary>
+    /// Aplica um pedido. Numa repetição semanal, o início passa para o primeiro dia escolhido (no fuso da casa).
+    /// </summary>
+    private static void Apply(CalendarEvent calendarEvent, SaveEventRequest request, DateTimeOffset now, TimeZoneInfo zone)
     {
         calendarEvent.Title = request.Title.Trim();
-        calendarEvent.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+        calendarEvent.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Replace("\r\n", "\n").Trim();
         calendarEvent.Location = string.IsNullOrWhiteSpace(request.Location) ? null : request.Location.Trim();
 
         if (request.IsAllDay)
@@ -635,6 +663,7 @@ public static class CalendarEndpoints
         calendarEvent.ParticipantUserIds = [.. (request.ParticipantUserIds ?? []).Distinct()];
         calendarEvent.DropOffUserId = request.DropOffUserId;
         calendarEvent.PickUpUserId = request.PickUpUserId;
+        calendarEvent.AlignStartToRule(zone);
         calendarEvent.UpdatedAt = now;
     }
 

@@ -14,11 +14,45 @@ namespace Kubico.Api.Calendar.Sync;
 public sealed record OAuthState(
     Guid UserId, Guid HouseholdId, CalendarProvider Provider, string CodeVerifier, DateTimeOffset ExpiresAt);
 
+/// <summary>
+/// Uma ligação autorizada na página do Google ou da Microsoft, à espera de que a pessoa confirme (no navegador) que é
+/// ela que quer ligar a conta a esta casa. Viaja cifrada no formulário da página de confirmação.
+/// </summary>
+public sealed record PendingConnection(
+    Guid UserId,
+    Guid HouseholdId,
+    CalendarProvider Provider,
+    string AccessToken,
+    string RefreshToken,
+    string Email,
+    DateTimeOffset ExpiresAt);
+
 /// <summary>Cifra os refresh tokens guardados e o estado OAuth que viaja no endereço (ASP.NET Data Protection).</summary>
 public sealed class CalendarSecrets(IDataProtectionProvider protection)
 {
     private readonly IDataProtector _tokens = protection.CreateProtector("Kubico.CalendarSync.RefreshToken.v1");
     private readonly IDataProtector _state = protection.CreateProtector("Kubico.CalendarSync.OAuthState.v1");
+    private readonly IDataProtector _pending = protection.CreateProtector("Kubico.CalendarSync.PendingConnection.v1");
+
+    public string ProtectPending(PendingConnection pending) => _pending.Protect(JsonSerializer.Serialize(pending));
+
+    /// <summary>A ligação por confirmar, ou null se tiver sido alterada ou não tiver sido o Kubico a criá-la.</summary>
+    public PendingConnection? UnprotectPending(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<PendingConnection>(_pending.Unprotect(text));
+        }
+        catch (Exception e) when (e is CryptographicException or JsonException or FormatException)
+        {
+            return null;
+        }
+    }
 
     public string ProtectToken(string refreshToken) => _tokens.Protect(refreshToken);
 

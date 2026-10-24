@@ -154,7 +154,7 @@ class _RewardsViewState extends State<RewardsView> {
             : Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(_error.toString()),
+                  Text(errorText(_error!)),
                   TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
                 ],
               ),
@@ -255,7 +255,16 @@ class _PointsCard extends StatelessWidget {
           children: [
             Text('Os teus pontos'.tr, style: theme.textTheme.titleSmall),
             const SizedBox(height: 4),
-            Text('${mine?.available ?? 0}', style: theme.textTheme.displaySmall),
+            Text(
+              (mine?.available ?? 0) < 0 ? 'Deves ${-(mine!.available)}'.tr : '${mine?.available ?? 0}',
+              style: theme.textTheme.displaySmall,
+            ),
+            if (mine != null && mine.available < 0)
+              Text(
+                'Trocaste pontos de uma tarefa que depois não foi aceite. Os próximos pontos que ganhares pagam esta dívida.'
+                    .tr,
+                style: theme.textTheme.bodySmall,
+              ),
             if (mine != null && mine.reserved > 0)
               Text('Mais ${mine.reserved} reservados em pedidos à espera.'.tr, style: theme.textTheme.bodySmall),
             if (others.isNotEmpty) ...[
@@ -267,7 +276,7 @@ class _PointsCard extends StatelessWidget {
                   for (final p in others)
                     Chip(
                       avatar: CircleAvatar(backgroundColor: colorFromHex(p.color)),
-                      label: Text('${p.displayName} · ${p.available} pts'),
+                      label: Text('${p.displayName} · ${pointsText(p.available)}'),
                     ),
                 ],
               ),

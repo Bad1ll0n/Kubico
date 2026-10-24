@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Kubico.Api.Activity;
+using Kubico.Api.Auth;
+using Kubico.Api.Calendar;
 using Kubico.Api.Common;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Households;
@@ -24,10 +26,11 @@ public static class MemberEndpoints
             .WithTags("Households")
             .RequireAuthorization();
 
-        household.MapPut("/members/{userId:guid}/role", UpdateRole);
-        household.MapDelete("/members/{userId:guid}", RemoveMember);
+        // Ações sensíveis: só com a sessão ativa (terminar a sessão corta-as logo).
+        household.MapPut("/members/{userId:guid}/role", UpdateRole).RequireActiveSession();
+        household.MapDelete("/members/{userId:guid}", RemoveMember).RequireActiveSession();
         household.MapPost("/leave", Leave);
-        household.MapPost("/transfer-admin", TransferAdmin);
+        household.MapPost("/transfer-admin", TransferAdmin).RequireActiveSession();
 
         return api;
     }
@@ -55,6 +58,11 @@ public static class MemberEndpoints
             return Results.NotFound();
         }
 
+        if (!Enum.IsDefined(request.Role))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]> { ["Role"] = ["Esse papel não existe."] });
+        }
+
         if (membership.User.IsChildProfile && request.Role != HouseholdRole.Child)
         {
             return Problem("Um perfil de criança é sempre Criança. Para outro papel, a pessoa precisa de conta própria.",
@@ -70,6 +78,7 @@ public static class MemberEndpoints
         membership.Role = request.Role;
         activity.Capture(householdId, principal.GetUserId(), null, $"mudou o papel de {membership.User.DisplayName} para {RoleLabel(request.Role)}", undoable: false);
         await db.SaveChangesAsync(ct);
+        await CalendarFeedEndpoints.RevokeFeedsWithoutAccessAsync(db, access, householdId, ct);
 
         var dto = ToDto(membership);
         await notifier.MemberUpserted(householdId, dto, ct);

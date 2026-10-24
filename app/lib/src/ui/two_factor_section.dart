@@ -48,8 +48,14 @@ class _TwoFactorSectionState extends State<TwoFactorSection> {
     }
   }
 
-  Future<void> _turnOn() => _run(() async {
-    final (secret, uri) = await _api.setUpTwoFactor();
+  Future<void> _turnOn() async {
+    final password = await showDialog<String>(context: context, builder: (_) => const _PasswordDialog());
+    if (password == null || !mounted) return;
+    await _setUp(password);
+  }
+
+  Future<void> _setUp(String password) => _run(() async {
+    final (secret, uri) = await _api.setUpTwoFactor(password);
     if (!mounted) return;
     final codes = await showDialog<List<String>>(
       context: context,
@@ -289,6 +295,54 @@ class _RecoveryCodesDialog extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Antes de ligar: a palavra-passe (quem só tem uma sessão aberta não liga a verificação no lugar da pessoa).
+class _PasswordDialog extends StatefulWidget {
+  const _PasswordDialog();
+
+  @override
+  State<_PasswordDialog> createState() => _PasswordDialogState();
+}
+
+class _PasswordDialogState extends State<_PasswordDialog> {
+  final _password = TextEditingController();
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('Ligar a verificação em dois passos'.tr),
+    content: SizedBox(
+      width: 400,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Confirma que és tu: escreve a tua palavra-passe.'.tr),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _password,
+            autofocus: true,
+            obscureText: true,
+            decoration: InputDecoration(labelText: 'Palavra-passe'.tr),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (value) => value.isEmpty ? null : Navigator.pop(context, value),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
+      FilledButton(
+        onPressed: _password.text.isEmpty ? null : () => Navigator.pop(context, _password.text),
+        child: Text('Continuar'.tr),
+      ),
+    ],
+  );
 }
 
 /// Para desligar: a palavra-passe e um código da app (ou de recuperação).

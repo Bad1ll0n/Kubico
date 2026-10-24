@@ -137,6 +137,7 @@ public static class HouseholdTemplates
                 Title = T(chore.Title),
                 Points = chore.Points,
                 DueDate = today,
+                DueDay = today.Day,
                 Recurrence = chore.Recurrence,
                 TimeOfDay = chore.TimeOfDay,
                 Steps = [.. (chore.Steps ?? []).Select(T)],
@@ -151,7 +152,7 @@ public static class HouseholdTemplates
             db.Rewards.Add(new Reward
             {
                 HouseholdId = household.Id,
-                Title = reward.Title,
+                Title = T(reward.Title),
                 Cost = reward.Cost,
                 CreatedByUserId = userId,
                 CreatedAt = now,

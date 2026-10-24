@@ -1,3 +1,4 @@
+using Kubico.Domain;
 using Kubico.Domain.Activity;
 using Kubico.Domain.Calendar;
 using Kubico.Domain.Chores;
@@ -45,6 +46,44 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     /// <summary>As chaves que cifram os tokens das contas ligadas (têm de sobreviver a reinícios e a novas versões).</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
+    /// <summary>
+    /// Antes de gravar, as entidades com concorrência otimista (<see cref="IVersioned"/>) que mudaram ganham uma
+    /// versão nova; o UPDATE leva a antiga no WHERE e falha (DbUpdateConcurrencyException) se outro pedido gravou
+    /// entretanto. Serve igual em SQLite e PostgreSQL.
+    /// </summary>
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        RenewVersions();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        RenewVersions();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>
+    /// Marca a entidade como alterada (ganha uma versão nova ao gravar), sem mudar mais nada: um "cadeado" para
+    /// operações que leem várias linhas e depois inserem outra (por exemplo, ver o saldo e pedir uma recompensa).
+    /// </summary>
+    public void Touch(IVersioned entity) => Entry(entity).Property(nameof(IVersioned.Version)).IsModified = true;
+
+    private void RenewVersions()
+    {
+        foreach (var entry in ChangeTracker.Entries<IVersioned>())
+        {
+            if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.Version = Guid.NewGuid();
+            }
+            else if (entry.State == EntityState.Added && entry.Entity.Version == Guid.Empty)
+            {
+                entry.Entity.Version = Guid.NewGuid();
+            }
+        }
+    }
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         // SQLite (usado nos testes) não ordena nem compara DateTimeOffset; guardamos como número.
@@ -62,6 +101,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(u => u.DisplayName).HasMaxLength(100);
             e.Property(u => u.PinHash).HasMaxLength(200);
             e.Property(u => u.Language).HasMaxLength(8).HasDefaultValue(User.DefaultLanguage);
+            e.Property(u => u.Version).IsConcurrencyToken();
             e.HasIndex(u => u.Email).IsUnique();
 
             // Os perfis de criança são da casa: apagar a casa apaga-os.
@@ -91,6 +131,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(m => m.Role).HasConversion<string>().HasMaxLength(20);
             e.Property(m => m.Color).HasMaxLength(7);
             e.Property(m => m.CalendarFeedToken).HasMaxLength(64);
+            e.Property(m => m.Version).IsConcurrencyToken();
             e.HasIndex(m => new { m.HouseholdId, m.UserId }).IsUnique();
             e.HasIndex(m => m.CalendarFeedToken).IsUnique();
             e.HasOne(m => m.Household).WithMany(h => h.Members).HasForeignKey(m => m.HouseholdId).OnDelete(DeleteBehavior.Cascade);
@@ -101,6 +142,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         {
             e.Property(i => i.Code).HasMaxLength(16);
             e.Property(i => i.Role).HasConversion<string>().HasMaxLength(20);
+            e.Property(i => i.UsedCount).HasDefaultValue(0);
             e.HasIndex(i => i.Code).IsUnique();
             e.HasOne(i => i.Household).WithMany(h => h.Invites).HasForeignKey(i => i.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -131,6 +173,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
 
         modelBuilder.Entity<AllowancePayment>(e =>
         {
+            e.Property(p => p.BonusPerChoreCents).HasDefaultValue(0);
             e.HasIndex(p => new { p.HouseholdId, p.UserId, p.PeriodStart }).IsUnique();
             e.HasOne<Household>().WithMany().HasForeignKey(p => p.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -140,6 +183,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasKey(a => a.Id);
             e.Property(a => a.Id).ValueGeneratedOnAdd();
             e.Property(a => a.Module).HasConversion<string>().HasMaxLength(20);
+            e.Property(a => a.RequiredAccess).HasConversion<string>().HasMaxLength(20);
             e.Property(a => a.Summary).HasMaxLength(300);
             e.HasIndex(a => new { a.HouseholdId, a.Id });
             e.HasOne<Household>().WithMany().HasForeignKey(a => a.HouseholdId).OnDelete(DeleteBehavior.Cascade);
@@ -177,6 +221,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(c => c.Notes).HasMaxLength(1000);
             e.Property(c => c.Recurrence).HasConversion<string>().HasMaxLength(20);
             e.Property(c => c.TimeOfDay).HasConversion<string>().HasMaxLength(20);
+            e.Property(c => c.Version).IsConcurrencyToken();
             e.HasIndex(c => new { c.HouseholdId, c.DueDate });
             e.HasOne(c => c.Household).WithMany().HasForeignKey(c => c.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -217,6 +262,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         {
             e.Property(r => r.RewardTitle).HasMaxLength(100);
             e.Property(r => r.Status).HasConversion<string>().HasMaxLength(20);
+            e.Property(r => r.Version).IsConcurrencyToken();
             e.HasIndex(r => new { r.HouseholdId, r.RequestedAt });
             e.HasIndex(r => new { r.HouseholdId, r.UserId });
             e.HasOne<Household>().WithMany().HasForeignKey(r => r.HouseholdId).OnDelete(DeleteBehavior.Cascade);
@@ -250,6 +296,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(d => d.Platform).HasMaxLength(20);
             e.HasIndex(d => d.Token).IsUnique();
             e.HasIndex(d => d.UserId);
+            e.HasIndex(d => d.SessionId);
             e.HasOne<User>().WithMany().HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 

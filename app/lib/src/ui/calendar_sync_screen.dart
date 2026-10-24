@@ -9,6 +9,7 @@ import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
 import 'dates_pt.dart';
+import 'theme.dart';
 
 /// Abre a página de autorização do Google ou da Microsoft no navegador do sistema.
 Future<bool> openInBrowser(Uri url) => launchUrl(url, mode: LaunchMode.externalApplication);
@@ -150,7 +151,7 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(_error.toString()),
+                        Text(errorText(_error!)),
                         TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
                       ],
                     ),

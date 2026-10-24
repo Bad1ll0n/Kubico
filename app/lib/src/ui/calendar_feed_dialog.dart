@@ -6,6 +6,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
 import 'calendar_sync_screen.dart';
+import 'theme.dart';
 
 /// Mostra o endereço pessoal para subscrever o calendário da casa no Google Calendar, no Outlook ou no iPhone.
 Future<void> showCalendarFeedDialog(BuildContext context, {required String householdId}) => showDialog<void>(
@@ -105,7 +106,7 @@ class _CalendarFeedDialogState extends State<_CalendarFeedDialog> {
                 child: SelectableText(feed.url, style: theme.textTheme.bodySmall),
               )
             else if (_error != null)
-              Text(_error.toString(), style: TextStyle(color: theme.colorScheme.error))
+              Text(errorText(_error!), style: TextStyle(color: theme.colorScheme.error))
             else
               const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 16),

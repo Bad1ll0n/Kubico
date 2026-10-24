@@ -86,18 +86,31 @@ public static class ActivityEndpoints
                 continue;
             }
 
-            var canUndo = latest && entry.CanBeUndone
-                && (entry.UserId == me || (entry.Module is { } area && levels[area] >= ModuleAccess.Manage));
+            // Alterações sobre uma pessoa (a mesada): só ela e quem gere a área as veem.
+            if (entry.PrivateToUserId is { } subject && subject != me
+                && !(entry.Module is { } own && levels[own] >= ModuleAccess.Manage))
+            {
+                continue;
+            }
+
+            var canUndo = latest && entry.CanBeUndone && entry.Module is { } area
+                && levels[area] >= entry.RequiredAccess
+                && (entry.UserId == me || levels[area] >= ModuleAccess.Manage);
             result.Add(ToDto(entry, canUndo, Texts.LanguageOf(http)));
         }
 
         return Results.Ok(result);
     }
 
-    /// <summary>Desfaz uma alteração: o que foi criado sai, o que mudou ou foi apagado volta ao que era.</summary>
+    /// <summary>
+    /// Desfaz uma alteração: o que foi criado sai, o que mudou ou foi apagado volta ao que era. É preciso ter ainda o
+    /// acesso que a alteração pediu (e ser quem a fez, ou gerir a área). Se desfazer tirar pontos que já foram
+    /// trocados, responde 409 (código "points-spent"); com <c>force=true</c>, quem gere a área confirma.
+    /// </summary>
     private static async Task<IResult> Undo(
         Guid householdId,
         long entryId,
+        bool? force,
         ClaimsPrincipal principal,
         KubicoDbContext db,
         HouseholdAccess access,
@@ -139,6 +152,12 @@ public static class ActivityEndpoints
                 statusCode: StatusCodes.Status403Forbidden);
         }
 
+        if (level < entry.RequiredAccess)
+        {
+            return Results.Problem(
+                title: "Já não tens acesso para desfazer esta alteração.", statusCode: StatusCodes.Status403Forbidden);
+        }
+
         // Antes de desfazer: de que lista é cada artigo (para avisar a lista certa se o artigo desaparecer).
         var itemLists = new Dictionary<Guid, Guid>();
         foreach (var (type, id) in ActivityLog.OwnKeys(entry).Select(ActivityLog.Parse).Where(k => k.Type == typeof(ShoppingItem)))
@@ -157,12 +176,57 @@ public static class ActivityEndpoints
                 statusCode: StatusCodes.Status409Conflict);
         }
 
+        // Desfazer uma tarefa feita tira os pontos a quem a fez: não se deixam saldos negativos sem confirmação.
+        if (await SpentPointsAsync(db, householdId, force == true && level >= ModuleAccess.Manage, ct) is { } spent)
+        {
+            return spent;
+        }
+
         var undo = log.Capture(householdId, me, entry.Module, $"desfez: {entry.Summary}", undoable: false);
         undo.UndoOfId = entry.Id;
         await db.SaveChangesAsync(ct);
 
         await NotifyAsync(db, notifier, householdId, keys, itemLists, ct);
         return Results.Ok(ToDto(entry, false, Texts.LanguageOf(http)));
+    }
+
+    /// <summary>
+    /// Quanto o desfazer (ainda por gravar) muda o saldo de cada pessoa: conclusões que saem ou deixam de contar tiram
+    /// pontos, as que voltam dão. Tranca o saldo de quem perde pontos e devolve o 409 se algum ficasse negativo.
+    /// </summary>
+    private static async Task<IResult?> SpentPointsAsync(KubicoDbContext db, Guid householdId, bool force, CancellationToken ct)
+    {
+        var losses = new Dictionary<Guid, int>();
+        foreach (var change in db.ChangeTracker.Entries<ChoreCompletion>())
+        {
+            var counted = change.Property(c => c.RejectedAt).OriginalValue is null;
+            var counts = change.Entity.RejectedAt is null;
+            var delta = change.State switch
+            {
+                EntityState.Deleted when counted => -change.Entity.Points,
+                EntityState.Added when counts => change.Entity.Points,
+                EntityState.Modified when counted != counts => counts ? change.Entity.Points : -change.Entity.Points,
+                _ => 0,
+            };
+            losses[change.Entity.UserId] = losses.GetValueOrDefault(change.Entity.UserId) + delta;
+        }
+
+        foreach (var (userId, delta) in losses.Where(l => l.Value < 0))
+        {
+            if (await Points.LockAsync(db, householdId, userId, ct) is null || force)
+            {
+                continue;
+            }
+
+            var left = await Points.AvailableAsync(db, householdId, userId, ct) + delta;
+            if (left < 0)
+            {
+                var name = await db.Users.Where(u => u.Id == userId).Select(u => u.DisplayName).SingleAsync(ct);
+                return Points.SpentProblem(name, -left);
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Avisa as apps do estado novo de cada coisa que o desfazer tocou.</summary>

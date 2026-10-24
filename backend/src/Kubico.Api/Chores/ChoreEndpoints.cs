@@ -29,10 +29,18 @@ public record SaveChoreRequest(
     IReadOnlyList<string>? Steps = null,
     bool RequiresPhoto = false);
 
-public record SetChoreStepRequest(bool Done);
+/// <summary>
+/// Marcar um passo. <c>DoneByUserId</c>: quem gere as tarefas pode dizer quem o fez (por omissão, o responsável da
+/// tarefa); é a essa pessoa que vão os pontos quando a rotina fica concluída.
+/// </summary>
+public record SetChoreStepRequest(bool Done, Guid? DoneByUserId = null);
 
-/// <summary>Concluir uma tarefa; <c>PhotoId</c> é a foto de prova já enviada (obrigatória se a tarefa a pedir).</summary>
-public record CompleteChoreRequest(Guid? PhotoId = null);
+/// <summary>
+/// Concluir uma tarefa; <c>PhotoId</c> é a foto de prova já enviada (obrigatória se a tarefa a pedir).
+/// <c>DoneByUserId</c>: quem gere as tarefas pode marcar como feita por outra pessoa (por exemplo, a criança sem
+/// telemóvel); sem ele, numa tarefa atribuída a outra pessoa, o crédito vai para o responsável.
+/// </summary>
+public record CompleteChoreRequest(Guid? PhotoId = null, Guid? DoneByUserId = null);
 
 public record ChoreDto(
     Guid Id,
@@ -50,7 +58,8 @@ public record ChoreDto(
     ChoreTimeOfDay TimeOfDay = ChoreTimeOfDay.Any,
     IReadOnlyList<string>? Steps = null,
     IReadOnlyList<int>? DoneSteps = null,
-    bool RequiresPhoto = false);
+    bool RequiresPhoto = false,
+    DateOnly? AvailableFrom = null);
 
 public record ChoreCompletedDto(ChoreDto Chore, int PointsEarned);
 
@@ -141,6 +150,7 @@ public static class ChoreEndpoints
         }
 
         var now = clock.GetUtcNow();
+        var household = await db.Households.AsNoTracking().SingleAsync(h => h.Id == householdId, ct);
         var chore = new Chore
         {
             HouseholdId = householdId,
@@ -148,7 +158,7 @@ public static class ChoreEndpoints
             CreatedByUserId = userId,
             CreatedAt = now,
         };
-        Apply(chore, request, now);
+        Apply(chore, request, now, household.Today(now));
 
         db.Chores.Add(chore);
         activity.Capture(householdId, userId, HouseholdModule.Chores, $"criou a tarefa «{chore.Title}»");
@@ -180,7 +190,8 @@ public static class ChoreEndpoints
             return error;
         }
 
-        var chore = await db.Chores.SingleOrDefaultAsync(c => c.Id == choreId && c.HouseholdId == householdId, ct);
+        var chore = await db.Chores.Include(c => c.Household)
+            .SingleOrDefaultAsync(c => c.Id == choreId && c.HouseholdId == householdId, ct);
         if (chore is null)
         {
             return Results.NotFound();
@@ -192,7 +203,8 @@ public static class ChoreEndpoints
         }
 
         var previousAssignee = chore.AssigneeUserId;
-        Apply(chore, request, clock.GetUtcNow());
+        var now = clock.GetUtcNow();
+        Apply(chore, request, now, chore.Household.Today(now));
         activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Chores, $"mudou a tarefa «{chore.Title}»");
         await db.SaveChangesAsync(ct);
 
@@ -264,9 +276,15 @@ public static class ChoreEndpoints
             return Results.NotFound();
         }
 
-        if (CannotAct(chore, userId, level) is { } refused)
+        var now = clock.GetUtcNow();
+        if (CannotAct(chore, userId, level, chore.Household.Today(now)) is { } refused)
         {
             return refused;
+        }
+
+        if (await DoneBy(db, chore, userId, level, request?.DoneByUserId, ct) is not { } doneBy)
+        {
+            return CannotCredit(level);
         }
 
         var photoId = request?.PhotoId;
@@ -284,12 +302,12 @@ public static class ChoreEndpoints
             return Results.Problem(title: "Esta foto não serve: envia outra.", statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var completion = await CompleteAsync(db, activity, notifier, notifications, chore, userId, clock.GetUtcNow(), ct, photoId);
+        var completion = await CompleteAsync(db, activity, notifier, notifications, chore, userId, doneBy, now, ct, photoId);
         if (photoId is not null)
         {
             // Quem gere as tarefas é avisado para ver a foto.
             var managers = await access.MembersWithAsync(householdId, HouseholdModule.Chores, ModuleAccess.Manage, ct);
-            var name = await db.Users.Where(u => u.Id == userId).Select(u => u.DisplayName).SingleAsync(ct);
+            var name = await db.Users.Where(u => u.Id == doneBy).Select(u => u.DisplayName).SingleAsync(ct);
             await notifications.NotifyAsync(
                 householdId, managers, userId, NotificationKind.ChoreCompleted,
                 $"{name} fez: {chore.Title}", "Com foto. Vê no histórico das tarefas.", chore.Id, ct);
@@ -329,12 +347,17 @@ public static class ChoreEndpoints
             return Results.NotFound();
         }
 
-        if (CannotAct(chore, userId, level) is { } refused)
+        var now = clock.GetUtcNow();
+        if (CannotAct(chore, userId, level, chore.Household.Today(now)) is { } refused)
         {
             return refused;
         }
 
-        var now = clock.GetUtcNow();
+        if (await DoneBy(db, chore, userId, level, request.DoneByUserId, ct) is not { } doneBy)
+        {
+            return CannotCredit(level);
+        }
+
         if (!chore.SetStep(index, request.Done, now))
         {
             return Results.NotFound();
@@ -343,7 +366,7 @@ public static class ChoreEndpoints
         // Com foto de prova, o último passo não conclui: falta enviar a foto.
         if (chore.AllStepsDone && !chore.RequiresPhoto)
         {
-            var completion = await CompleteAsync(db, activity, notifier, notifications, chore, userId, now, ct);
+            var completion = await CompleteAsync(db, activity, notifier, notifications, chore, userId, doneBy, now, ct);
             return Results.Ok(new ChoreStepResultDto(ToDto(chore), true, completion.Points));
         }
 
@@ -353,12 +376,23 @@ public static class ChoreEndpoints
         return Results.Ok(new ChoreStepResultDto(dto, false, 0));
     }
 
-    /// <summary>Já concluída, ou (para quem não gere as tarefas) de outra pessoa.</summary>
-    private static IResult? CannotAct(Chore chore, Guid userId, ModuleAccess level)
+    /// <summary>
+    /// Já concluída; uma tarefa que se repete cuja ocorrência atual ainda não começou (cada ocorrência faz-se uma vez,
+    /// e não se adiantam as seguintes); ou, para quem não gere as tarefas, de outra pessoa.
+    /// </summary>
+    private static IResult? CannotAct(Chore chore, Guid userId, ModuleAccess level, DateOnly today)
     {
         if (chore.IsDone)
         {
             return Results.Problem(title: "Esta tarefa já está concluída.", statusCode: StatusCodes.Status409Conflict);
+        }
+
+        if (!chore.IsAvailableOn(today))
+        {
+            var from = chore.AvailableFrom!.Value.ToString("dd/MM", CultureInfo.InvariantCulture);
+            return Results.Problem(
+                title: $"Esta tarefa já está feita. Volta a estar disponível a {from}.",
+                statusCode: StatusCodes.Status409Conflict);
         }
 
         // Crianças e convidados só concluem as suas tarefas ou as que são de qualquer pessoa.
@@ -372,7 +406,37 @@ public static class ChoreEndpoints
         return null;
     }
 
-    /// <summary>Conclui a tarefa (a rotação salta quem está fora), grava e avisa a casa e o próximo responsável.</summary>
+    /// <summary>
+    /// Quem fica com o crédito (pontos, estatísticas, mesada): quem pede, ou quem gere as tarefas indica (tem de ser
+    /// membro da casa); sem indicação, numa tarefa atribuída a outra pessoa, o responsável. Null = não pode indicar.
+    /// </summary>
+    private static async Task<Guid?> DoneBy(
+        KubicoDbContext db, Chore chore, Guid userId, ModuleAccess level, Guid? requested, CancellationToken ct)
+    {
+        if (requested is { } chosen && chosen != userId)
+        {
+            return level >= ModuleAccess.Manage
+                && await db.Memberships.AnyAsync(m => m.HouseholdId == chore.HouseholdId && m.UserId == chosen, ct)
+                ? chosen
+                : null;
+        }
+
+        return requested is null && level >= ModuleAccess.Manage && chore.AssigneeUserId is { } assignee ? assignee : userId;
+    }
+
+    private static IResult CannotCredit(ModuleAccess level) => level >= ModuleAccess.Manage
+        ? Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["DoneByUserId"] = ["Quem fez a tarefa tem de ser membro desta casa."],
+        })
+        : Results.Problem(
+            title: "Só quem gere as tarefas pode marcar uma tarefa como feita por outra pessoa.",
+            statusCode: StatusCodes.Status403Forbidden);
+
+    /// <summary>
+    /// Conclui a tarefa em nome de <paramref name="doneBy"/> (a rotação salta quem está fora), grava e avisa a casa e
+    /// o próximo responsável. <paramref name="userId"/> é quem a marcou.
+    /// </summary>
     private static async Task<ChoreCompletion> CompleteAsync(
         KubicoDbContext db,
         ActivityLog activity,
@@ -380,6 +444,7 @@ public static class ChoreEndpoints
         NotificationService notifications,
         Chore chore,
         Guid userId,
+        Guid doneBy,
         DateTimeOffset now,
         CancellationToken ct,
         Guid? photoId = null)
@@ -389,12 +454,21 @@ public static class ChoreEndpoints
         var absences = await db.MemberAbsences.AsNoTracking()
             .Where(a => a.HouseholdId == chore.HouseholdId && a.EndDate >= today)
             .ToListAsync(ct);
-        var completion = chore.Complete(userId, now, today, MemberAbsence.Checker(absences));
+        var completion = chore.Complete(doneBy, now, today, MemberAbsence.Checker(absences));
         completion.PhotoId = photoId;
 
         // O Id já vem preenchido; sem Add explícito o EF trataria o registo como existente (UPDATE).
         db.ChoreCompletions.Add(completion);
-        activity.Capture(chore.HouseholdId, userId, HouseholdModule.Chores, $"fez «{chore.Title}»");
+        if (doneBy == userId)
+        {
+            activity.Capture(chore.HouseholdId, userId, HouseholdModule.Chores, $"fez «{chore.Title}»", access: ModuleAccess.Participate);
+        }
+        else
+        {
+            var name = await db.Users.Where(u => u.Id == doneBy).Select(u => u.DisplayName).SingleAsync(ct);
+            activity.Capture(chore.HouseholdId, userId, HouseholdModule.Chores, $"marcou «{chore.Title}» como feita por {name}");
+        }
+
         await db.SaveChangesAsync(ct);
 
         await notifier.ChoreUpserted(chore.HouseholdId, ToDto(chore), ct);
@@ -478,6 +552,16 @@ public static class ChoreEndpoints
                 .ToListAsync(ct);
 
         var errors = new Dictionary<string, string[]>();
+        if (!Enum.IsDefined(request.Recurrence))
+        {
+            errors["Recurrence"] = ["Essa repetição não existe."];
+        }
+
+        if (!Enum.IsDefined(request.TimeOfDay))
+        {
+            errors["TimeOfDay"] = ["Essa altura do dia não existe."];
+        }
+
         if (referenced.Except(memberIds).Any())
         {
             errors["AssigneeUserId"] = ["O responsável e a rotação têm de ser membros desta casa."];
@@ -506,12 +590,22 @@ public static class ChoreEndpoints
         return errors.Count == 0 ? null : Results.ValidationProblem(errors);
     }
 
-    private static void Apply(Chore chore, SaveChoreRequest request, DateTimeOffset now)
+    /// <summary>
+    /// Aplica um pedido. Uma tarefa que se repete tem sempre prazo (sem ele, começa hoje); o dia do prazo escolhido
+    /// fica como referência das mensais (31 volta a 31 depois de fevereiro).
+    /// </summary>
+    private static void Apply(Chore chore, SaveChoreRequest request, DateTimeOffset now, DateOnly today)
     {
         chore.Title = request.Title.Trim();
         chore.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
         chore.Points = request.Points;
-        chore.DueDate = request.DueDate;
+        var dueDate = request.DueDate ?? (request.Recurrence != ChoreRecurrence.None ? today : null);
+        if (dueDate != chore.DueDate || chore.DueDay is null)
+        {
+            chore.DueDay = dueDate?.Day;
+        }
+
+        chore.DueDate = dueDate;
         chore.Recurrence = request.Recurrence;
         chore.RotationUserIds = [.. request.RotationUserIds ?? []];
         chore.TimeOfDay = request.TimeOfDay;
@@ -533,5 +627,5 @@ public static class ChoreEndpoints
     internal static ChoreDto ToDto(Chore c) => new(
         c.Id, c.HouseholdId, c.Title, c.Notes, c.Points, c.DueDate, c.Recurrence,
         c.AssigneeUserId, c.RotationUserIds, c.IsDone, c.CompletedAt, c.UpdatedAt, c.TimeOfDay, c.Steps, c.DoneSteps,
-        c.RequiresPhoto);
+        c.RequiresPhoto, c.AvailableFrom);
 }

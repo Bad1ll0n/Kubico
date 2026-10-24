@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
+using Kubico.Api.Realtime;
 using Kubico.Domain.Users;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -13,9 +14,12 @@ public record DeviceSessionDto(Guid Id, string? Device, DateTimeOffset StartedAt
 
 /// <summary>
 /// Sessões com refresh tokens: o token de acesso dura pouco e a app troca o refresh token por um par novo
-/// sempre que precisa. Cada troca revoga o anterior; reutilizar um token já trocado revoga a sessão desse dispositivo.
+/// sempre que precisa. Cada troca revoga o anterior; reutilizar um token já trocado revoga a sessão desse dispositivo
+/// (a não ser que o pedido já viesse a caminho antes da troca: duas abas a renovar ao mesmo tempo).
+/// Terminar uma sessão também fecha as ligações de tempo real dela e deixa de enviar avisos para os telemóveis dela.
 /// </summary>
-public class SessionService(KubicoDbContext db, TokenService tokens, IOptions<JwtOptions> options, TimeProvider clock)
+public class SessionService(
+    KubicoDbContext db, TokenService tokens, IOptions<JwtOptions> options, HubConnections connections, TimeProvider clock)
 {
     /// <summary>Início de sessão (registo ou entrada): uma família de refresh tokens nova.</summary>
     public async Task<AuthResponse> StartAsync(User user, string? device, CancellationToken ct)
@@ -31,8 +35,12 @@ public class SessionService(KubicoDbContext db, TokenService tokens, IOptions<Jw
         return response;
     }
 
-    /// <summary>Troca um refresh token válido por um par novo; null se não servir (a app tem de pedir a palavra-passe).</summary>
-    public async Task<AuthResponse?> RefreshAsync(string refreshToken, CancellationToken ct)
+    /// <summary>
+    /// Troca um refresh token válido por um par novo; null se não servir (a app tem de pedir a palavra-passe).
+    /// <paramref name="requestStartedAt"/> é quando o pedido chegou: se o token foi trocado depois disso por outro
+    /// pedido igual (duas abas ao mesmo tempo), este também recebe um par novo, em vez de terminar a sessão.
+    /// </summary>
+    public async Task<AuthResponse?> RefreshAsync(string refreshToken, DateTimeOffset requestStartedAt, CancellationToken ct)
     {
         var hash = Hash(refreshToken);
         var token = await db.RefreshTokens.Include(t => t.User).SingleOrDefaultAsync(t => t.TokenHash == hash, ct);
@@ -44,12 +52,22 @@ public class SessionService(KubicoDbContext db, TokenService tokens, IOptions<Jw
 
         if (token.RevokedAt is not null)
         {
+            if (token.ReplacedAt is { } replaced && requestStartedAt < replaced
+                && await db.RefreshTokens.AnyAsync(t => t.FamilyId == token.FamilyId && t.RevokedAt == null && t.ExpiresAt > now, ct))
+            {
+                // Renovação em simultâneo com outra (a mesma sessão): mais um par, na mesma família.
+                var again = Issue(token.User, token.FamilyId, token.Device, now);
+                await db.SaveChangesAsync(ct);
+                return again;
+            }
+
             // Um token já trocado voltou a aparecer: alguém o copiou. Termina a sessão desse dispositivo.
-            await RevokeAsync(t => t.FamilyId == token.FamilyId, now, ct);
+            await EndFamilyAsync(token.UserId, token.FamilyId, now, ct);
             return null;
         }
 
         token.RevokedAt = now;
+        token.ReplacedAt = now;
         var response = Issue(token.User, token.FamilyId, token.Device, now);
         await db.SaveChangesAsync(ct);
         return response;
@@ -59,11 +77,12 @@ public class SessionService(KubicoDbContext db, TokenService tokens, IOptions<Jw
     public async Task SignOutAsync(string refreshToken, CancellationToken ct)
     {
         var hash = Hash(refreshToken);
-        var familyId = await db.RefreshTokens.Where(t => t.TokenHash == hash).Select(t => (Guid?)t.FamilyId)
+        var token = await db.RefreshTokens.AsNoTracking().Where(t => t.TokenHash == hash)
+            .Select(t => new { t.UserId, t.FamilyId })
             .SingleOrDefaultAsync(ct);
-        if (familyId is { } family)
+        if (token is not null)
         {
-            await RevokeAsync(t => t.FamilyId == family, clock.GetUtcNow(), ct);
+            await EndFamilyAsync(token.UserId, token.FamilyId, clock.GetUtcNow(), ct);
         }
     }
 
@@ -94,30 +113,56 @@ public class SessionService(KubicoDbContext db, TokenService tokens, IOptions<Jw
     public async Task<bool> EndAsync(Guid userId, Guid sessionId, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        var active = await db.RefreshTokens
-            .Where(t => t.UserId == userId && t.FamilyId == sessionId && t.RevokedAt == null)
-            .ToListAsync(ct);
-        if (!active.Any(t => t.IsActive(now)))
+        if (!await IsActiveAsync(userId, sessionId, ct))
         {
             return false;
         }
 
-        foreach (var token in active)
-        {
-            token.RevokedAt = now;
-        }
-
-        await db.SaveChangesAsync(ct);
+        await EndFamilyAsync(userId, sessionId, now, ct);
         return true;
     }
 
-    /// <summary>Terminar sessão em todos os dispositivos.</summary>
-    public Task SignOutEverywhereAsync(Guid userId, CancellationToken ct) =>
-        RevokeAsync(t => t.UserId == userId, clock.GetUtcNow(), ct);
+    /// <summary>
+    /// Terminar sessão em todos os dispositivos (menos, se indicada, a sessão <paramref name="keep"/>: por exemplo,
+    /// a de quem acabou de ligar a verificação em dois passos).
+    /// </summary>
+    public async Task SignOutEverywhereAsync(Guid userId, CancellationToken ct, Guid? keep = null)
+    {
+        var now = clock.GetUtcNow();
+        await RevokeAsync(t => t.UserId == userId && (keep == null || t.FamilyId != keep), now, ct);
+        await db.PushDevices.Where(d => d.UserId == userId && (keep == null || d.SessionId == null || d.SessionId != keep))
+            .ExecuteDeleteAsync(ct);
+        connections.Abort(c => c.UserId == userId && (keep == null || c.SessionId != keep));
+    }
+
+    /// <summary>Se a sessão (família) do token de acesso ainda está ativa: terminar a sessão corta-a já nas ações sensíveis.</summary>
+    public async Task<bool> IsActiveAsync(Guid userId, Guid? sessionId, CancellationToken ct)
+    {
+        if (sessionId is not { } family)
+        {
+            return false;
+        }
+
+        var now = clock.GetUtcNow();
+        return await db.RefreshTokens.AnyAsync(
+            t => t.UserId == userId && t.FamilyId == family && t.RevokedAt == null && t.ExpiresAt > now, ct);
+    }
+
+    private async Task EndFamilyAsync(Guid userId, Guid familyId, DateTimeOffset now, CancellationToken ct)
+    {
+        await RevokeAsync(t => t.FamilyId == familyId, now, ct);
+        await db.PushDevices.Where(d => d.UserId == userId && d.SessionId == familyId).ExecuteDeleteAsync(ct);
+        connections.Abort(c => c.SessionId == familyId);
+    }
 
     private AuthResponse Issue(User user, Guid familyId, string? device, DateTimeOffset now)
     {
         var raw = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));
+
+        // Na web o refresh token fica no armazenamento do browser: dura menos.
+        var days = device == "web"
+            ? Math.Min(options.Value.RefreshTokenLifetimeDays, options.Value.WebRefreshTokenLifetimeDays)
+            : options.Value.RefreshTokenLifetimeDays;
         var refresh = new RefreshToken
         {
             UserId = user.Id,
@@ -125,7 +170,7 @@ public class SessionService(KubicoDbContext db, TokenService tokens, IOptions<Jw
             FamilyId = familyId,
             Device = device is { Length: > 200 } ? device[..200] : device,
             CreatedAt = now,
-            ExpiresAt = now.AddDays(options.Value.RefreshTokenLifetimeDays),
+            ExpiresAt = now.AddDays(days),
         };
         db.RefreshTokens.Add(refresh);
 

@@ -128,7 +128,7 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
     if (lists == null && _error != null) {
       body = _Message(
         icon: Icons.cloud_off,
-        text: _error.toString(),
+        text: errorText(_error!),
         action: TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
       );
     } else if (lists == null) {

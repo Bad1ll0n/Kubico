@@ -73,6 +73,40 @@ public class CalendarEvent
         EndsAt = null;
     }
 
+    /// <summary>
+    /// Numa repetição semanal com dias escolhidos, a primeira ocorrência tem de ser num desses dias (RFC 5545: um início
+    /// fora da regra dá resultados diferentes em cada calendário). Se não for, o início passa para o primeiro dia
+    /// escolhido a seguir, à mesma hora local (como no Google Calendar). Devolve true se mudou.
+    /// </summary>
+    public bool AlignStartToRule(TimeZoneInfo zone)
+    {
+        if (!RecurrenceRule.TryParse(Recurrence, out var rule) || rule.Frequency != RecurrenceFrequency.Weekly
+            || rule.ByDay is not { Count: > 0 } days)
+        {
+            return false;
+        }
+
+        var first = FirstDate(zone);
+        var shift = Enumerable.Range(0, 7).First(d => days.Contains(first.AddDays(d).DayOfWeek));
+        if (shift == 0)
+        {
+            return false;
+        }
+
+        if (StartDate is { } start)
+        {
+            SetAllDay(start.AddDays(shift), EndDate!.Value.AddDays(shift));
+        }
+        else
+        {
+            var duration = EndsAt!.Value - StartsAt!.Value;
+            var startsAt = ZonedTime.ToInstant(TimeZoneInfo.ConvertTime(StartsAt.Value, zone).DateTime.AddDays(shift), zone);
+            SetTimed(startsAt, startsAt + duration);
+        }
+
+        return true;
+    }
+
     /// <summary>Alguém saiu da casa: deixa de participar e de levar ou ir buscar. Devolve true se o evento mudou.</summary>
     public bool RemoveMember(Guid userId, DateTimeOffset now)
     {

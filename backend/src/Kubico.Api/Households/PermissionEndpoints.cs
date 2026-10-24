@@ -1,5 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
+using Kubico.Api.Activity;
+using Kubico.Api.Auth;
+using Kubico.Api.Calendar;
 using Kubico.Api.Common;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Households;
@@ -33,7 +36,7 @@ public static class PermissionEndpoints
             .RequireAuthorization();
 
         permissions.MapGet("/", GetPermissions);
-        permissions.MapPut("/", SavePermissions);
+        permissions.MapPut("/", SavePermissions).RequireActiveSession();
         return api;
     }
 
@@ -55,6 +58,7 @@ public static class PermissionEndpoints
         SavePermissionsRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
@@ -111,7 +115,13 @@ public static class PermissionEndpoints
             }
         }
 
+        foreach (var role in request.Roles.Select(r => r.Role).Distinct())
+        {
+            activity.Capture(householdId, principal.GetUserId(), null, $"mudou as permissões {RoleGroup(role)}", undoable: false);
+        }
+
         await db.SaveChangesAsync(ct);
+        await CalendarFeedEndpoints.RevokeFeedsWithoutAccessAsync(db, access, householdId, ct);
         await notifier.PermissionsChanged(householdId, ct);
         return Results.Ok(await Describe(db, householdId, ct));
     }
@@ -123,6 +133,14 @@ public static class PermissionEndpoints
             [.. ModulePermissions.ConfigurableRoles.Select(r => new RolePermissionsDto(r, ModulePermissions.ResolveAll(r, chosen)))],
             [.. ModulePermissions.ConfigurableRoles.Select(r => new RolePermissionsDto(r, ModulePermissions.ResolveAll(r, [])))]);
     }
+
+    /// <summary>"dos Adultos", "das Crianças", "dos Convidados".</summary>
+    private static string RoleGroup(HouseholdRole role) => role switch
+    {
+        HouseholdRole.Adult => "dos Adultos",
+        HouseholdRole.Child => "das Crianças",
+        _ => "dos Convidados",
+    };
 
     private static IResult Invalid(string title) =>
         Results.Problem(title: title, statusCode: StatusCodes.Status400BadRequest);
