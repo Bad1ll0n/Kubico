@@ -1,22 +1,88 @@
+using Kubico.Domain;
+using Kubico.Domain.Activity;
+using Kubico.Domain.Calendar;
 using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
+using Kubico.Domain.Notifications;
+using Kubico.Domain.Rewards;
 using Kubico.Domain.Shopping;
+using Kubico.Domain.Support;
 using Kubico.Domain.Users;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Kubico.Infrastructure.Persistence;
 
-public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbContext(options)
+public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Household> Households => Set<Household>();
     public DbSet<Membership> Memberships => Set<Membership>();
     public DbSet<Invite> Invites => Set<Invite>();
     public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
     public DbSet<ShoppingItem> ShoppingItems => Set<ShoppingItem>();
+    public DbSet<ChorePhoto> ChorePhotos => Set<ChorePhoto>();
+    public DbSet<ActivityEntry> ActivityEntries => Set<ActivityEntry>();
+    public DbSet<Allowance> Allowances => Set<Allowance>();
+    public DbSet<AllowancePayment> AllowancePayments => Set<AllowancePayment>();
+    public DbSet<ProductInfo> ProductInfos => Set<ProductInfo>();
+    public DbSet<HouseholdProduct> HouseholdProducts => Set<HouseholdProduct>();
     public DbSet<Chore> Chores => Set<Chore>();
     public DbSet<ChoreCompletion> ChoreCompletions => Set<ChoreCompletion>();
+    public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
+    public DbSet<Reward> Rewards => Set<Reward>();
+    public DbSet<RewardRedemption> RewardRedemptions => Set<RewardRedemption>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
+    public DbSet<PushDevice> PushDevices => Set<PushDevice>();
+    public DbSet<MemberAbsence> MemberAbsences => Set<MemberAbsence>();
+    public DbSet<HouseholdPermission> HouseholdPermissions => Set<HouseholdPermission>();
+    public DbSet<Feedback> Feedback => Set<Feedback>();
+    public DbSet<CalendarConnection> CalendarConnections => Set<CalendarConnection>();
+    public DbSet<CalendarEventLink> CalendarEventLinks => Set<CalendarEventLink>();
+
+    /// <summary>As chaves que cifram os tokens das contas ligadas (têm de sobreviver a reinícios e a novas versões).</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+
+    /// <summary>
+    /// Antes de gravar, as entidades com concorrência otimista (<see cref="IVersioned"/>) que mudaram ganham uma
+    /// versão nova; o UPDATE leva a antiga no WHERE e falha (DbUpdateConcurrencyException) se outro pedido gravou
+    /// entretanto. Serve igual em SQLite e PostgreSQL.
+    /// </summary>
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        RenewVersions();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        RenewVersions();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>
+    /// Marca a entidade como alterada (ganha uma versão nova ao gravar), sem mudar mais nada: um "cadeado" para
+    /// operações que leem várias linhas e depois inserem outra (por exemplo, ver o saldo e pedir uma recompensa).
+    /// </summary>
+    public void Touch(IVersioned entity) => Entry(entity).Property(nameof(IVersioned.Version)).IsModified = true;
+
+    private void RenewVersions()
+    {
+        foreach (var entry in ChangeTracker.Entries<IVersioned>())
+        {
+            if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.Version = Guid.NewGuid();
+            }
+            else if (entry.State == EntityState.Added && entry.Entity.Version == Guid.Empty)
+            {
+                entry.Entity.Version = Guid.NewGuid();
+            }
+        }
+    }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -33,20 +99,41 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         {
             e.Property(u => u.Email).HasMaxLength(256);
             e.Property(u => u.DisplayName).HasMaxLength(100);
+            e.Property(u => u.PinHash).HasMaxLength(200);
+            e.Property(u => u.Language).HasMaxLength(8).HasDefaultValue(User.DefaultLanguage);
+            e.Property(u => u.Version).IsConcurrencyToken();
             e.HasIndex(u => u.Email).IsUnique();
+
+            // Os perfis de criança são da casa: apagar a casa apaga-os.
+            e.HasOne<Household>().WithMany().HasForeignKey(u => u.ManagedByHouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RefreshToken>(e =>
+        {
+            e.Property(t => t.TokenHash).HasMaxLength(64);
+            e.Property(t => t.Device).HasMaxLength(200);
+            e.HasIndex(t => t.TokenHash).IsUnique();
+            e.HasIndex(t => t.FamilyId);
+            e.HasIndex(t => t.UserId);
+            e.HasOne(t => t.User).WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Household>(e =>
         {
             e.Property(h => h.Name).HasMaxLength(100);
             e.Property(h => h.TimeZoneId).HasMaxLength(64).HasDefaultValue(Household.DefaultTimeZoneId);
+            e.Property(h => h.ChildSignInCode).HasMaxLength(16);
+            e.HasIndex(h => h.ChildSignInCode).IsUnique();
         });
 
         modelBuilder.Entity<Membership>(e =>
         {
             e.Property(m => m.Role).HasConversion<string>().HasMaxLength(20);
             e.Property(m => m.Color).HasMaxLength(7);
+            e.Property(m => m.CalendarFeedToken).HasMaxLength(64);
+            e.Property(m => m.Version).IsConcurrencyToken();
             e.HasIndex(m => new { m.HouseholdId, m.UserId }).IsUnique();
+            e.HasIndex(m => m.CalendarFeedToken).IsUnique();
             e.HasOne(m => m.Household).WithMany(h => h.Members).HasForeignKey(m => m.HouseholdId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(m => m.User).WithMany(u => u.Memberships).HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -55,6 +142,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         {
             e.Property(i => i.Code).HasMaxLength(16);
             e.Property(i => i.Role).HasConversion<string>().HasMaxLength(20);
+            e.Property(i => i.UsedCount).HasDefaultValue(0);
             e.HasIndex(i => i.Code).IsUnique();
             e.HasOne(i => i.Household).WithMany(h => h.Invites).HasForeignKey(i => i.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -71,8 +159,60 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(i => i.Name).HasMaxLength(200);
             e.Property(i => i.Quantity).HasMaxLength(50);
             e.Property(i => i.Category).HasMaxLength(50);
+            e.Property(i => i.Barcode).HasMaxLength(14);
             e.HasIndex(i => i.ListId);
             e.HasOne(i => i.List).WithMany(l => l.Items).HasForeignKey(i => i.ListId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Allowance>(e =>
+        {
+            e.HasKey(a => new { a.HouseholdId, a.UserId });
+            e.Property(a => a.Period).HasConversion<string>().HasMaxLength(20);
+            e.HasOne<Household>().WithMany().HasForeignKey(a => a.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AllowancePayment>(e =>
+        {
+            e.Property(p => p.BonusPerChoreCents).HasDefaultValue(0);
+            e.HasIndex(p => new { p.HouseholdId, p.UserId, p.PeriodStart }).IsUnique();
+            e.HasOne<Household>().WithMany().HasForeignKey(p => p.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ActivityEntry>(e =>
+        {
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).ValueGeneratedOnAdd();
+            e.Property(a => a.Module).HasConversion<string>().HasMaxLength(20);
+            e.Property(a => a.RequiredAccess).HasConversion<string>().HasMaxLength(20);
+            e.Property(a => a.Summary).HasMaxLength(300);
+            e.HasIndex(a => new { a.HouseholdId, a.Id });
+            e.HasOne<Household>().WithMany().HasForeignKey(a => a.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ChorePhoto>(e =>
+        {
+            e.Property(p => p.ContentType).HasMaxLength(50);
+            e.HasIndex(p => p.HouseholdId);
+            e.HasOne<Household>().WithMany().HasForeignKey(p => p.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProductInfo>(e =>
+        {
+            e.HasKey(p => p.Barcode);
+            e.Property(p => p.Barcode).HasMaxLength(14);
+            e.Property(p => p.Name).HasMaxLength(200);
+            e.Property(p => p.Brand).HasMaxLength(100);
+            e.Property(p => p.Size).HasMaxLength(50);
+            e.Property(p => p.Category).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<HouseholdProduct>(e =>
+        {
+            e.HasKey(p => new { p.HouseholdId, p.Barcode });
+            e.Property(p => p.Barcode).HasMaxLength(14);
+            e.Property(p => p.Name).HasMaxLength(200);
+            e.Property(p => p.Category).HasMaxLength(50);
+            e.HasOne<Household>().WithMany().HasForeignKey(p => p.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Chore>(e =>
@@ -80,6 +220,8 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(c => c.Title).HasMaxLength(200);
             e.Property(c => c.Notes).HasMaxLength(1000);
             e.Property(c => c.Recurrence).HasConversion<string>().HasMaxLength(20);
+            e.Property(c => c.TimeOfDay).HasConversion<string>().HasMaxLength(20);
+            e.Property(c => c.Version).IsConcurrencyToken();
             e.HasIndex(c => new { c.HouseholdId, c.DueDate });
             e.HasOne(c => c.Household).WithMany().HasForeignKey(c => c.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -88,7 +230,125 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         {
             e.HasIndex(c => new { c.ChoreId, c.CompletedAt });
             e.HasIndex(c => c.UserId);
+            e.HasIndex(c => c.PhotoId);
+            e.HasOne<ChorePhoto>().WithMany().HasForeignKey(c => c.PhotoId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(c => c.Chore).WithMany(c => c.Completions).HasForeignKey(c => c.ChoreId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CalendarEvent>(e =>
+        {
+            e.Property(c => c.Title).HasMaxLength(200);
+            e.Property(c => c.Notes).HasMaxLength(1000);
+            e.Property(c => c.Location).HasMaxLength(200);
+            e.Property(c => c.Recurrence).HasMaxLength(200);
+            e.HasIndex(c => new { c.HouseholdId, c.StartsAt });
+            e.HasIndex(c => new { c.HouseholdId, c.StartDate });
+            e.HasIndex(c => new { c.SeriesId, c.OriginalDate });
+            e.HasOne(c => c.Household).WithMany().HasForeignKey(c => c.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+
+            // Apagar uma série apaga as suas exceções.
+            e.HasOne<CalendarEvent>().WithMany().HasForeignKey(c => c.SeriesId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Reward>(e =>
+        {
+            e.Property(r => r.Title).HasMaxLength(100);
+            e.Property(r => r.Description).HasMaxLength(500);
+            e.HasIndex(r => r.HouseholdId);
+            e.HasOne(r => r.Household).WithMany().HasForeignKey(r => r.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RewardRedemption>(e =>
+        {
+            e.Property(r => r.RewardTitle).HasMaxLength(100);
+            e.Property(r => r.Status).HasConversion<string>().HasMaxLength(20);
+            e.Property(r => r.Version).IsConcurrencyToken();
+            e.HasIndex(r => new { r.HouseholdId, r.RequestedAt });
+            e.HasIndex(r => new { r.HouseholdId, r.UserId });
+            e.HasOne<Household>().WithMany().HasForeignKey(r => r.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+
+            // O histórico fica, mesmo que a recompensa seja apagada.
+            e.HasOne<Reward>().WithMany().HasForeignKey(r => r.RewardId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Notification>(e =>
+        {
+            e.Property(n => n.Title).HasMaxLength(200);
+            e.Property(n => n.Body).HasMaxLength(500);
+            e.Property(n => n.Kind).HasConversion<string>().HasMaxLength(30);
+            e.HasIndex(n => new { n.UserId, n.CreatedAt });
+            e.HasIndex(n => n.PushedAt);
+            e.HasOne<User>().WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Household>().WithMany().HasForeignKey(n => n.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NotificationPreferences>(e =>
+        {
+            e.HasKey(p => p.UserId);
+            e.Property(p => p.Delivery).HasConversion<string>().HasMaxLength(20);
+            e.Property(p => p.TimeZoneId).HasMaxLength(64);
+            e.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PushDevice>(e =>
+        {
+            e.Property(d => d.Token).HasMaxLength(512);
+            e.Property(d => d.Platform).HasMaxLength(20);
+            e.HasIndex(d => d.Token).IsUnique();
+            e.HasIndex(d => d.UserId);
+            e.HasIndex(d => d.SessionId);
+            e.HasOne<User>().WithMany().HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Feedback>(e =>
+        {
+            e.Property(f => f.Kind).HasConversion<string>().HasMaxLength(20);
+            e.Property(f => f.Message).HasMaxLength(2000);
+            e.Property(f => f.Device).HasMaxLength(20);
+            e.HasIndex(f => f.CreatedAt);
+            e.HasIndex(f => new { f.UserId, f.CreatedAt });
+            e.HasOne<User>().WithMany().HasForeignKey(f => f.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Household>().WithMany().HasForeignKey(f => f.HouseholdId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<HouseholdPermission>(e =>
+        {
+            e.HasKey(p => new { p.HouseholdId, p.Role, p.Module });
+            e.Property(p => p.Role).HasConversion<string>().HasMaxLength(20);
+            e.Property(p => p.Module).HasConversion<string>().HasMaxLength(20);
+            e.Property(p => p.Access).HasConversion<string>().HasMaxLength(20);
+            e.HasOne<Household>().WithMany().HasForeignKey(p => p.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MemberAbsence>(e =>
+        {
+            e.Property(a => a.Reason).HasMaxLength(200);
+            e.HasIndex(a => new { a.HouseholdId, a.EndDate });
+            e.HasOne<Household>().WithMany().HasForeignKey(a => a.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CalendarConnection>(e =>
+        {
+            e.Property(c => c.Provider).HasConversion<string>().HasMaxLength(20);
+            e.Property(c => c.Status).HasConversion<string>().HasMaxLength(20);
+            e.Property(c => c.AccountEmail).HasMaxLength(256);
+            e.Property(c => c.ExternalCalendarId).HasMaxLength(512);
+            e.Property(c => c.ProtectedRefreshToken).HasMaxLength(4000);
+            e.Property(c => c.SyncCursor).HasMaxLength(1000);
+            e.Property(c => c.LastError).HasMaxLength(1000);
+            e.HasIndex(c => new { c.HouseholdId, c.UserId, c.Provider }).IsUnique();
+            e.HasOne<Household>().WithMany().HasForeignKey(c => c.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CalendarEventLink>(e =>
+        {
+            e.Property(l => l.ExternalId).HasMaxLength(512);
+            e.Property(l => l.ExternalVersion).HasMaxLength(200);
+            e.HasIndex(l => new { l.ConnectionId, l.EventId }).IsUnique();
+            e.HasIndex(l => new { l.ConnectionId, l.ExternalId });
+            e.HasOne<CalendarConnection>().WithMany().HasForeignKey(l => l.ConnectionId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

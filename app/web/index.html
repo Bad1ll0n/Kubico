@@ -18,6 +18,15 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+
+  <!--
+    Content Security Policy: só corre o código da própria app (e o CanvasKit e o Firebase do gstatic, e o leitor de
+    códigos de barras do jsdelivr). Os quatro hashes são os pequenos scripts com que o firebase_core e o
+    firebase_messaging carregam o Firebase JS 13.0.0 (com e sem Trusted Types): se o Firebase for atualizado, a
+    consola do browser diz o hash novo. connect-src deixa falar com a API: em produção, troca "https: wss:" pelo
+    endereço real da API (ex.: https://api.kubico.pt wss://api.kubico.pt) — ver CLAUDE.md, "Produção".
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://cdn.jsdelivr.net 'sha256-8c/WNoEw1nr7G8Z0vl3LfbVXE+6ihJRtsJUSyJDxXI8=' 'sha256-aY2JLKFsJmMJL1EncC8tO+bblNU58sIPRs9DXmKKbxA=' 'sha256-qmhsWjBdPDUIUZaJGmHgZAcbtmicSEoUx2HOuWsG41Q=' 'sha256-FyxZLmxkYMwaZEpIx8WQLqw5Ve8JtjBlqw+Ud/2PdA4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*; media-src 'self' blob: mediastream:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="description" content="A new Flutter project.">
 
   <!-- iOS meta tags & icons -->

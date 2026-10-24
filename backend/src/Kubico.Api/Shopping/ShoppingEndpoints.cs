@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
+using Kubico.Api.Activity;
 using Kubico.Api.Common;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Households;
@@ -12,10 +13,17 @@ namespace Kubico.Api.Shopping;
 public record CreateShoppingListRequest(
     [property: Required, StringLength(100, MinimumLength = 1)] string Name);
 
+/// <summary>
+/// Novo artigo. A app pode mandar o <c>Id</c> (gerado no telemóvel): assim, reenviar o mesmo pedido depois de
+/// estar sem rede não duplica o artigo. Com <c>Barcode</c> (lido com a câmara), a casa fica a saber que nome dá
+/// a esse produto.
+/// </summary>
 public record AddShoppingItemRequest(
     [property: Required, StringLength(200, MinimumLength = 1)] string Name,
     [property: StringLength(50)] string? Quantity = null,
-    [property: StringLength(50)] string? Category = null);
+    [property: StringLength(50)] string? Category = null,
+    Guid? Id = null,
+    [property: StringLength(14)] string? Barcode = null);
 
 /// <summary>Atualização parcial: só os campos enviados (não nulos) são alterados.</summary>
 public record UpdateShoppingItemRequest(
@@ -36,7 +44,8 @@ public record ShoppingItemDto(
     Guid AddedByUserId,
     Guid? CheckedByUserId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? Barcode = null);
 
 public static class ShoppingEndpoints
 {
@@ -62,7 +71,8 @@ public static class ShoppingEndpoints
     private static async Task<IResult> GetLists(
         Guid householdId, ClaimsPrincipal principal, KubicoDbContext db, HouseholdAccess access, CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;
@@ -83,13 +93,14 @@ public static class ShoppingEndpoints
         CreateShoppingListRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(
-            principal.GetUserId(), householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -102,6 +113,7 @@ public static class ShoppingEndpoints
             CreatedAt = clock.GetUtcNow(),
         };
         db.ShoppingLists.Add(list);
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Shopping, $"criou a lista «{list.Name}»");
         await db.SaveChangesAsync(ct);
 
         var dto = new ShoppingListDto(list.Id, householdId, list.Name, 0, 0);
@@ -115,12 +127,13 @@ public static class ShoppingEndpoints
         Guid listId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(
-            principal.GetUserId(), householdId, ct, r => r.CanManageContent());
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.Manage, ct);
         if (error is not null)
         {
             return error;
@@ -132,7 +145,10 @@ public static class ShoppingEndpoints
             return Results.NotFound();
         }
 
+        // Os artigos vão com a lista: carregam-se para o histórico os poder repor.
+        await db.ShoppingItems.Where(i => i.ListId == listId).LoadAsync(ct);
         db.ShoppingLists.Remove(list);
+        activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Shopping, $"apagou a lista «{list.Name}»");
         await db.SaveChangesAsync(ct);
         await notifier.ShoppingListDeleted(householdId, listId, ct);
 
@@ -142,7 +158,8 @@ public static class ShoppingEndpoints
     private static async Task<IResult> GetItems(
         Guid householdId, Guid listId, ClaimsPrincipal principal, KubicoDbContext db, HouseholdAccess access, CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;
@@ -174,13 +191,15 @@ public static class ShoppingEndpoints
         AddShoppingItemRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Shopping, ModuleAccess.Participate, ct);
         if (error is not null)
         {
             return error;
@@ -191,19 +210,59 @@ public static class ShoppingEndpoints
             return Results.NotFound();
         }
 
+        var barcode = Clean(request.Barcode);
+        if (barcode is not null && !Barcodes.IsValid(barcode))
+        {
+            return Results.Problem(title: "Este código de barras não é válido.", statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        if (request.Id is { } id && await db.ShoppingItems.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id, ct) is { } existing)
+        {
+            // Pedido repetido (a app voltou a enviá-lo): devolve o artigo que já existe.
+            return existing.ListId == listId
+                ? Results.Ok(ToDto(existing))
+                : Results.Problem(title: "Este artigo já existe noutra lista.", statusCode: StatusCodes.Status409Conflict);
+        }
+
         var now = clock.GetUtcNow();
         var item = new ShoppingItem
         {
+            Id = request.Id ?? Guid.NewGuid(),
             ListId = listId,
             Name = request.Name.Trim(),
             Quantity = Clean(request.Quantity),
             Category = Clean(request.Category),
+            Barcode = barcode,
             AddedByUserId = userId,
             CreatedAt = now,
             UpdatedAt = now,
         };
         db.ShoppingItems.Add(item);
-        await db.SaveChangesAsync(ct);
+        if (barcode is not null)
+        {
+            await ProductEndpoints.RememberAsync(db, householdId, barcode, item.Name, item.Category, now, ct);
+        }
+
+        activity.Capture(
+            householdId, userId, HouseholdModule.Shopping, $"pôs «{item.Name}» na lista «{await ListName(db, listId, ct)}»",
+            access: ModuleAccess.Participate);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException e) when (request.Id is { } repeated && e is not DbUpdateConcurrencyException)
+        {
+            // O mesmo artigo chegou duas vezes ao mesmo tempo (a fila sem rede a reenviar): fica o que chegou primeiro.
+            db.ChangeTracker.Clear();
+            if (await db.ShoppingItems.AsNoTracking().SingleOrDefaultAsync(i => i.Id == repeated, ct) is not { } first)
+            {
+                throw;
+            }
+
+            return first.ListId == listId
+                ? Results.Ok(ToDto(first))
+                : Results.Problem(title: "Este artigo já existe noutra lista.", statusCode: StatusCodes.Status409Conflict);
+        }
 
         var dto = ToDto(item);
         await notifier.ShoppingItemUpserted(householdId, dto, ct);
@@ -218,13 +277,15 @@ public static class ShoppingEndpoints
         UpdateShoppingItemRequest request,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         TimeProvider clock,
         CancellationToken ct)
     {
         var userId = principal.GetUserId();
-        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Shopping, ModuleAccess.Participate, ct);
         if (error is not null)
         {
             return error;
@@ -238,6 +299,11 @@ public static class ShoppingEndpoints
 
         if (request.Name is not null)
         {
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["Name"] = ["O nome é obrigatório."] });
+            }
+
             item.Name = request.Name.Trim();
         }
 
@@ -258,6 +324,18 @@ public static class ShoppingEndpoints
         }
 
         item.UpdatedAt = clock.GetUtcNow();
+        if (item.Barcode is not null && (request.Name is not null || request.Category is not null))
+        {
+            // Mudou o nome a um artigo lido com a câmara: da próxima vez já aparece assim.
+            await ProductEndpoints.RememberAsync(db, householdId, item.Barcode, item.Name, item.Category, item.UpdatedAt, ct);
+        }
+
+        activity.Capture(householdId, userId, HouseholdModule.Shopping, request.IsChecked switch
+        {
+            true => $"marcou «{item.Name}» como comprado",
+            false => $"desmarcou «{item.Name}»",
+            _ => $"mudou «{item.Name}»",
+        }, access: ModuleAccess.Participate);
         await db.SaveChangesAsync(ct);
 
         var dto = ToDto(item);
@@ -272,11 +350,13 @@ public static class ShoppingEndpoints
         Guid itemId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.Participate, ct);
         if (error is not null)
         {
             return error;
@@ -288,6 +368,9 @@ public static class ShoppingEndpoints
             return Results.NotFound();
         }
 
+        activity.Capture(
+            householdId, principal.GetUserId(), HouseholdModule.Shopping,
+            $"tirou «{item.Name}» da lista «{await ListName(db, listId, ct)}»", access: ModuleAccess.Participate);
         db.ShoppingItems.Remove(item);
         await db.SaveChangesAsync(ct);
         await notifier.ShoppingItemDeleted(householdId, listId, itemId, ct);
@@ -300,11 +383,13 @@ public static class ShoppingEndpoints
         Guid listId,
         ClaimsPrincipal principal,
         KubicoDbContext db,
+        ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
         CancellationToken ct)
     {
-        var (_, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.Participate, ct);
         if (error is not null)
         {
             return error;
@@ -317,6 +402,12 @@ public static class ShoppingEndpoints
 
         var checkedItems = await db.ShoppingItems.Where(i => i.ListId == listId && i.IsChecked).ToListAsync(ct);
         db.ShoppingItems.RemoveRange(checkedItems);
+        if (checkedItems.Count > 0)
+        {
+            activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Shopping,
+                $"limpou {checkedItems.Count} {(checkedItems.Count == 1 ? "artigo comprado" : "artigos comprados")} da lista «{await ListName(db, listId, ct)}»",
+                access: ModuleAccess.Participate);
+        }
         await db.SaveChangesAsync(ct);
 
         foreach (var item in checkedItems)
@@ -326,6 +417,9 @@ public static class ShoppingEndpoints
 
         return Results.Ok(new { Removed = checkedItems.Count });
     }
+
+    private static Task<string> ListName(KubicoDbContext db, Guid listId, CancellationToken ct) =>
+        db.ShoppingLists.Where(l => l.Id == listId).Select(l => l.Name).SingleAsync(ct);
 
     private static Task<bool> ListBelongsTo(KubicoDbContext db, Guid listId, Guid householdId, CancellationToken ct) =>
         db.ShoppingLists.AnyAsync(l => l.Id == listId && l.HouseholdId == householdId, ct);
@@ -338,7 +432,7 @@ public static class ShoppingEndpoints
     private static string? Clean(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static ShoppingItemDto ToDto(ShoppingItem i) => new(
+    internal static ShoppingItemDto ToDto(ShoppingItem i) => new(
         i.Id, i.ListId, i.Name, i.Quantity, i.Category, i.IsChecked,
-        i.AddedByUserId, i.CheckedByUserId, i.CreatedAt, i.UpdatedAt);
+        i.AddedByUserId, i.CheckedByUserId, i.CreatedAt, i.UpdatedAt, i.Barcode);
 }

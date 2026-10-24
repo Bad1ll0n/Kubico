@@ -20,3 +20,7 @@ Thumbs.db
 # Segredos locais
 .env
 appsettings.Local.json
+
+# Contas de teste locais (com palavras-passe) e definições pessoais do Claude Code
+.claude/contas-de-teste.md
+.claude/settings.local.json

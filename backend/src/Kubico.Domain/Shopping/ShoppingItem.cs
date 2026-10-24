@@ -11,6 +11,9 @@ public class ShoppingItem
     public string? Quantity { get; set; }
     public string? Category { get; set; }
 
+    /// <summary>O código de barras, quando o artigo foi lido com a câmara.</summary>
+    public string? Barcode { get; set; }
+
     public bool IsChecked { get; set; }
     public Guid? CheckedByUserId { get; set; }
     public Guid AddedByUserId { get; set; }

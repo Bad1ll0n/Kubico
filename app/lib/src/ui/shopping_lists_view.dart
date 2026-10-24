@@ -5,7 +5,9 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
+import '../shopping/shopping_repository.dart';
 import 'theme.dart';
 
 class ShoppingListsView extends StatefulWidget {
@@ -53,7 +55,7 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
 
   Future<void> _load() async {
     try {
-      final lists = await _api.getLists(widget.household.id);
+      final lists = await context.read<ShoppingRepository>().lists(widget.household.id);
       if (mounted) {
         setState(() {
           _lists = lists;
@@ -100,11 +102,11 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Apagar "${list.name}"?'),
-        content: const Text('Os artigos desta lista também são apagados para toda a casa.'),
+        title: Text('Apagar "${list.name}"?'.tr),
+        content: Text('Os artigos desta lista também são apagados para toda a casa.'.tr),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Apagar')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancelar'.tr)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text('Apagar'.tr)),
         ],
       ),
     );
@@ -119,22 +121,22 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
 
   @override
   Widget build(BuildContext context) {
-    final canManage = widget.household.role.canManageContent;
+    final canManage = widget.household.accessTo(HouseholdModule.shopping).canManage;
     final lists = _lists;
 
     Widget body;
     if (lists == null && _error != null) {
       body = _Message(
         icon: Icons.cloud_off,
-        text: _error.toString(),
-        action: TextButton(onPressed: _load, child: const Text('Tentar de novo')),
+        text: errorText(_error!),
+        action: TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
       );
     } else if (lists == null) {
       body = const Center(child: CircularProgressIndicator());
     } else if (lists.isEmpty) {
       body = _Message(
         icon: Icons.checklist_rtl,
-        text: canManage ? 'Ainda não há listas. Cria a primeira!' : 'Ainda não há listas nesta casa.',
+        text: canManage ? 'Ainda não há listas. Cria a primeira!'.tr : 'Ainda não há listas nesta casa.'.tr,
       );
     } else {
       body = RefreshIndicator(
@@ -149,10 +151,10 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
                 selected: list.id == widget.selectedListId,
                 leading: const Icon(Icons.shopping_cart_outlined),
                 title: Text(list.name),
-                subtitle: Text(list.pendingCount == 0 ? 'Tudo comprado' : '${list.pendingCount} por comprar'),
+                subtitle: Text(list.pendingCount == 0 ? 'Tudo comprado'.tr : '${list.pendingCount} por comprar'.tr),
                 trailing: canManage
                     ? IconButton(
-                        tooltip: 'Apagar lista',
+                        tooltip: 'Apagar lista'.tr,
                         icon: const Icon(Icons.delete_outline),
                         onPressed: () => _deleteList(list),
                       )
@@ -171,7 +173,7 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
           ? FloatingActionButton.extended(
               onPressed: _createList,
               icon: const Icon(Icons.add),
-              label: const Text('Nova lista'),
+              label: Text('Nova lista'.tr),
             )
           : null,
     );
@@ -183,17 +185,17 @@ Future<String?> _askName(BuildContext context) {
   return showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Nova lista'),
+      title: Text('Nova lista'.tr),
       content: TextField(
         controller: controller,
         autofocus: true,
-        decoration: const InputDecoration(hintText: 'Ex.: Supermercado'),
+        decoration: InputDecoration(hintText: 'Ex.: Supermercado'.tr),
         textCapitalization: TextCapitalization.sentences,
         onSubmitted: (value) => Navigator.pop(context, value.trim()),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Criar')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
+        FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: Text('Criar'.tr)),
       ],
     ),
   ).whenComplete(controller.dispose);

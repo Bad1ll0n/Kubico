@@ -1,0 +1,587 @@
+using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using Kubico.Api.Common;
+using Kubico.Api.Realtime;
+using Kubico.Domain.Calendar;
+using Kubico.Domain.Households;
+using Kubico.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
+namespace Kubico.Api.Calendar.Sync;
+
+/// <summary>A ligação de quem pede a uma conta Google ou Microsoft. <c>LastError</c> está pronto a mostrar.</summary>
+public record CalendarConnectionDto(
+    Guid Id,
+    Guid HouseholdId,
+    CalendarProvider Provider,
+    string AccountEmail,
+    CalendarConnectionStatus Status,
+    DateTimeOffset? LastSyncedAt,
+    string? LastError);
+
+/// <summary>Um serviço de calendário e se este servidor tem credenciais para ele.</summary>
+public record CalendarSyncProviderDto(CalendarProvider Provider, bool Available);
+
+/// <summary><c>CanConnect</c>: só quem gere o calendário da casa liga contas (o que mudar lá muda no Kubico).</summary>
+public record CalendarSyncDto(
+    bool CanConnect, IReadOnlyList<CalendarSyncProviderDto> Providers, IReadOnlyList<CalendarConnectionDto> Connections);
+
+/// <summary>A página onde a pessoa autoriza o Kubico; a app abre-a no navegador.</summary>
+public record CalendarAuthorizationDto(string Url);
+
+/// <summary>Ligar o iCloud: o Apple ID e uma palavra-passe específica da app (criada em appleid.apple.com).</summary>
+public record AppleSignInRequest(
+    [property: Required, StringLength(256)] string AppleId,
+    [property: Required, StringLength(64)] string AppPassword);
+
+/// <summary>
+/// Ligar o calendário da casa ao Google Calendar ou ao Outlook de cada membro, nos dois sentidos. A ligação é
+/// pessoal: cada um liga a sua conta e só vê as suas ligações.
+/// </summary>
+public static class CalendarSyncEndpoints
+{
+    /// <summary>Quanto tempo há para autorizar na página do Google ou da Microsoft.</summary>
+    private static readonly TimeSpan AuthorizationLifetime = TimeSpan.FromMinutes(15);
+
+    /// <summary>Quanto tempo há para confirmar a ligação na página do Kubico, depois de autorizar.</summary>
+    private static readonly TimeSpan ConfirmationLifetime = TimeSpan.FromMinutes(10);
+
+    public static RouteGroupBuilder MapCalendarSyncEndpoints(this RouteGroupBuilder api)
+    {
+        var sync = api.MapGroup("/households/{householdId:guid}/calendar-sync")
+            .WithTags("Calendar")
+            .RequireAuthorization();
+
+        sync.MapGet("/", GetOverview);
+        sync.MapPost("/{provider}/authorize", Authorize);
+        sync.MapPost("/apple", ConnectApple);
+        sync.MapPost("/{connectionId:guid}/sync", SyncNow);
+        sync.MapDelete("/{connectionId:guid}", Disconnect);
+
+        // O navegador volta aqui depois de autorizar: quem é e de que casa vem no estado cifrado, não num token. A
+        // ligação só fica feita depois de a pessoa confirmar, nessa página, que é ela que a quer.
+        api.MapGet("/calendar-sync/callback/{provider}", Callback)
+            .WithTags("Calendar")
+            .AllowAnonymous()
+            .ExcludeFromDescription();
+        api.MapPost("/calendar-sync/callback/{provider}/confirm", Confirm)
+            .WithTags("Calendar")
+            .AllowAnonymous()
+            .DisableAntiforgery()
+            .ExcludeFromDescription();
+
+        return api;
+    }
+
+    private static async Task<IResult> GetOverview(
+        Guid householdId,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        CalendarSyncService sync,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, level, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Calendar, ModuleAccess.View, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var connections = await db.CalendarConnections.AsNoTracking()
+            .Where(c => c.HouseholdId == householdId && c.UserId == userId)
+            .ToListAsync(ct);
+
+        return Results.Ok(new CalendarSyncDto(
+            level >= ModuleAccess.Manage,
+            [.. Enum.GetValues<CalendarProvider>().Select(p => new CalendarSyncProviderDto(p, sync.Provider(p)?.IsConfigured == true))],
+            [.. connections.OrderBy(c => c.Provider).Select(c => ToDto(c, Texts.LanguageOf(http)))]));
+    }
+
+    /// <summary>Começa a ligação: devolve o endereço da página de autorização (OAuth com PKCE).</summary>
+    private static async Task<IResult> Authorize(
+        Guid householdId,
+        string provider,
+        ClaimsPrincipal principal,
+        HttpRequest http,
+        IConfiguration configuration,
+        HouseholdAccess access,
+        CalendarSyncService sync,
+        CalendarSecrets secrets,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Calendar, ModuleAccess.Manage, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        if (ParseProvider(provider) is not { } kind || sync.Provider(kind) is not { } service
+            || service is IPasswordCalendarProvider)
+        {
+            return Results.NotFound();
+        }
+
+        if (!service.IsConfigured)
+        {
+            return Results.Problem(
+                title: $"A ligação ao {ServiceName(kind)} ainda não está configurada neste servidor.",
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var (verifier, challenge) = CalendarSecrets.NewPkce();
+        var state = secrets.ProtectState(
+            new OAuthState(userId, householdId, kind, verifier, clock.GetUtcNow() + AuthorizationLifetime));
+        var url = service.AuthorizationUrl(RedirectUri(http, configuration, kind), state, challenge);
+        return Results.Ok(new CalendarAuthorizationDto(url));
+    }
+
+    /// <summary>
+    /// O regresso da página de autorização: troca o código por tokens e pergunta, na própria página, se é mesmo esta
+    /// conta que se quer ligar a esta casa (de quem e qual). Assim, um link de autorização enviado a outra pessoa não
+    /// liga a conta dela sem ela saber a que casa.
+    /// </summary>
+    private static async Task<IResult> Callback(
+        string provider,
+        string? code,
+        string? state,
+        string? error,
+        HttpRequest http,
+        IConfiguration configuration,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        CalendarSyncService sync,
+        CalendarSecrets secrets,
+        CalendarSyncTrigger trigger,
+        HouseholdNotifier notifier,
+        TimeProvider clock,
+        ILoggerFactory loggers,
+        CancellationToken ct)
+    {
+        var language = Texts.LanguageOf(http.HttpContext);
+        if (error is not null)
+        {
+            return Page(language, "Ligação cancelada", "Não foi dada autorização ao Kubico. Podes fechar esta página e tentar outra vez na app.", 400);
+        }
+
+        var request = secrets.UnprotectState(state);
+        if (request is null || ParseProvider(provider) is not { } kind || request.Provider != kind || string.IsNullOrEmpty(code))
+        {
+            return Page(language, "Pedido inválido", "Este endereço não é válido. Volta à app do Kubico e tenta outra vez.", 400);
+        }
+
+        language = await db.Users.Where(u => u.Id == request.UserId).Select(u => u.Language).SingleOrDefaultAsync(ct) ?? language;
+        var now = clock.GetUtcNow();
+        if (request.ExpiresAt < now)
+        {
+            return Page(language, "O pedido expirou", "Passou demasiado tempo. Volta à app do Kubico e tenta outra vez.", 400);
+        }
+
+        var role = await access.GetRoleAsync(request.UserId, request.HouseholdId, ct);
+        var household = await db.Households.AsNoTracking().SingleOrDefaultAsync(h => h.Id == request.HouseholdId, ct);
+        if (role is null || household is null
+            || await access.GetAccessAsync(request.HouseholdId, role.Value, HouseholdModule.Calendar, ct) < ModuleAccess.Manage)
+        {
+            return Page(language, "Sem permissão", "Já não podes ligar calendários nesta casa.", 403);
+        }
+
+        if (sync.Provider(kind) is not { IsConfigured: true } service)
+        {
+            return Page(language, "Indisponível", $"A ligação ao {ServiceName(kind)} não está configurada neste servidor.", 400);
+        }
+
+        OAuthTokens tokens;
+        try
+        {
+            tokens = await service.ExchangeCodeAsync(code, RedirectUri(http, configuration, kind), request.CodeVerifier, ct);
+            if (tokens.RefreshToken is null)
+            {
+                return Page(language, "Não foi possível ligar", $"O {ServiceName(kind)} não deu acesso permanente. Tenta outra vez.", 502);
+            }
+        }
+        catch (Exception e) when (e is CalendarAuthException or CalendarProviderException or HttpRequestException)
+        {
+            loggers.CreateLogger(typeof(CalendarSyncEndpoints)).LogWarning(e, "Falha a ligar uma conta {Provider}.", kind);
+            return Page(language, "Não foi possível ligar", $"O {ServiceName(kind)} não confirmou a autorização. Tenta outra vez.", 502);
+        }
+
+        var email = tokens.Email ?? "(conta sem email)";
+        var who = await db.Users.Where(u => u.Id == request.UserId).Select(u => u.DisplayName).SingleAsync(ct);
+        var pending = secrets.ProtectPending(new PendingConnection(
+            request.UserId, request.HouseholdId, kind, tokens.AccessToken, tokens.RefreshToken, email, now + ConfirmationLifetime));
+        var message = Texts.Format(language,
+            "{0} quer mostrar os eventos da casa «{1}» do Kubico no calendário «{2}» da conta {3}, e o que mudar lá muda também no Kubico. Só confirma se foste tu a pedir esta ligação.",
+            who, household.Name, CalendarSyncService.CalendarName(household.Name), email);
+        return Page(language, "Confirma a ligação", message, 200,
+            form: ($"/api/calendar-sync/callback/{kind.ToString().ToLowerInvariant()}/confirm", pending));
+    }
+
+    /// <summary>
+    /// A pessoa confirmou na página: cria o calendário do Kubico na conta (ou reaproveita o da ligação anterior à
+    /// mesma conta) e pede a primeira sincronização.
+    /// </summary>
+    private static async Task<IResult> Confirm(
+        string provider,
+        HttpRequest http,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        CalendarSyncService sync,
+        CalendarSecrets secrets,
+        CalendarSyncTrigger trigger,
+        HouseholdNotifier notifier,
+        TimeProvider clock,
+        ILoggerFactory loggers,
+        CancellationToken ct)
+    {
+        var language = Texts.LanguageOf(http.HttpContext);
+        var form = http.HasFormContentType ? await http.ReadFormAsync(ct) : null;
+        var pending = secrets.UnprotectPending(form?["pending"]);
+        if (pending is null || ParseProvider(provider) is not { } kind || pending.Provider != kind)
+        {
+            return Page(language, "Pedido inválido", "Este endereço não é válido. Volta à app do Kubico e tenta outra vez.", 400);
+        }
+
+        language = await db.Users.Where(u => u.Id == pending.UserId).Select(u => u.Language).SingleOrDefaultAsync(ct) ?? language;
+        if (form?["decision"].ToString() != "connect")
+        {
+            return Page(language, "Ligação cancelada", "Não foi dada autorização ao Kubico. Podes fechar esta página e tentar outra vez na app.", 400);
+        }
+
+        var now = clock.GetUtcNow();
+        if (pending.ExpiresAt < now)
+        {
+            return Page(language, "O pedido expirou", "Passou demasiado tempo. Volta à app do Kubico e tenta outra vez.", 400);
+        }
+
+        var role = await access.GetRoleAsync(pending.UserId, pending.HouseholdId, ct);
+        var household = await db.Households.AsNoTracking().SingleOrDefaultAsync(h => h.Id == pending.HouseholdId, ct);
+        if (role is null || household is null
+            || await access.GetAccessAsync(pending.HouseholdId, role.Value, HouseholdModule.Calendar, ct) < ModuleAccess.Manage)
+        {
+            return Page(language, "Sem permissão", "Já não podes ligar calendários nesta casa.", 403);
+        }
+
+        if (sync.Provider(kind) is not { IsConfigured: true } service)
+        {
+            return Page(language, "Indisponível", $"A ligação ao {ServiceName(kind)} não está configurada neste servidor.", 400);
+        }
+
+        var name = CalendarSyncService.CalendarName(household.Name);
+        CalendarConnection connection;
+        try
+        {
+            connection = await SaveConnectionAsync(
+                db, service, secrets, pending.HouseholdId, pending.UserId, household,
+                new OAuthTokens(pending.AccessToken, pending.RefreshToken, pending.Email), now, ct);
+        }
+        catch (Exception e) when (e is CalendarAuthException or CalendarProviderException or HttpRequestException)
+        {
+            loggers.CreateLogger(typeof(CalendarSyncEndpoints)).LogWarning(e, "Falha a ligar uma conta {Provider}.", kind);
+            return Page(language, "Não foi possível ligar", $"O {ServiceName(kind)} não confirmou a autorização. Tenta outra vez.", 502);
+        }
+
+        await db.SaveChangesAsync(ct);
+        trigger.Request(pending.HouseholdId);
+        await notifier.CalendarConnectionUpserted(pending.UserId, ToDto(connection, language), ct);
+        return Page(language, "Calendário ligado",
+            $"Os eventos da casa vão aparecer no calendário «{name}» da conta {pending.Email}. Já podes voltar ao Kubico.", 200);
+    }
+
+    /// <summary>
+    /// Liga o iCloud com o Apple ID e uma palavra-passe da app (não há OAuth para calendários na Apple). As
+    /// credenciais ficam cifradas, como os refresh tokens; o resto é igual às outras contas.
+    /// </summary>
+    private static async Task<IResult> ConnectApple(
+        Guid householdId,
+        AppleSignInRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        CalendarSyncService sync,
+        CalendarSecrets secrets,
+        CalendarSyncTrigger trigger,
+        HouseholdNotifier notifier,
+        TimeProvider clock,
+        ILoggerFactory loggers,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Calendar, ModuleAccess.Manage, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        if (sync.Provider(CalendarProvider.Apple) is not IPasswordCalendarProvider { IsConfigured: true } service)
+        {
+            return Results.Problem(
+                title: "A ligação ao iCloud ainda não está configurada neste servidor.",
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var household = await db.Households.AsNoTracking().SingleAsync(h => h.Id == householdId, ct);
+        CalendarConnection connection;
+        try
+        {
+            var tokens = await service.SignInAsync(request.AppleId, request.AppPassword, ct);
+            connection = await SaveConnectionAsync(db, service, secrets, householdId, userId, household, tokens, clock.GetUtcNow(), ct);
+        }
+        catch (CalendarAuthException)
+        {
+            return Results.Problem(
+                title: "O Apple ID ou a palavra-passe da app não estão certos. Confirma que usas uma palavra-passe específica da app.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+        catch (Exception e) when (e is CalendarProviderException or HttpRequestException or TaskCanceledException
+            or System.Xml.XmlException)
+        {
+            loggers.CreateLogger(typeof(CalendarSyncEndpoints)).LogWarning(e, "Falha a ligar uma conta {Provider}.", CalendarProvider.Apple);
+            return Results.Problem(
+                title: "Não foi possível ligar ao iCloud agora. Tenta outra vez daqui a pouco.",
+                statusCode: StatusCodes.Status502BadGateway);
+        }
+
+        await db.SaveChangesAsync(ct);
+        trigger.Request(householdId);
+        var dto = ToDto(connection, Texts.LanguageOf(http));
+        await notifier.CalendarConnectionUpserted(userId, dto, ct);
+        return Results.Ok(dto);
+    }
+
+    /// <summary>
+    /// A ligação de quem ligou a conta: numa conta nova (ou noutra conta), um calendário novo do Kubico, copiado do
+    /// zero; na mesma conta, reaproveita-se o calendário. Grava-se com o resto do pedido.
+    /// </summary>
+    private static async Task<CalendarConnection> SaveConnectionAsync(
+        KubicoDbContext db,
+        ICalendarProvider service,
+        CalendarSecrets secrets,
+        Guid householdId,
+        Guid userId,
+        Household household,
+        OAuthTokens tokens,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var email = tokens.Email ?? "";
+        var connection = await db.CalendarConnections.SingleOrDefaultAsync(
+            c => c.HouseholdId == householdId && c.UserId == userId && c.Provider == service.Kind, ct);
+        if (connection is null || !string.Equals(connection.AccountEmail, email, StringComparison.OrdinalIgnoreCase))
+        {
+            var calendarId = await service.CreateCalendarAsync(
+                tokens.AccessToken, CalendarSyncService.CalendarName(household.Name), household.TimeZone, ct);
+            if (connection is null)
+            {
+                connection = new CalendarConnection
+                {
+                    HouseholdId = householdId,
+                    UserId = userId,
+                    Provider = service.Kind,
+                    AccountEmail = email,
+                    ExternalCalendarId = calendarId,
+                    ProtectedRefreshToken = "",
+                    CreatedAt = now,
+                };
+                db.CalendarConnections.Add(connection);
+            }
+            else
+            {
+                connection.ExternalCalendarId = calendarId;
+                connection.SyncCursor = null;
+                await db.CalendarEventLinks.Where(l => l.ConnectionId == connection.Id).ExecuteDeleteAsync(ct);
+            }
+        }
+
+        connection.AccountEmail = email;
+        connection.ProtectedRefreshToken = secrets.ProtectToken(tokens.RefreshToken!);
+        connection.Status = CalendarConnectionStatus.Active;
+        connection.LastError = null;
+        return connection;
+    }
+
+    private static async Task<IResult> SyncNow(
+        Guid householdId,
+        Guid connectionId,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        CalendarSyncService sync,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var owned = await db.CalendarConnections.AnyAsync(
+            c => c.Id == connectionId && c.HouseholdId == householdId && c.UserId == userId, ct);
+        if (!owned || await sync.SyncAsync(connectionId, ct) is not { } connection)
+        {
+            return Results.NotFound();
+        }
+
+        return Results.Ok(ToDto(connection, Texts.LanguageOf(http)));
+    }
+
+    /// <summary>
+    /// Desliga a conta: apaga lá o calendário do Kubico (os eventos ficam no Kubico) e retira o acesso. Se a conta
+    /// já não responder, desliga na mesma.
+    /// </summary>
+    private static async Task<IResult> Disconnect(
+        Guid householdId,
+        Guid connectionId,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        CalendarSyncService sync,
+        CalendarSecrets secrets,
+        CalendarSyncLocks locks,
+        HouseholdNotifier notifier,
+        ILoggerFactory loggers,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, error) = await access.RequireMemberAsync(userId, householdId, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        using var _ = await locks.AcquireAsync(connectionId, ct);
+        var connection = await db.CalendarConnections.SingleOrDefaultAsync(
+            c => c.Id == connectionId && c.HouseholdId == householdId && c.UserId == userId, ct);
+        if (connection is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (sync.Provider(connection.Provider) is { IsConfigured: true } service)
+        {
+            await ForgetRemoteAsync(service, secrets, connection, loggers.CreateLogger(typeof(CalendarSyncEndpoints)), ct);
+        }
+
+        db.CalendarConnections.Remove(connection);
+        await db.SaveChangesAsync(ct);
+        await notifier.CalendarConnectionDeleted(userId, householdId, connection.Id, ct);
+        return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Apaga lá o calendário do Kubico e retira o acesso à conta. Se a conta já não responder, não falha: a cópia fica
+    /// na conta e a pessoa pode apagá-la lá.
+    /// </summary>
+    public static async Task ForgetRemoteAsync(
+        ICalendarProvider service, CalendarSecrets secrets, CalendarConnection connection, ILogger logger, CancellationToken ct)
+    {
+        try
+        {
+            var refreshToken = secrets.UnprotectToken(connection.ProtectedRefreshToken);
+            var tokens = await service.RefreshAsync(refreshToken, ct);
+            await service.DeleteCalendarAsync(tokens.AccessToken, connection.ExternalCalendarId, ct);
+            await service.RevokeAsync(tokens.RefreshToken ?? refreshToken, ct);
+        }
+        catch (Exception e) when (e is CryptographicException or CalendarAuthException or CalendarProviderException
+            or HttpRequestException or OperationCanceledException or System.Xml.XmlException)
+        {
+            logger.LogInformation(e, "Não foi possível apagar o calendário da ligação {Connection}.", connection.Id);
+        }
+    }
+
+    /// <summary>A ligação, com os avisos da última sincronização (um por linha) na língua de quem a vê.</summary>
+    public static CalendarConnectionDto ToDto(CalendarConnection c, string language) => new(
+        c.Id, c.HouseholdId, c.Provider, c.AccountEmail, c.Status, c.LastSyncedAt,
+        c.LastError is { } error ? string.Join(" ", error.Split('\n').Select(line => Texts.Translate(line, language))) : null);
+
+    /// <summary>O endereço de regresso, que tem de estar registado na app OAuth do Google ou da Microsoft.</summary>
+    public static string RedirectUri(HttpRequest http, IConfiguration configuration, CalendarProvider kind) =>
+        $"{PublicUrls.BaseUrl(http, configuration)}/api/calendar-sync/callback/{kind.ToString().ToLowerInvariant()}";
+
+    private static CalendarProvider? ParseProvider(string text) => text.ToLowerInvariant() switch
+    {
+        "google" => CalendarProvider.Google,
+        "microsoft" => CalendarProvider.Microsoft,
+        "apple" => CalendarProvider.Apple,
+        _ => null,
+    };
+
+    private static string ServiceName(CalendarProvider kind) => kind switch
+    {
+        CalendarProvider.Google => "Google Calendar",
+        CalendarProvider.Microsoft => "Outlook",
+        _ => "iCloud",
+    };
+
+    /// <summary>
+    /// Uma página simples para o navegador, em vez de JSON. Com <paramref name="form"/>, os botões "Ligar" e
+    /// "Cancelar" (um formulário para esse endereço, com a ligação por confirmar).
+    /// </summary>
+    private static IResult Page(
+        string language, string title, string message, int statusCode, (string Action, string Pending)? form = null)
+    {
+        (title, message) = (Texts.Translate(title, language), Texts.Translate(message, language));
+        var buttons = form is { } f
+            ? $$"""
+                <form method="post" action="{{Html(f.Action)}}">
+                <input type="hidden" name="pending" value="{{Html(f.Pending)}}">
+                <button type="submit" name="decision" value="connect">{{Html(Texts.Translate("Ligar", language))}}</button>
+                <button type="submit" name="decision" value="cancel">{{Html(Texts.Translate("Cancelar", language))}}</button>
+                </form>
+                """
+            : "";
+        var html = $$"""
+            <!doctype html>
+            <html lang="{{(language == Texts.English ? "en" : "pt-PT")}}">
+            <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>{{Html(title)}} · Kubico</title>
+            <style>
+            body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 15vh auto; padding: 0 1rem; line-height: 1.5;
+                   background: #fffbfe; color: #1c1b1f; }
+            @media (prefers-color-scheme: dark) { body { background: #1c1b1f; color: #e6e1e5; } }
+            h1 { font-size: 1.4rem; }
+            button { font: inherit; padding: .5rem 1.2rem; margin-right: .5rem; border-radius: 1.2rem; border: 1px solid #79747e;
+                     background: transparent; color: inherit; }
+            button[value=connect] { background: #6750a4; color: #fff; border-color: #6750a4; }
+            </style>
+            </head>
+            <body>
+            <h1>{{Html(title)}}</h1>
+            <p>{{Html(message)}}</p>
+            {{buttons}}
+            </body>
+            </html>
+            """;
+        return new HtmlPage(html, statusCode);
+    }
+
+    /// <summary>A página, com a sua própria CSP (estilos na página e o formulário só para a própria API).</summary>
+    private sealed class HtmlPage(string html, int statusCode) : IResult
+    {
+        public Task ExecuteAsync(HttpContext http)
+        {
+            http.Response.Headers.ContentSecurityPolicy =
+                "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'";
+            return Results.Content(html, "text/html; charset=utf-8", Encoding.UTF8, statusCode).ExecuteAsync(http);
+        }
+    }
+
+    /// <summary>Escapa só o que o HTML exige; os acentos vão tal e qual (a página é UTF-8).</summary>
+    private static string Html(string text) => text
+        .Replace("&", "&amp;")
+        .Replace("<", "&lt;")
+        .Replace(">", "&gt;")
+        .Replace("\"", "&quot;");
+}

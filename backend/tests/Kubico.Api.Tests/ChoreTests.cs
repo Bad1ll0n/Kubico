@@ -100,10 +100,12 @@ public class ChoreTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFacto
         var household = await HouseholdTests.CreateHousehold(admin, "Casa");
         await Join(admin, partner, household.Id, HouseholdRole.Adult);
 
+        // Cada ocorrência de uma tarefa diária conclui-se uma vez por dia (T1): duas tarefas diárias.
         var dishes = await CreateChore(admin, household.Id, new SaveChoreRequest("Loiça", Points: 3, Recurrence: ChoreRecurrence.Daily));
+        var laundry = await CreateChore(admin, household.Id, new SaveChoreRequest("Roupa", Points: 3, Recurrence: ChoreRecurrence.Daily));
         var bathroom = await CreateChore(admin, household.Id, new SaveChoreRequest("Casa de banho", Points: 10));
         await Complete(partner, household.Id, dishes.Id);
-        await Complete(partner, household.Id, dishes.Id);
+        await Complete(partner, household.Id, laundry.Id);
         await Complete(admin, household.Id, bathroom.Id);
 
         var stats = await admin.GetFromJsonAsync<ChoreStatsDto>(

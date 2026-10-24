@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import 'theme.dart';
 
 /// Resultado do editor: guardar (com os dados) ou apagar.
@@ -55,6 +56,11 @@ class _ChoreEditorState extends State<_ChoreEditor> {
   late String? _assignee;
   late List<String> _rotation;
   late bool _rotates;
+  late ChoreTimeOfDay _timeOfDay;
+  late bool _requiresPhoto;
+
+  /// Os passos da rotina (cada um com a sua caixa de texto).
+  final _steps = <TextEditingController>[];
 
   bool get _isNew => widget.chore == null;
 
@@ -70,14 +76,36 @@ class _ChoreEditorState extends State<_ChoreEditor> {
     _assignee = chore?.assigneeUserId;
     _rotation = [...?chore?.rotationUserIds];
     _rotates = _rotation.isNotEmpty;
+    _timeOfDay = chore?.timeOfDay ?? ChoreTimeOfDay.any;
+    _requiresPhoto = chore?.requiresPhoto ?? false;
+    for (final step in chore?.steps ?? const <String>[]) {
+      _steps.add(TextEditingController(text: step));
+    }
   }
 
   @override
   void dispose() {
     _title.dispose();
     _notes.dispose();
+    for (final s in _steps) {
+      s.dispose();
+    }
     super.dispose();
   }
+
+  void _addStep() => setState(() {
+    // Uma rotina é quase sempre de todos os dias (a começar hoje, para aparecer nas tarefas do dia).
+    if (_steps.isEmpty && _recurrence == ChoreRecurrence.none) _setRecurrence(ChoreRecurrence.daily);
+    _steps.add(TextEditingController());
+  });
+
+  /// Uma tarefa que se repete tem sempre prazo: sem ele, começa hoje.
+  void _setRecurrence(ChoreRecurrence recurrence) {
+    _recurrence = recurrence;
+    if (recurrence != ChoreRecurrence.none) _dueDate ??= DateUtils.dateOnly(DateTime.now());
+  }
+
+  void _removeStep(int index) => setState(() => _steps.removeAt(index).dispose());
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
@@ -106,6 +134,12 @@ class _ChoreEditorState extends State<_ChoreEditor> {
           // Com rotação, o servidor começa pelo primeiro da lista.
           assigneeUserId: rotation.isNotEmpty ? (rotation.contains(_assignee) ? _assignee : null) : _assignee,
           rotationUserIds: rotation,
+          timeOfDay: _timeOfDay,
+          requiresPhoto: _requiresPhoto,
+          steps: [
+            for (final s in _steps)
+              if (s.text.trim().isNotEmpty) s.text.trim(),
+          ],
         ),
       ),
     );
@@ -125,19 +159,19 @@ class _ChoreEditorState extends State<_ChoreEditor> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_isNew ? 'Nova tarefa' : 'Editar tarefa', style: theme.textTheme.titleLarge),
+            Text(_isNew ? 'Nova tarefa'.tr : 'Editar tarefa'.tr, style: theme.textTheme.titleLarge),
             const SizedBox(height: 16),
             TextField(
               controller: _title,
               autofocus: _isNew,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'O que há para fazer?', hintText: 'Ex.: Tirar o lixo'),
+              decoration: InputDecoration(labelText: 'O que há para fazer?'.tr, hintText: 'Ex.: Tirar o lixo'.tr),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _notes,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Notas (opcional)'),
+              decoration: InputDecoration(labelText: 'Notas (opcional)'.tr),
               maxLines: 2,
             ),
             const SizedBox(height: 16),
@@ -147,12 +181,12 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                   child: OutlinedButton.icon(
                     onPressed: _pickDate,
                     icon: const Icon(Icons.event),
-                    label: Text(_dueDate == null ? 'Sem prazo' : localizations.formatMediumDate(_dueDate!)),
+                    label: Text(_dueDate == null ? 'Sem prazo'.tr : localizations.formatMediumDate(_dueDate!)),
                   ),
                 ),
                 if (_dueDate != null)
                   IconButton(
-                    tooltip: 'Remover prazo',
+                    tooltip: 'Remover prazo'.tr,
                     onPressed: () => setState(() => _dueDate = null),
                     icon: const Icon(Icons.close),
                   ),
@@ -160,17 +194,18 @@ class _ChoreEditorState extends State<_ChoreEditor> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<ChoreRecurrence>(
+              key: ValueKey(_recurrence),
               initialValue: _recurrence,
-              decoration: const InputDecoration(labelText: 'Repetição'),
+              decoration: InputDecoration(labelText: 'Repetição'.tr),
               items: [for (final r in ChoreRecurrence.values) DropdownMenuItem(value: r, child: Text(r.label))],
-              onChanged: (value) => setState(() => _recurrence = value ?? ChoreRecurrence.none),
+              onChanged: (value) => setState(() => _setRecurrence(value ?? ChoreRecurrence.none)),
             ),
             const SizedBox(height: 12),
             if (canRotate)
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Rodar entre membros'),
-                subtitle: const Text('Cada vez que é feita, passa para a pessoa seguinte.'),
+                title: Text('Rodar entre membros'.tr),
+                subtitle: Text('Cada vez que é feita, passa para a pessoa seguinte.'.tr),
                 value: _rotates,
                 onChanged: (value) => setState(() {
                   _rotates = value;
@@ -196,18 +231,80 @@ class _ChoreEditorState extends State<_ChoreEditor> {
             else
               DropdownButtonFormField<String?>(
                 initialValue: widget.members.any((m) => m.userId == _assignee) ? _assignee : null,
-                decoration: const InputDecoration(labelText: 'Responsável'),
+                decoration: InputDecoration(labelText: 'Responsável'.tr),
                 items: [
-                  const DropdownMenuItem<String?>(value: null, child: Text('Qualquer pessoa')),
+                  DropdownMenuItem<String?>(value: null, child: Text('Qualquer pessoa'.tr)),
                   for (final m in widget.members)
                     DropdownMenuItem<String?>(value: m.userId, child: Text(m.displayName)),
                 ],
                 onChanged: (value) => setState(() => _assignee = value),
               ),
             const SizedBox(height: 16),
+            Text('Altura do dia'.tr, style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            SegmentedButton<ChoreTimeOfDay>(
+              segments: [
+                ButtonSegment(
+                  value: ChoreTimeOfDay.morning,
+                  icon: const Icon(Icons.wb_sunny_outlined),
+                  label: Text('Manhã'.tr),
+                ),
+                ButtonSegment(value: ChoreTimeOfDay.any, label: Text('Qualquer'.tr)),
+                ButtonSegment(
+                  value: ChoreTimeOfDay.evening,
+                  icon: const Icon(Icons.bedtime_outlined),
+                  label: Text('Noite'.tr),
+                ),
+              ],
+              selected: {_timeOfDay},
+              onSelectionChanged: (s) => setState(() => _timeOfDay = s.single),
+            ),
+            const SizedBox(height: 16),
+            Text('Passos (para uma rotina)'.tr, style: theme.textTheme.titleSmall),
+            Text(
+              'Ex.: lavar os dentes, vestir, fazer a cama. Ao marcar o último passo, a tarefa fica feita.'.tr,
+              style: theme.textTheme.bodySmall,
+            ),
+            for (final (i, step) in _steps.indexed)
+              Row(
+                children: [
+                  SizedBox(width: 24, child: Text('${i + 1}.')),
+                  Expanded(
+                    child: TextField(
+                      key: ValueKey(step),
+                      controller: step,
+                      autofocus: step.text.isEmpty,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(hintText: 'Passo'.tr),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Tirar este passo'.tr,
+                    onPressed: () => _removeStep(i),
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+                ],
+              ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _steps.length >= 20 ? null : _addStep,
+                icon: const Icon(Icons.add),
+                label: Text('Adicionar passo'.tr),
+              ),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.photo_camera_outlined),
+              title: Text('Pedir foto de prova'.tr),
+              subtitle: Text('Para a dar como feita, é preciso uma foto do trabalho.'.tr),
+              value: _requiresPhoto,
+              onChanged: (value) => setState(() => _requiresPhoto = value),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
-                Text('Pontos', style: theme.textTheme.titleSmall),
+                Text('Pontos'.tr, style: theme.textTheme.titleSmall),
                 Expanded(
                   child: Slider(
                     value: _points.toDouble(),
@@ -228,10 +325,10 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                   TextButton.icon(
                     onPressed: () => Navigator.pop(context, const ChoreDeleteRequested()),
                     icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
-                    label: Text('Apagar', style: TextStyle(color: theme.colorScheme.error)),
+                    label: Text('Apagar'.tr, style: TextStyle(color: theme.colorScheme.error)),
                   ),
                 const Spacer(),
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+                TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
                 const SizedBox(width: 8),
                 ValueListenableBuilder(
                   valueListenable: _title,
@@ -239,7 +336,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                     onPressed: value.text.trim().isEmpty || (_rotates && canRotate && _rotation.length < 2)
                         ? null
                         : _save,
-                    child: const Text('Guardar'),
+                    child: Text('Guardar'.tr),
                   ),
                 ),
               ],
