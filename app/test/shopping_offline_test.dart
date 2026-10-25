@@ -21,6 +21,9 @@ http.Response _json(Object body, [int status = 200]) => http.Response.bytes(
 /// Servidor com uma lista ("l1") que se pode desligar, como a rede no supermercado.
 class _Server {
   var online = true;
+
+  /// Com um estado, o servidor responde só isso (base de dados em baixo, proxy, limites…).
+  int? failWith;
   final items = <String, Map<String, dynamic>>{'bread': _item('bread', 'Pão')};
   final requests = <String>[];
 
@@ -39,6 +42,7 @@ class _Server {
 
   late final client = MockClient((request) async {
     if (!online) throw http.ClientException('Sem rede');
+    if (failWith case final status?) return _json({'title': 'Falhou ($status)'}, status);
     final path = request.url.path;
     const base = '/api/households/h1/lists/l1/items';
     if (request.method != 'GET') requests.add('${request.method} ${path.replaceFirst(base, '')}');
@@ -64,8 +68,8 @@ class _Server {
   });
 }
 
-ShoppingRepository _repository(_Server server, KeyValueStore store) => ShoppingRepository(
-  api: ApiClient(baseUrl: 'http://api', httpClient: server.client)..accessToken = 't',
+ShoppingRepository _repository(_Server server, KeyValueStore store, {String? token = 't'}) => ShoppingRepository(
+  api: ApiClient(baseUrl: 'http://api', httpClient: server.client)..accessToken = token,
   store: store,
   retryEvery: const Duration(hours: 1),
 );
@@ -128,6 +132,80 @@ void main() {
 
     expect(server.items.values.where((i) => i['name'] == 'Chá'), hasLength(1));
     expect(shopping.pendingCount, 0);
+  });
+
+  for (final status in [401, 408, 429, 500, 502, 503]) {
+    test('com o servidor a responder $status, a alteração fica na fila e chega quando ele recupera', () async {
+      final server = _Server();
+      final shopping = _repository(server, MemoryKeyValueStore());
+      final rejected = <ShoppingRejection>[];
+      shopping.rejections.listen(rejected.add);
+      await shopping.items('h1', 'l1');
+
+      server.failWith = status;
+      final milk = shopping.addItem('h1', 'l1', name: 'Leite');
+      await shopping.sync();
+      expect(shopping.pendingCount, 1);
+
+      server.failWith = null;
+      await shopping.sync();
+      expect(shopping.pendingCount, 0);
+      expect(server.items.keys, contains(milk.id));
+      expect(rejected, isEmpty);
+    });
+  }
+
+  test('uma alteração recusada de vez (400) sai da fila e é anunciada, sem prender as seguintes', () async {
+    final server = _Server();
+    final shopping = _repository(server, MemoryKeyValueStore());
+    final rejected = <ShoppingRejection>[];
+    shopping.rejections.listen(rejected.add);
+    await shopping.items('h1', 'l1');
+
+    server.failWith = 400;
+    shopping.addItem('h1', 'l1', name: 'Leite');
+    await shopping.sync();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(shopping.pendingCount, 0);
+    expect(rejected.single.change.name, 'Leite');
+    expect(rejected.single.message, 'Falhou (400)');
+  });
+
+  test('um erro do servidor que não passa acaba por soltar a fila', () async {
+    final server = _Server()..failWith = 500;
+    final shopping = _repository(server, MemoryKeyValueStore());
+    final rejected = <ShoppingRejection>[];
+    shopping.rejections.listen(rejected.add);
+    shopping.addItem('h1', 'l1', name: 'Leite');
+    for (var i = 0; i < ShoppingRepository.maxServerFailures; i++) {
+      await shopping.sync();
+    }
+    await Future<void>.delayed(Duration.zero);
+
+    expect(shopping.pendingCount, 0);
+    expect(rejected, hasLength(1));
+  });
+
+  test('ao abrir a app, a fila espera pela sessão em vez de a enviar sem token', () async {
+    final server = _Server();
+    final store = MemoryKeyValueStore();
+    final before = _repository(server, store);
+    server.online = false;
+    final coffee = before.addItem('h1', 'l1', name: 'Café');
+    await before.sync();
+    server.online = true;
+
+    final after = _repository(server, store, token: null);
+    await after.restore();
+    await after.sync();
+    expect(server.requests, isEmpty, reason: 'sem token não se envia nada');
+    expect(after.pendingCount, 1);
+
+    after.api.accessToken = 't';
+    await after.sync();
+    expect(after.pendingCount, 0);
+    expect(server.items.keys, contains(coffee.id));
   });
 
   test('ids gerados no telemóvel são UUIDs v4 diferentes', () {

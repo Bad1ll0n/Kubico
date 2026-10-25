@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -23,13 +25,16 @@ Future<void> main() async {
   final preferences = PreferencesStore();
   await AppLanguage.restore(preferences);
   final api = ApiClient(baseUrl: AppConfig.apiUrl, deviceKind: currentDeviceKind());
-  final session = SessionController(api: api, store: const SecureTokenStore())..restore();
+  final session = SessionController(api: api, store: const SecureTokenStore());
+  final restoringSession = session.restore();
 
   // Um link de convite (…/?convite=CÓDIGO) abre a app web com o código à espera.
   final invite = kIsWeb ? Uri.base.queryParameters['convite'] : null;
   session.pendingInvite = invite == null ? null : inviteCodeFrom(invite);
   final realtime = HouseholdRealtime(baseUrl: AppConfig.apiUrl, accessToken: session.freshAccessToken);
   final shopping = ShoppingRepository(api: api, store: preferences)..restore();
+  // A fila das compras só se envia com a sessão pronta (antes, saía sem token, levava 401 e perdia-se).
+  unawaited(restoringSession.whenComplete(shopping.sync));
   final notifications = NotificationCenter(api: api, realtime: realtime);
 
   // A sessão acabou (aqui ou noutro lado): o que ficou guardado neste aparelho sai.

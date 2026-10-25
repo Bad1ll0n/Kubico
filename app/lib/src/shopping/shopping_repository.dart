@@ -77,6 +77,14 @@ class ShoppingChange {
   );
 }
 
+/// Uma alteração que o servidor recusou de vez, com a mensagem dele, pronta a mostrar.
+class ShoppingRejection {
+  const ShoppingRejection(this.change, this.message);
+
+  final ShoppingChange change;
+  final String message;
+}
+
 /// Listas de compras que funcionam sem rede (no supermercado a rede falha muitas vezes).
 ///
 /// Guarda no dispositivo a última cópia das listas e dos artigos e uma fila das alterações feitas. Cada alteração
@@ -110,6 +118,14 @@ class ShoppingRepository extends ChangeNotifier {
 
   final _pending = <ShoppingChange>[];
   final _cacheKeys = <String>{};
+  final _rejections = StreamController<ShoppingRejection>.broadcast();
+
+  /// Quantas vezes seguidas o servidor falhou (5xx) a primeira alteração da fila.
+  var _serverFailures = 0;
+
+  /// Ao fim de quantas falhas seguidas do servidor (5xx) a mesma alteração se dá como recusada, para não prender a
+  /// fila para sempre atrás de um erro que não passa.
+  static const maxServerFailures = 10;
   var _offline = false;
   Future<void>? _syncing;
   Timer? _retry;
@@ -126,6 +142,10 @@ class ShoppingRepository extends ChangeNotifier {
 
   /// Alterações ainda por enviar.
   int get pendingCount => _pending.length;
+
+  /// Alterações que o servidor recusou de vez (sem permissão, lista apagada, dados inválidos). Saem da fila; quem
+  /// mostra a lista avisa a pessoa e volta a lê-la.
+  Stream<ShoppingRejection> get rejections => _rejections.stream;
 
   /// Lê a fila guardada (alterações feitas antes de a app fechar) e tenta enviá-la.
   Future<void> restore() async {
@@ -228,8 +248,9 @@ class ShoppingRepository extends ChangeNotifier {
     ),
   );
 
-  /// Envia as alterações por ordem. Sem rede, pára e volta a tentar mais tarde; uma alteração que o servidor
-  /// recusa (por exemplo, o artigo já foi apagado por outra pessoa) é descartada.
+  /// Envia as alterações por ordem. Sem rede, sem sessão ou com o servidor em baixo (0, 401, 408, 429, 5xx), pára e
+  /// volta a tentar mais tarde; uma alteração que o servidor recusa de vez (por exemplo, a lista foi apagada) sai da
+  /// fila e é anunciada em [rejections].
   Future<void> sync() => _syncing ??= _flush().whenComplete(() => _syncing = null);
 
   /// Grava já a cópia dos artigos que ainda está só em memória (ao sair da app).
@@ -253,6 +274,7 @@ class ShoppingRepository extends ChangeNotifier {
     _unsaved.clear();
     _itemsCache.clear();
     _pending.clear();
+    _serverFailures = 0;
     for (final key in _cacheKeys) {
       await _store.write(key, null);
     }
@@ -267,23 +289,31 @@ class ShoppingRepository extends ChangeNotifier {
   void dispose() {
     _retry?.cancel();
     unawaited(flush());
+    unawaited(_rejections.close());
     super.dispose();
   }
 
   Future<void> _flush() async {
     while (_pending.isNotEmpty) {
+      // Ainda sem sessão (a app está a arrancar): o pedido sairia sem token e seria recusado.
+      if (api.accessToken == null) {
+        _scheduleRetry();
+        return;
+      }
       final change = _pending.first;
       try {
         await _send(change);
         _setOffline(false);
       } on ApiException catch (e) {
-        if (_isNetwork(e)) {
-          _setOffline(true);
-          _retry ??= Timer.periodic(retryEvery, (_) => sync());
+        if (e.statusCode == 0) _setOffline(true);
+        if (_isTransient(e) && (e.statusCode < 500 || ++_serverFailures < maxServerFailures)) {
+          _scheduleRetry();
           return;
         }
-        debugPrint('Kubico: alteração à lista recusada (${e.message})');
+        debugPrint('Kubico: alteração à lista recusada (${e.statusCode} ${e.message})');
+        _rejections.add(ShoppingRejection(change, e.message));
       }
+      _serverFailures = 0;
       _pending.removeAt(0);
       await _savePending();
       notifyListeners();
@@ -291,6 +321,8 @@ class ShoppingRepository extends ChangeNotifier {
     _retry?.cancel();
     _retry = null;
   }
+
+  void _scheduleRetry() => _retry ??= Timer.periodic(retryEvery, (_) => sync());
 
   Future<void> _send(ShoppingChange change) async {
     final (householdId, listId) = (change.householdId, change.listId);
@@ -353,6 +385,10 @@ class ShoppingRepository extends ChangeNotifier {
   }
 
   static bool _isNetwork(ApiException e) => e.statusCode == 0;
+
+  /// Falhas que passam: sem rede, sessão por renovar, tempo esgotado, demasiados pedidos ou servidor em baixo.
+  static bool _isTransient(ApiException e) =>
+      e.statusCode == 0 || e.statusCode == 401 || e.statusCode == 408 || e.statusCode == 429 || e.statusCode >= 500;
 
   static String _itemsKey(String listId) => 'kubico.shopping.items.$listId';
 

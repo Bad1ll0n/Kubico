@@ -64,7 +64,8 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     _shopping = context.read<ShoppingRepository>();
     _subscriptions
       ..add(realtime.events.listen(_onEvent))
-      ..add(realtime.reconnected.listen((_) => _load()));
+      ..add(realtime.reconnected.listen((_) => _load()))
+      ..add(_shopping.rejections.listen(_onRejected));
     // A fila de alterações enviou-se (ou a rede voltou): o servidor tem a versão final.
     _shopping.addListener(_onShoppingChanged);
     _load();
@@ -104,6 +105,13 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     if (_waitedOffline && !waiting) _load();
     _waitedOffline = waiting && (_waitedOffline || _shopping.isOffline);
     if (mounted) setState(() {});
+  }
+
+  /// O servidor recusou uma alteração desta lista: avisa e volta a mostrar o que lá está de facto.
+  void _onRejected(ShoppingRejection rejection) {
+    if (rejection.change.listId != _listId || !mounted) return;
+    _tell('Não foi possível guardar uma alteração à lista: ${rejection.message}'.tr);
+    _load();
   }
 
   void _onEvent(HouseholdEvent event) {
