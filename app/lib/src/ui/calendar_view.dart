@@ -357,11 +357,13 @@ class _CalendarViewState extends State<CalendarView> {
                 icon: const Icon(Icons.chevron_right),
               ),
               TextButton(onPressed: () => _go(DateTime.now()), child: Text('Hoje'.tr)),
-              IconButton(
-                tooltip: 'Ver noutros calendários'.tr,
-                onPressed: () => showCalendarFeedDialog(context, householdId: _householdId),
-                icon: const Icon(Icons.share_outlined),
-              ),
+              // As crianças veem o calendário só na app (o endereço funcionaria fora dela, sem sessão).
+              if (widget.household.role != HouseholdRole.child)
+                IconButton(
+                  tooltip: 'Ver noutros calendários'.tr,
+                  onPressed: () => showCalendarFeedDialog(context, householdId: _householdId),
+                  icon: const Icon(Icons.share_outlined),
+                ),
             ],
           ),
         ],

@@ -213,7 +213,7 @@ public class PerformanceFixesTests(KubicoApiFactory factory) : IClassFixture<Kub
         var children = new List<Guid>();
         foreach (var (name, period) in new[] { ("Rita", Kubico.Domain.Rewards.AllowancePeriod.Weekly), ("Rui", Kubico.Domain.Rewards.AllowancePeriod.Monthly), ("Ana", Kubico.Domain.Rewards.AllowancePeriod.Weekly) })
         {
-            var child = await ChildProfileTests.CreateChild(admin, householdId, name, "1234");
+            var child = await ChildProfileTests.CreateChild(admin, householdId, name, "4829");
             children.Add(child.UserId);
             (await admin.PutAsJsonAsync($"{url}/{child.UserId}", new Kubico.Api.Rewards.SaveAllowanceRequest(500, 20, period), TestJson.Options))
                 .EnsureSuccessStatusCode();

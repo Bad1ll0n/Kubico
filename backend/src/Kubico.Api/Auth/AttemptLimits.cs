@@ -19,19 +19,41 @@ public static class AttemptLimits
                 && u.FailedPinAttempts < User.MaxPinAttempts)
             .ExecuteUpdateAsync(s => s.SetProperty(u => u.FailedPinAttempts, u => u.FailedPinAttempts + 1), ct) == 1;
 
-    /// <summary>Um PIN errado. Se chegou ao limite, bloqueia o perfil 15 minutos; devolve true nesse caso.</summary>
-    public static async Task<bool> PinFailedAsync(KubicoDbContext db, Guid userId, DateTimeOffset now, CancellationToken ct) =>
-        await db.Users
+    /// <summary>
+    /// Um PIN errado. Se chegou ao limite, bloqueia o perfil (cada bloqueio seguido mais longo,
+    /// <see cref="User.PinLockoutFor"/>) e devolve até quando e que bloqueio é; senão, null.
+    /// </summary>
+    public static async Task<(DateTimeOffset Until, int Lockouts)?> PinFailedAsync(
+        KubicoDbContext db, Guid userId, DateTimeOffset now, CancellationToken ct)
+    {
+        // O primeiro UPDATE decide (atómico): só um dos pedidos em simultâneo bloqueia. Depois acerta-se a duração.
+        var locked = await db.Users
             .Where(u => u.Id == userId && u.FailedPinAttempts >= User.MaxPinAttempts)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.PinLockedUntil, now + User.PinLockout)
-                .SetProperty(u => u.FailedPinAttempts, 0), ct) == 1;
+                .SetProperty(u => u.FailedPinAttempts, 0)
+                .SetProperty(u => u.PinLockouts, u => u.PinLockouts + 1), ct) == 1;
+        if (!locked)
+        {
+            return null;
+        }
 
-    /// <summary>O PIN estava certo (ou foi mudado por um adulto): o contador volta a zero e o perfil desbloqueia.</summary>
+        var lockouts = await db.Users.Where(u => u.Id == userId).Select(u => u.PinLockouts).SingleAsync(ct);
+        var until = now + User.PinLockoutFor(lockouts);
+        if (lockouts > 1)
+        {
+            await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(s => s.SetProperty(u => u.PinLockedUntil, until), ct);
+        }
+
+        return (until, lockouts);
+    }
+
+    /// <summary>O PIN estava certo (ou foi mudado por um adulto): os contadores voltam a zero e o perfil desbloqueia.</summary>
     public static Task PinSucceededAsync(KubicoDbContext db, Guid userId, CancellationToken ct) =>
         db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(s => s
             .SetProperty(u => u.FailedPinAttempts, 0)
-            .SetProperty(u => u.PinLockedUntil, (DateTimeOffset?)null), ct);
+            .SetProperty(u => u.PinLockedUntil, (DateTimeOffset?)null)
+            .SetProperty(u => u.PinLockouts, 0), ct);
 
     /// <summary>Reserva uma tentativa de código da 2FA. False se a conta está bloqueada (ou já há 5 a ser verificadas).</summary>
     public static async Task<bool> ReserveTwoFactorAsync(KubicoDbContext db, Guid userId, DateTimeOffset now, CancellationToken ct) =>

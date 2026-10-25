@@ -22,7 +22,7 @@ public class MemberFixesTests(KubicoApiFactory factory) : IClassFixture<KubicoAp
         await Fase1.MemberAsync(factory, admin, household, "Bruno", HouseholdRole.Child);
         (await admin.DeleteAsync($"/api/households/{household}/members/{ana}")).EnsureSuccessStatusCode();
 
-        await ChildProfileTests.CreateChild(admin, household, "Carla", "1234");
+        await ChildProfileTests.CreateChild(admin, household, "Carla", "4829");
         var members = await MemberTests.Members(admin, household);
 
         Assert.Equal(4, members.Count);
@@ -146,7 +146,7 @@ public class MemberFixesTests(KubicoApiFactory factory) : IClassFixture<KubicoAp
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         connection.Closed += _ => { closed.TrySetResult(); return Task.CompletedTask; };
 
-        (await admin.PutAsJsonAsync($"/api/households/{household}/children/{bruno}/pin", new ChildPinRequest("5678"), TestJson.Options))
+        (await admin.PutAsJsonAsync($"/api/households/{household}/children/{bruno}/pin", new ChildPinRequest("5938"), TestJson.Options))
             .EnsureSuccessStatusCode();
         var refresh = await factory.CreateClient().PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(auth.RefreshToken));
         await closed.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -186,7 +186,7 @@ public class MemberFixesTests(KubicoApiFactory factory) : IClassFixture<KubicoAp
         var (admin, _, household) = await Fase1.HouseholdAsync(factory);
         var (guest, _) = await Fase1.MemberAsync(factory, admin, household, "Babysitter", HouseholdRole.Guest);
         var rita = await admin.PostAsJsonAsync($"/api/households/{household}/children",
-            new CreateChildProfileRequest("Rita", "1234", factory.Today.AddYears(-7)), TestJson.Options);
+            new CreateChildProfileRequest("Rita", "4829", factory.Today.AddYears(-7)), TestJson.Options);
         var ritaId = (await rita.Content.ReadFromJsonAsync<MemberDto>(TestJson.Options))!.UserId;
 
         var forAdmin = await Fase1.HouseholdDetailsAsync(admin, household);

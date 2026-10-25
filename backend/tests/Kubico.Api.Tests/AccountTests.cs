@@ -61,7 +61,7 @@ public class AccountTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFac
         var home = await HouseholdTests.CreateHousehold(me, "Casa");
         var beach = await HouseholdTests.CreateHousehold(me, "Casa da praia");
         await NotificationTests.Join(me, partner, home.Id, HouseholdRole.Adult);
-        var beachKid = await ChildProfileTests.CreateChild(me, beach.Id, "Rita", "1234");
+        var beachKid = await ChildProfileTests.CreateChild(me, beach.Id, "Rita", "4829");
         var code = await ChildProfileTests.FamilyCode(me, beach.Id);
 
         var wrongPassword = await Delete(me, "outra-coisa");
@@ -70,7 +70,7 @@ public class AccountTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFac
         var login = await factory.CreateClient().PostAsJsonAsync("/api/auth/login", new LoginRequest(email, Password));
         var members = await MemberTests.Members(partner, home.Id);
         var beachForPartner = await partner.GetAsync($"/api/households/{beach.Id}");
-        var kidLogin = await factory.CreateClient().PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, beachKid.UserId, "1234"));
+        var kidLogin = await factory.CreateClient().PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, beachKid.UserId, "4829"));
 
         Assert.Equal(HttpStatusCode.BadRequest, wrongPassword.StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
@@ -88,14 +88,14 @@ public class AccountTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFac
     {
         var (admin, _) = await factory.CreateUserAsync("Mãe");
         var household = await HouseholdTests.CreateHousehold(admin, "Casa");
-        var rita = await ChildProfileTests.CreateChild(admin, household.Id, "Rita", "1234");
+        var rita = await ChildProfileTests.CreateChild(admin, household.Id, "Rita", "4829");
         var code = await ChildProfileTests.FamilyCode(admin, household.Id);
-        var login = await factory.CreateClient().PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, rita.UserId, "1234"));
+        var login = await factory.CreateClient().PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, rita.UserId, "4829"));
         var auth = (await login.Content.ReadFromJsonAsync<AuthResponse>(TestJson.Options))!;
         var child = factory.CreateClient();
         child.DefaultRequestHeaders.Authorization = new("Bearer", auth.AccessToken);
 
-        var response = await Delete(child, "1234");
+        var response = await Delete(child, "4829");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal(2, (await MemberTests.Members(admin, household.Id)).Count);

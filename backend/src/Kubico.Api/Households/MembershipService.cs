@@ -57,6 +57,17 @@ public class MembershipService(
         if (user.ManagedByHouseholdId == householdId)
         {
             db.Users.Remove(user);
+
+            // As fotos de prova de uma criança tirada da casa saem já (não ficam 90 dias à espera da limpeza).
+            var photos = await db.ChorePhotos.Where(p => p.UploadedByUserId == userId).ToListAsync(ct);
+            var photoIds = photos.Select(p => p.Id).ToList();
+            foreach (var completion in await db.ChoreCompletions
+                .Where(c => c.PhotoId != null && photoIds.Contains(c.PhotoId.Value)).ToListAsync(ct))
+            {
+                completion.PhotoId = null;
+            }
+
+            db.ChorePhotos.RemoveRange(photos);
         }
 
         await db.SaveChangesAsync(ct);

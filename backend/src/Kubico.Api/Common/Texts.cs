@@ -219,6 +219,11 @@ public static partial class Texts
         ["Código da família inválido. Pede-o a um adulto da casa."] =
             "Invalid family code. Ask an adult in the household for it.",
         ["Demasiados PINs errados. Tenta outra vez daqui a {0} minutos."] = "Too many wrong PINs. Try again in {0} minutes.",
+        ["Demasiados PINs errados. Tenta outra vez daqui a {0} horas ou pede a um adulto para mudar o PIN."] = "Too many wrong PINs. Try again in {0} hours or ask an adult to change the PIN.",
+        ["O perfil de {0} ficou bloqueado por PINs errados"] = "{0}'s profile was locked after wrong PINs",
+        ["Se não foi a criança, muda o PIN no perfil dela: isso também o desbloqueia."] = "If it wasn't the child, change the PIN on their profile: that also unlocks it.",
+        ["Escolhe um PIN mais difícil de adivinhar (não uses algarismos repetidos, seguidos nem um ano)."] = "Choose a PIN that is harder to guess (no repeated or consecutive digits, and not a year).",
+        ["Os perfis de criança não podem subscrever o calendário fora da app."] = "Child profiles can't subscribe to the calendar outside the app.",
         ["Escolhe português (pt) ou inglês (en)."] = "Choose Portuguese (pt) or English (en).",
         ["Antes de apagares a conta, passa a administração de «{0}» a um adulto."] =
             "Before you delete your account, hand over the administration of “{0}” to an adult.",

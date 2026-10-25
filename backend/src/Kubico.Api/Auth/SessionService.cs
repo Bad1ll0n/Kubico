@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
+using Kubico.Api.Calendar;
 using Kubico.Api.Realtime;
 using Kubico.Domain.Users;
 using Kubico.Infrastructure.Persistence;
@@ -124,11 +125,19 @@ public class SessionService(
 
     /// <summary>
     /// Terminar sessão em todos os dispositivos (menos, se indicada, a sessão <paramref name="keep"/>: por exemplo,
-    /// a de quem acabou de ligar a verificação em dois passos).
+    /// a de quem acabou de ligar a verificação em dois passos). Os endereços de calendário subscritos (ICS) também
+    /// deixam de servir, a não ser que <paramref name="resetCalendarFeeds"/> seja false: quem entrou com a conta (ou
+    /// com o PIN de uma criança) e guardou o endereço não pode continuar a ver o calendário da casa.
     /// </summary>
-    public async Task SignOutEverywhereAsync(Guid userId, CancellationToken ct, Guid? keep = null)
+    public async Task SignOutEverywhereAsync(
+        Guid userId, CancellationToken ct, Guid? keep = null, bool resetCalendarFeeds = true)
     {
         var now = clock.GetUtcNow();
+        if (resetCalendarFeeds)
+        {
+            await CalendarFeedEndpoints.RevokeFeedsAsync(db, m => m.UserId == userId, ct);
+        }
+
         await RevokeAsync(t => t.UserId == userId && (keep == null || t.FamilyId != keep), now, ct);
         await db.PushDevices.Where(d => d.UserId == userId && (keep == null || d.SessionId == null || d.SessionId != keep))
             .ExecuteDeleteAsync(ct);

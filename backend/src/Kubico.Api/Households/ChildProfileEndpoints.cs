@@ -286,12 +286,31 @@ public static class ChildProfileEndpoints
             });
     }
 
-    /// <summary>O PIN tem 4 a 6 algarismos.</summary>
-    internal static IResult? InvalidPin(string? pin) =>
-        pin is { Length: >= 4 and <= 6 } && pin.All(char.IsAsciiDigit)
-            ? null
-            : Results.ValidationProblem(new Dictionary<string, string[]>
+    /// <summary>O PIN tem 4 a 6 algarismos e não é dos primeiros que se tentam (0000, 1234, 4321, 2015…).</summary>
+    internal static IResult? InvalidPin(string? pin)
+    {
+        if (pin is not { Length: >= 4 and <= 6 } || !pin.All(char.IsAsciiDigit))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
             {
                 ["Pin"] = ["O PIN tem de ter 4 a 6 algarismos."],
             });
+        }
+
+        return IsEasyToGuess(pin)
+            ? Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["Pin"] = ["Escolhe um PIN mais difícil de adivinhar (não uses algarismos repetidos, seguidos nem um ano)."],
+            })
+            : null;
+    }
+
+    /// <summary>Todos iguais, a subir ou a descer de um em um, ou (com 4 algarismos) um ano de 1900 a 2099.</summary>
+    public static bool IsEasyToGuess(string pin)
+    {
+        var steps = pin.Zip(pin.Skip(1), (a, b) => b - a).Distinct().ToList();
+        var repeatedOrSequence = steps is [0] or [1] or [-1];
+        var year = pin.Length == 4 && (pin.StartsWith("19", StringComparison.Ordinal) || pin.StartsWith("20", StringComparison.Ordinal));
+        return repeatedOrSequence || year;
+    }
 }

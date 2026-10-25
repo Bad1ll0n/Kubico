@@ -343,7 +343,7 @@ class _SignOutEverywhereDialog extends StatefulWidget {
 }
 
 class _SignOutEverywhereDialogState extends State<_SignOutEverywhereDialog> {
-  var _resetFeeds = false;
+  var _resetFeeds = true;
 
   @override
   Widget build(BuildContext context) => AlertDialog(

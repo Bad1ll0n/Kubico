@@ -32,7 +32,7 @@ internal static class Fase1
 
     /// <summary>Um perfil de criança (PIN 1234) e a sua sessão.</summary>
     public static async Task<(HttpClient Client, Guid UserId, AuthResponse Auth)> ChildProfileAsync(
-        KubicoApiFactory factory, HttpClient admin, Guid householdId, string name, string pin = "1234")
+        KubicoApiFactory factory, HttpClient admin, Guid householdId, string name, string pin = "4829")
     {
         var child = await ChildProfileTests.CreateChild(admin, householdId, name, pin);
         var code = await ChildProfileTests.FamilyCode(admin, householdId);

@@ -22,10 +22,10 @@ public record LoginRequest(
 public record RefreshRequest([property: Required] string RefreshToken);
 
 /// <summary>
-/// Terminar sessão em todos os dispositivos. Com <c>ResetCalendarFeeds</c>, os endereços de calendário subscritos
-/// (feed ICS) desta pessoa também deixam de servir (por exemplo, num telemóvel perdido).
+/// Terminar sessão em todos os dispositivos. Os endereços de calendário subscritos (feed ICS) desta pessoa também
+/// deixam de servir (por exemplo, num telemóvel perdido), a não ser que <c>ResetCalendarFeeds</c> seja false.
 /// </summary>
-public record LogoutAllRequest(bool ResetCalendarFeeds = false);
+public record LogoutAllRequest(bool ResetCalendarFeeds = true);
 
 /// <summary>
 /// A palavra-passe está certa mas a conta tem verificação em dois passos: falta o código, que se envia com o
@@ -178,15 +178,10 @@ public static class AuthEndpoints
         }).RequireRateLimiting(RateLimits.Refresh);
 
         group.MapPost("/logout-all", async (
-            LogoutAllRequest? request, ClaimsPrincipal principal, SessionService sessions, KubicoDbContext db, CancellationToken ct) =>
+            LogoutAllRequest? request, ClaimsPrincipal principal, SessionService sessions, CancellationToken ct) =>
         {
-            var userId = principal.GetUserId();
-            await sessions.SignOutEverywhereAsync(userId, ct);
-            if (request?.ResetCalendarFeeds == true)
-            {
-                await CalendarFeedEndpoints.RevokeFeedsAsync(db, m => m.UserId == userId, ct);
-            }
-
+            await sessions.SignOutEverywhereAsync(
+                principal.GetUserId(), ct, resetCalendarFeeds: request?.ResetCalendarFeeds ?? true);
             return Results.NoContent();
         }).RequireAuthorization();
 

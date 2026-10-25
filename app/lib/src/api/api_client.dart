@@ -111,10 +111,10 @@ class ApiClient {
   /// Termina a sessão deste dispositivo.
   Future<void> logout(String refreshToken) => _send('POST', '/api/auth/logout', body: {'refreshToken': refreshToken});
 
-  /// Termina a sessão em todos os dispositivos. Com [resetCalendarFeeds], os endereços de calendário subscritos
-  /// também deixam de servir.
-  Future<void> logoutEverywhere({bool resetCalendarFeeds = false}) =>
-      _send('POST', '/api/auth/logout-all', body: resetCalendarFeeds ? {'resetCalendarFeeds': true} : null);
+  /// Termina a sessão em todos os dispositivos. Os endereços de calendário subscritos também deixam de servir, a não
+  /// ser com [resetCalendarFeeds] a false.
+  Future<void> logoutEverywhere({bool resetCalendarFeeds = true}) =>
+      _send('POST', '/api/auth/logout-all', body: {'resetCalendarFeeds': resetCalendarFeeds});
 
   /// Os dispositivos com sessão iniciada (o deste vem marcado).
   Future<List<DeviceSession>> getSessions() async => [

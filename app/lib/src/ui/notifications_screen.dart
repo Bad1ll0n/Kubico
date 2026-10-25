@@ -107,6 +107,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'ChoreCompleted' => Icons.photo_camera_outlined,
     'ChoreRejected' => Icons.replay,
     'AllowancePaid' => Icons.savings_outlined,
+    'ChildPinLocked' => Icons.lock_outline,
     'EventAssigned' => Icons.event,
     'RideAssigned' => Icons.directions_car_outlined,
     'RewardRequested' || 'RewardDecided' => Icons.card_giftcard,

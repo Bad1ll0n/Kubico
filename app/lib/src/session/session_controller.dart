@@ -132,9 +132,9 @@ class SessionController extends ChangeNotifier {
   /// A conta foi apagada: esquece a sessão neste dispositivo (no servidor já não existe).
   Future<void> forgetDeletedAccount() => _forgetSession();
 
-  /// Termina a sessão em todos os dispositivos (por exemplo, depois de perder o telemóvel). Com
-  /// [resetCalendarFeeds], os endereços de calendário subscritos também deixam de servir.
-  Future<void> signOutEverywhere({bool resetCalendarFeeds = false}) async {
+  /// Termina a sessão em todos os dispositivos (por exemplo, depois de perder o telemóvel). Os endereços de
+  /// calendário subscritos também deixam de servir, a não ser com [resetCalendarFeeds] a false.
+  Future<void> signOutEverywhere({bool resetCalendarFeeds = true}) async {
     await api.logoutEverywhere(resetCalendarFeeds: resetCalendarFeeds);
     await _forgetSession();
   }

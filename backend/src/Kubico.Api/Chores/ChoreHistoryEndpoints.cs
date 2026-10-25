@@ -89,7 +89,8 @@ public static class ChoreHistoryEndpoints
     }
 
     /// <summary>
-    /// A foto nunca muda: vai com o id como ETag e "private, no-cache" (só o próprio aparelho guarda uma cópia e
+    /// A foto (muitas vezes de uma criança ou do quarto dela) só a veem quem a enviou e quem gere as Tarefas: não os
+    /// convidados nem as outras crianças. A foto nunca muda: vai com o id como ETag e "private, no-cache" (só o próprio aparelho guarda uma cópia e
     /// confirma-a sempre; o acesso volta a ser verificado). Quando a app já a tem, a resposta é 304, sem ler os bytes.
     /// </summary>
     private static async Task<IResult> GetPhoto(
@@ -101,14 +102,16 @@ public static class ChoreHistoryEndpoints
         HttpContext http,
         CancellationToken ct)
     {
-        var (_, _, error) = await access.RequireAsync(
-            principal.GetUserId(), householdId, HouseholdModule.Chores, ModuleAccess.View, ct);
+        var userId = principal.GetUserId();
+        var (_, level, error) = await access.RequireAsync(userId, householdId, HouseholdModule.Chores, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;
         }
 
-        var photos = db.ChorePhotos.AsNoTracking().Where(p => p.Id == photoId && p.HouseholdId == householdId);
+        var manages = level >= ModuleAccess.Manage;
+        var photos = db.ChorePhotos.AsNoTracking()
+            .Where(p => p.Id == photoId && p.HouseholdId == householdId && (manages || p.UploadedByUserId == userId));
         var etag = HttpCaching.ETagOf(photoId);
         if (HttpCaching.ClientHas(http, etag))
         {
@@ -141,20 +144,24 @@ public static class ChoreHistoryEndpoints
         TimeProvider clock,
         CancellationToken ct)
     {
-        var (_, _, error) = await access.RequireAsync(
-            principal.GetUserId(), householdId, HouseholdModule.Chores, ModuleAccess.View, ct);
+        var userId = principal.GetUserId();
+        var (_, level, error) = await access.RequireAsync(userId, householdId, HouseholdModule.Chores, ModuleAccess.View, ct);
         if (error is not null)
         {
             return error;
         }
 
+        // A foto de prova só vai para quem a pode ver (ver GetPhoto).
+        var manages = level >= ModuleAccess.Manage;
         var since = clock.GetUtcNow().AddDays(-Math.Clamp(days ?? 30, 1, 365));
         var items = await db.ChoreCompletions.AsNoTracking()
             .Where(c => c.Chore.HouseholdId == householdId && c.CompletedAt >= since)
             .OrderByDescending(c => c.CompletedAt)
             .Take(200)
             .Select(c => new ChoreHistoryItemDto(
-                c.Id, c.ChoreId, c.Chore.Title, c.UserId, c.Points, c.CompletedAt, c.PhotoId, c.RejectedAt != null))
+                c.Id, c.ChoreId, c.Chore.Title, c.UserId, c.Points, c.CompletedAt,
+                manages || db.ChorePhotos.Any(p => p.Id == c.PhotoId && p.UploadedByUserId == userId) ? c.PhotoId : null,
+                c.RejectedAt != null))
             .ToListAsync(ct);
         return Results.Ok(items);
     }

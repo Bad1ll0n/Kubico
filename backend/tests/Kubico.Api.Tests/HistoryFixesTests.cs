@@ -35,7 +35,7 @@ public class HistoryFixesTests(KubicoApiFactory factory) : IClassFixture<KubicoA
         var (admin, _, household) = await Fase1.HouseholdAsync(factory);
         var (child, rita) = await Fase1.MemberAsync(factory, admin, household, "Rita", HouseholdRole.Child);
         var (brother, _) = await Fase1.MemberAsync(factory, admin, household, "Tomás", HouseholdRole.Child);
-        var bruno = await ChildProfileTests.CreateChild(admin, household, "Bruno", "1234");
+        var bruno = await ChildProfileTests.CreateChild(admin, household, "Bruno", "4829");
         var url = $"/api/households/{household}";
         var today = factory.Today;
         var chore = await Fase1.ChoreAsync(admin, household, new SaveChoreRequest("Aspirar", Points: 10, AssigneeUserId: rita));
@@ -51,7 +51,7 @@ public class HistoryFixesTests(KubicoApiFactory factory) : IClassFixture<KubicoA
             new PayAllowanceRequest(Allowance.PeriodStart(today, AllowancePeriod.Weekly)), TestJson.Options)).EnsureSuccessStatusCode();
         (await admin.PutAsJsonAsync($"{url}/permissions", new SavePermissionsRequest(
             [PermissionTests.Role(HouseholdRole.Guest, (HouseholdModule.Rewards, ModuleAccess.None))]), TestJson.Options)).EnsureSuccessStatusCode();
-        (await admin.PutAsJsonAsync($"{url}/children/{bruno.UserId}/pin", new ChildPinRequest("4321"), TestJson.Options)).EnsureSuccessStatusCode();
+        (await admin.PutAsJsonAsync($"{url}/children/{bruno.UserId}/pin", new ChildPinRequest("7316"), TestJson.Options)).EnsureSuccessStatusCode();
 
         var forAdmin = (await admin.GetFromJsonAsync<List<ActivityDto>>($"{url}/activity", TestJson.Options))!.Select(a => a.Summary).ToList();
         var forRita = (await child.GetFromJsonAsync<List<ActivityDto>>($"{url}/activity", TestJson.Options))!.Select(a => a.Summary).ToList();

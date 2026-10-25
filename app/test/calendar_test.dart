@@ -378,9 +378,15 @@ void main() {
     expect(api.occurrenceChanges.last, 'DELETE /api/households/h1/events/e1/occurrences/2026-11-10?scope=following');
   });
 
-  testWidgets('qualquer membro vê o endereço para subscrever noutros calendários e pode trocá-lo', (tester) async {
+  testWidgets('as crianças não têm endereço para subscrever o calendário fora da app', (tester) async {
+    await _pump(tester, _FakeApi(), HouseholdRole.child);
+
+    expect(find.byTooltip('Ver noutros calendários'), findsNothing);
+  });
+
+  testWidgets('os outros membros veem o endereço para subscrever noutros calendários e podem trocá-lo', (tester) async {
     final api = _FakeApi();
-    await _pump(tester, api, HouseholdRole.child);
+    await _pump(tester, api, HouseholdRole.guest);
 
     await tester.tap(find.byTooltip('Ver noutros calendários'));
     await tester.pumpAndSettle();

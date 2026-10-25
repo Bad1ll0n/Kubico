@@ -51,7 +51,18 @@ public static class CalendarFeedEndpoints
             return error;
         }
 
-        var membership = await db.Memberships.SingleAsync(m => m.UserId == userId && m.HouseholdId == householdId, ct);
+        var membership = await db.Memberships.Include(m => m.User)
+            .SingleAsync(m => m.UserId == userId && m.HouseholdId == householdId, ct);
+
+        // O endereço funciona sem sessão e para sempre: quem soubesse o PIN de uma criança ficava com o calendário da
+        // família mesmo depois de os pais mudarem o PIN. As crianças veem o calendário na app.
+        if (membership.User.IsChildProfile)
+        {
+            return Results.Problem(
+                title: "Os perfis de criança não podem subscrever o calendário fora da app.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
         if (membership.CalendarFeedToken is null)
         {
             membership.CalendarFeedToken = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));

@@ -81,9 +81,9 @@ public class ValidationFixesTests(KubicoApiFactory factory) : IClassFixture<Kubi
         var url = $"/api/households/{household}/children";
         var today = factory.Today;
 
-        var future = await admin.PostAsJsonAsync(url, new CreateChildProfileRequest("Rita", "1234", today.AddDays(1)), TestJson.Options);
-        var adult = await admin.PostAsJsonAsync(url, new CreateChildProfileRequest("Rita", "1234", today.AddYears(-18)), TestJson.Options);
-        var child = await admin.PostAsJsonAsync(url, new CreateChildProfileRequest("Rita", "1234", today.AddYears(-8)), TestJson.Options);
+        var future = await admin.PostAsJsonAsync(url, new CreateChildProfileRequest("Rita", "4829", today.AddDays(1)), TestJson.Options);
+        var adult = await admin.PostAsJsonAsync(url, new CreateChildProfileRequest("Rita", "4829", today.AddYears(-18)), TestJson.Options);
+        var child = await admin.PostAsJsonAsync(url, new CreateChildProfileRequest("Rita", "4829", today.AddYears(-8)), TestJson.Options);
         var created = (await child.Content.ReadFromJsonAsync<MemberDto>(TestJson.Options))!;
         var edit = await admin.PutAsJsonAsync($"{url}/{created.UserId}", new UpdateChildProfileRequest("Rita", today.AddYears(2)), TestJson.Options);
 

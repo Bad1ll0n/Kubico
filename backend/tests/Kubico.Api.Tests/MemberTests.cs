@@ -179,13 +179,13 @@ public class ChildProfileTests(KubicoApiFactory factory) : IClassFixture<KubicoA
     {
         var (admin, _) = await factory.CreateUserAsync("Mãe");
         var household = await HouseholdTests.CreateHousehold(admin, "Casa");
-        var rita = await CreateChild(admin, household.Id, "Rita", "1234");
+        var rita = await CreateChild(admin, household.Id, "Rita", "4829");
         var code = await FamilyCode(admin, household.Id);
         var anonymous = factory.CreateClient();
 
         var profiles = await anonymous.PostAsJsonAsync("/api/auth/child/profiles", new FamilyCodeRequest(code.ToLowerInvariant()[..4] + "-" + code[4..]));
         var badCode = await anonymous.PostAsJsonAsync("/api/auth/child/profiles", new FamilyCodeRequest("NAOEXISTE"));
-        var login = await anonymous.PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, rita.UserId, "1234"));
+        var login = await anonymous.PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, rita.UserId, "4829"));
         var auth = (await login.Content.ReadFromJsonAsync<AuthResponse>(TestJson.Options))!;
         var child = factory.CreateClient();
         child.DefaultRequestHeaders.Authorization = new("Bearer", auth.AccessToken);
@@ -215,7 +215,7 @@ public class ChildProfileTests(KubicoApiFactory factory) : IClassFixture<KubicoA
     {
         var (admin, _) = await factory.CreateUserAsync("Pai");
         var household = await HouseholdTests.CreateHousehold(admin, "Casa");
-        var tiago = await CreateChild(admin, household.Id, "Tiago", "4321");
+        var tiago = await CreateChild(admin, household.Id, "Tiago", "7316");
         var code = await FamilyCode(admin, household.Id);
         var anonymous = factory.CreateClient();
         Task<HttpResponseMessage> Try(string pin) =>
@@ -227,7 +227,7 @@ public class ChildProfileTests(KubicoApiFactory factory) : IClassFixture<KubicoA
             wrong.Add((await Try("0000")).StatusCode);
         }
 
-        var lockedEvenWithRightPin = await Try("4321");
+        var lockedEvenWithRightPin = await Try("7316");
         var lockedMessage = (await lockedEvenWithRightPin.Content.ReadFromJsonAsync<Microsoft.AspNetCore.Mvc.ProblemDetails>())!.Title;
         var reset = await admin.PutAsJsonAsync($"/api/households/{household.Id}/children/{tiago.UserId}/pin", new ChildPinRequest("2468"), TestJson.Options);
         var afterReset = await Try("2468");
@@ -260,22 +260,22 @@ public class ChildProfileTests(KubicoApiFactory factory) : IClassFixture<KubicoA
         var household = await HouseholdTests.CreateHousehold(admin, "Casa");
         var other = await HouseholdTests.CreateHousehold(otherAdmin, "Outra casa");
         await NotificationTests.Join(admin, guest, household.Id, HouseholdRole.Guest);
-        var rita = await CreateChild(admin, household.Id, "Rita", "1234");
-        var neighbourKid = await CreateChild(otherAdmin, other.Id, "Duarte", "1234");
+        var rita = await CreateChild(admin, household.Id, "Rita", "4829");
+        var neighbourKid = await CreateChild(otherAdmin, other.Id, "Duarte", "4829");
         var code = await FamilyCode(admin, household.Id);
         var anonymous = factory.CreateClient();
 
         var guestCreates = await guest.PostAsJsonAsync($"/api/households/{household.Id}/children", new CreateChildProfileRequest("Zé", "1111"), TestJson.Options);
         var guestCode = await guest.PostAsync($"/api/households/{household.Id}/family-code", null);
-        var otherHouseKid = await anonymous.PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, neighbourKid.UserId, "1234"));
+        var otherHouseKid = await anonymous.PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, neighbourKid.UserId, "4829"));
         var renamed = await admin.PutAsJsonAsync($"/api/households/{household.Id}/children/{rita.UserId}",
             new UpdateChildProfileRequest("Rita Maria", new DateOnly(2016, 5, 3)), TestJson.Options);
         var renamedDto = (await renamed.Content.ReadFromJsonAsync<MemberDto>(TestJson.Options))!;
         (await admin.DeleteAsync($"/api/households/{household.Id}/family-code")).EnsureSuccessStatusCode();
-        var oldCode = await anonymous.PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, rita.UserId, "1234"));
+        var oldCode = await anonymous.PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, rita.UserId, "4829"));
         var newCode = await FamilyCode(admin, household.Id);
         (await admin.DeleteAsync($"/api/households/{household.Id}/members/{rita.UserId}")).EnsureSuccessStatusCode();
-        var removedProfile = await anonymous.PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(newCode, rita.UserId, "1234"));
+        var removedProfile = await anonymous.PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(newCode, rita.UserId, "4829"));
 
         Assert.Equal(HttpStatusCode.Forbidden, guestCreates.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, guestCode.StatusCode);

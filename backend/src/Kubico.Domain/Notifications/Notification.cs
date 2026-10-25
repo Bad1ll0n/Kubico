@@ -25,6 +25,9 @@ public enum NotificationKind
 
     /// <summary>A tua mesada foi paga.</summary>
     AllowancePaid = 7,
+
+    /// <summary>Um perfil de criança ficou bloqueado por PINs errados (para quem gere a casa).</summary>
+    ChildPinLocked = 8,
 }
 
 /// <summary>

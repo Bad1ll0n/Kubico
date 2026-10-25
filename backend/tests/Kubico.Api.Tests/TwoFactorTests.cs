@@ -108,14 +108,14 @@ public class TwoFactorTests(KubicoApiFactory factory) : IClassFixture<KubicoApiF
     {
         var (admin, _) = await factory.CreateUserAsync("Mãe");
         var household = await HouseholdTests.CreateHousehold(admin, "Casa");
-        var rita = await ChildProfileTests.CreateChild(admin, household.Id, "Rita", "1234");
+        var rita = await ChildProfileTests.CreateChild(admin, household.Id, "Rita", "4829");
         var code = await ChildProfileTests.FamilyCode(admin, household.Id);
-        var login = await factory.CreateClient().PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, rita.UserId, "1234"));
+        var login = await factory.CreateClient().PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, rita.UserId, "4829"));
         var child = factory.CreateClient();
         child.DefaultRequestHeaders.Authorization = new("Bearer", (await login.Content.ReadFromJsonAsync<AuthResponse>(TestJson.Options))!.AccessToken);
 
         Assert.Equal(HttpStatusCode.Forbidden,
-            (await child.PostAsJsonAsync("/api/account/2fa/setup", new TwoFactorSetupRequest("1234"), TestJson.Options)).StatusCode);
+            (await child.PostAsJsonAsync("/api/account/2fa/setup", new TwoFactorSetupRequest("4829"), TestJson.Options)).StatusCode);
     }
 
     /// <summary>Liga a verificação e devolve o segredo.</summary>

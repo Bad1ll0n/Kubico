@@ -36,6 +36,9 @@ public class User : IVersioned
 
     public DateTimeOffset? PinLockedUntil { get; set; }
 
+    /// <summary>Bloqueios seguidos do PIN (cada um mais longo: <see cref="PinLockoutFor"/>); volta a zero com o PIN certo.</summary>
+    public int PinLockouts { get; set; }
+
     /// <summary>Verificação em dois passos: o segredo das apps de autenticação (cifrado). Null quando está desligada.</summary>
     public string? TotpSecret { get; set; }
 
@@ -84,20 +87,21 @@ public class User : IVersioned
 
     public bool IsPinLocked(DateTimeOffset now) => PinLockedUntil is { } until && now < until;
 
-    /// <summary>Conta um PIN errado; ao chegar ao limite, bloqueia o perfil e volta a contar do zero.</summary>
-    public void RegisterWrongPin(DateTimeOffset now)
+    /// <summary>
+    /// Quanto dura o bloqueio número <paramref name="lockouts"/> seguido: 15 minutos, depois 1 hora, depois 24 horas.
+    /// Assim, adivinhar um PIN de 4 algarismos passa de uns dias a anos.
+    /// </summary>
+    public static TimeSpan PinLockoutFor(int lockouts) => lockouts switch
     {
-        FailedPinAttempts++;
-        if (FailedPinAttempts >= MaxPinAttempts)
-        {
-            PinLockedUntil = now + PinLockout;
-            FailedPinAttempts = 0;
-        }
-    }
+        <= 1 => PinLockout,
+        2 => TimeSpan.FromHours(1),
+        _ => TimeSpan.FromHours(24),
+    };
 
     public void RegisterRightPin()
     {
         FailedPinAttempts = 0;
         PinLockedUntil = null;
+        PinLockouts = 0;
     }
 }

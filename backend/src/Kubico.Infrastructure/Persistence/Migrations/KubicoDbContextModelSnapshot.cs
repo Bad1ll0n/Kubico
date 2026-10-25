@@ -1168,6 +1168,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("PinLockedUntil")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("PinLockouts")
+                        .HasColumnType("integer");
+
                     b.PrimitiveCollection<List<string>>("RecoveryCodeHashes")
                         .IsRequired()
                         .HasColumnType("text[]");

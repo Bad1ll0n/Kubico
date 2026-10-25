@@ -1,5 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using Kubico.Api.Common;
+using Kubico.Api.Notifications;
+using Kubico.Domain.Households;
+using Kubico.Domain.Notifications;
 using Kubico.Domain.Users;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -16,8 +19,9 @@ public record ChildProfileOptionDto(Guid UserId, string DisplayName, string Colo
 
 /// <summary>
 /// Entrada das crianças sem email: o código da família diz que casa é, a criança escolhe o seu perfil e escreve o
-/// PIN. Ao fim de 5 PINs errados seguidos, o perfil fica bloqueado 15 minutos, mesmo com PINs enviados em
-/// simultâneo (ver <see cref="AttemptLimits"/>). Há também um limite de pedidos por IP.
+/// PIN. Ao fim de 5 PINs errados seguidos, o perfil fica bloqueado (15 minutos, depois 1 hora, depois 24 horas),
+/// mesmo com PINs enviados em simultâneo (ver <see cref="AttemptLimits"/>), e os adultos da casa são avisados (podem
+/// desbloquear mudando o PIN). Há também um limite de pedidos por IP.
 /// </summary>
 public static class ChildSignInEndpoints
 {
@@ -55,6 +59,7 @@ public static class ChildSignInEndpoints
         KubicoDbContext db,
         IPasswordHasher<User> hasher,
         SessionService sessions,
+        NotificationService notifications,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -82,9 +87,13 @@ public static class ChildSignInEndpoints
         if (child.PinHash is null
             || hasher.VerifyHashedPassword(child, child.PinHash, request.Pin) == PasswordVerificationResult.Failed)
         {
-            return await AttemptLimits.PinFailedAsync(db, child.Id, now, ct)
-                ? Locked(AttemptLimits.MinutesLeft(now + User.PinLockout, now))
-                : Results.Problem(title: "PIN errado.", statusCode: StatusCodes.Status401Unauthorized);
+            if (await AttemptLimits.PinFailedAsync(db, child.Id, now, ct) is not { } lockout)
+            {
+                return Results.Problem(title: "PIN errado.", statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            await WarnAdultsAsync(db, notifications, householdId!.Value, child, ct);
+            return Locked(AttemptLimits.MinutesLeft(lockout.Until, now));
         }
 
         await AttemptLimits.PinSucceededAsync(db, child.Id, ct);
@@ -98,7 +107,27 @@ public static class ChildSignInEndpoints
     private static IResult InvalidCode() =>
         Results.Problem(title: "Código da família inválido. Pede-o a um adulto da casa.", statusCode: StatusCodes.Status404NotFound);
 
+    /// <summary>
+    /// Um perfil ficou bloqueado: quem gere a casa sabe logo (pode ser alguém a tentar adivinhar o PIN, ou a impedir a
+    /// criança de entrar). Mudar o PIN desbloqueia-o.
+    /// </summary>
+    private static async Task WarnAdultsAsync(
+        KubicoDbContext db, NotificationService notifications, Guid householdId, User child, CancellationToken ct)
+    {
+        var adults = await db.Memberships
+            .Where(m => m.HouseholdId == householdId && (m.Role == HouseholdRole.Admin || m.Role == HouseholdRole.Adult))
+            .Select(m => m.UserId)
+            .ToListAsync(ct);
+        await notifications.NotifyAsync(
+            householdId, adults, child.Id, NotificationKind.ChildPinLocked,
+            $"O perfil de {child.DisplayName} ficou bloqueado por PINs errados",
+            "Se não foi a criança, muda o PIN no perfil dela: isso também o desbloqueia.",
+            child.Id, ct);
+    }
+
     private static IResult Locked(int minutes) => Results.Problem(
-        title: $"Demasiados PINs errados. Tenta outra vez daqui a {minutes} minutos.",
+        title: minutes > 60
+            ? $"Demasiados PINs errados. Tenta outra vez daqui a {(int)Math.Ceiling(minutes / 60.0)} horas ou pede a um adulto para mudar o PIN."
+            : $"Demasiados PINs errados. Tenta outra vez daqui a {minutes} minutos.",
         statusCode: StatusCodes.Status429TooManyRequests);
 }
