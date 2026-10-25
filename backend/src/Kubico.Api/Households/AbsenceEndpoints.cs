@@ -151,7 +151,7 @@ public static class AbsenceEndpoints
             .ToListAsync(ct);
         var isAway = MemberAbsence.Checker([.. all, absence]);
         var chores = await db.Chores
-            .Where(c => c.HouseholdId == householdId && c.CompletedAt == null && c.AssigneeUserId == request.UserId)
+            .Where(c => c.HouseholdId == householdId && c.CompletedAt == null && c.ArchivedAt == null && c.AssigneeUserId == request.UserId)
             .ToListAsync(ct);
         var moved = chores.Where(c => c.SkipAway(isAway, today, now) || c.PauseFor(absence, today, now)).ToList();
         activity.Capture(householdId, me, null, request.UserId == me

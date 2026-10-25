@@ -286,7 +286,7 @@ public static class ActivityEndpoints
             }
             else if (type == typeof(Chore))
             {
-                var chore = await db.Chores.AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct);
+                var chore = await db.Chores.AsNoTracking().SingleOrDefaultAsync(c => c.Id == id && c.ArchivedAt == null, ct);
                 await (chore is null ? notifier.ChoreDeleted(householdId, id, ct) : notifier.ChoreUpserted(householdId, ChoreEndpoints.ToDto(chore), ct));
             }
             else if (type == typeof(CalendarEvent))

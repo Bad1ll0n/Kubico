@@ -104,7 +104,7 @@ public static class ChoreEndpoints
             return error;
         }
 
-        var query = db.Chores.AsNoTracking().Where(c => c.HouseholdId == householdId);
+        var query = db.Chores.AsNoTracking().Where(c => c.HouseholdId == householdId && c.ArchivedAt == null);
         if (includeDone != true)
         {
             query = query.Where(c => c.CompletedAt == null);
@@ -191,7 +191,7 @@ public static class ChoreEndpoints
         }
 
         var chore = await db.Chores.Include(c => c.Household)
-            .SingleOrDefaultAsync(c => c.Id == choreId && c.HouseholdId == householdId, ct);
+            .SingleOrDefaultAsync(c => c.Id == choreId && c.HouseholdId == householdId && c.ArchivedAt == null, ct);
         if (chore is null)
         {
             return Results.NotFound();
@@ -223,6 +223,7 @@ public static class ChoreEndpoints
         ActivityLog activity,
         HouseholdAccess access,
         HouseholdNotifier notifier,
+        TimeProvider clock,
         CancellationToken ct)
     {
         var (_, _, error) = await access.RequireAsync(
@@ -232,19 +233,29 @@ public static class ChoreEndpoints
             return error;
         }
 
-        var chore = await db.Chores.SingleOrDefaultAsync(c => c.Id == choreId && c.HouseholdId == householdId, ct);
+        var chore = await db.Chores.SingleOrDefaultAsync(
+            c => c.Id == choreId && c.HouseholdId == householdId && c.ArchivedAt == null, ct);
         if (chore is null)
         {
             return Results.NotFound();
         }
 
-        // O histórico da tarefa (quem a fez) vai com ela: carrega-se para se poder repor.
-        await db.ChoreCompletions.Where(c => c.ChoreId == choreId).LoadAsync(ct);
-        db.Chores.Remove(chore);
+        // Com histórico, a tarefa fica arquivada: quem a fez não perde os pontos (que podem já ter sido trocados), nem
+        // as estatísticas, nem o extra da mesada. Sem histórico, apaga-se de vez.
+        if (await db.ChoreCompletions.AnyAsync(c => c.ChoreId == choreId, ct))
+        {
+            var now = clock.GetUtcNow();
+            chore.ArchivedAt = now;
+            chore.UpdatedAt = now;
+        }
+        else
+        {
+            db.Chores.Remove(chore);
+        }
+
         activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Chores, $"apagou a tarefa «{chore.Title}»");
         await db.SaveChangesAsync(ct);
         await notifier.ChoreDeleted(householdId, choreId, ct);
-        await notifier.PointsChanged(householdId, ct); // As conclusões (e os pontos) foram com a tarefa.
         return Results.NoContent();
     }
 
@@ -271,7 +282,7 @@ public static class ChoreEndpoints
 
         var chore = await db.Chores
             .Include(c => c.Household)
-            .SingleOrDefaultAsync(c => c.Id == choreId && c.HouseholdId == householdId, ct);
+            .SingleOrDefaultAsync(c => c.Id == choreId && c.HouseholdId == householdId && c.ArchivedAt == null, ct);
         if (chore is null)
         {
             return Results.NotFound();
@@ -342,7 +353,7 @@ public static class ChoreEndpoints
 
         var chore = await db.Chores
             .Include(c => c.Household)
-            .SingleOrDefaultAsync(c => c.Id == choreId && c.HouseholdId == householdId, ct);
+            .SingleOrDefaultAsync(c => c.Id == choreId && c.HouseholdId == householdId && c.ArchivedAt == null, ct);
         if (chore is null)
         {
             return Results.NotFound();
@@ -613,6 +624,13 @@ public static class ChoreEndpoints
         }
 
         chore.DueDate = dueDate;
+
+        // Uma tarefa já feita que passa a repetir-se volta a estar por fazer (senão ficava escondida para sempre).
+        if (request.Recurrence != ChoreRecurrence.None)
+        {
+            chore.CompletedAt = null;
+        }
+
         chore.Recurrence = request.Recurrence;
         chore.RotationUserIds = [.. request.RotationUserIds ?? []];
         chore.TimeOfDay = request.TimeOfDay;

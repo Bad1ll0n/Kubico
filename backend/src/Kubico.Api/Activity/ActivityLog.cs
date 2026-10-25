@@ -101,6 +101,7 @@ public sealed class ActivityLog(KubicoDbContext db, TimeProvider clock)
         }
 
         // O que mudou ou foi apagado volta ao que era (os de que outros dependem primeiro).
+        var restored = new List<object>();
         foreach (var before in data.Before.OrderBy(b => Order(b.Key)))
         {
             var (type, id) = Parse(before.Key);
@@ -121,11 +122,68 @@ public sealed class ActivityLog(KubicoDbContext db, TimeProvider clock)
                     property.CurrentValue = value.Deserialize(property.Metadata.ClrType, Json);
                 }
             }
+
+            // O que volta é uma versão nova: com o UpdatedAt antigo, os aparelhos que já tinham a mudança desfeita
+            // ignoravam-na (ficam com a versão mais recente).
+            if (target.Metadata.FindProperty("UpdatedAt") is { } updatedAt && updatedAt.ClrType == typeof(DateTimeOffset))
+            {
+                target.Property(updatedAt.Name).CurrentValue = clock.GetUtcNow();
+            }
+
+            restored.Add(entity);
         }
+
+        await DropMissingReferencesAsync(entry.HouseholdId, restored, ct);
 
         entry.UndoneAt = clock.GetUtcNow();
         entry.UndoneByUserId = userId;
         return OwnKeys(entry);
+    }
+
+    /// <summary>
+    /// O que volta pode apontar para o que entretanto desapareceu: quem saiu da casa (não volta a responsável, à
+    /// rotação, aos participantes nem às boleias) e fotos de prova já apagadas (a conclusão volta sem foto, em vez de
+    /// falhar com 500).
+    /// </summary>
+    private async Task DropMissingReferencesAsync(Guid householdId, List<object> restored, CancellationToken ct)
+    {
+        var chores = restored.OfType<Chore>().ToList();
+        var events = restored.OfType<CalendarEvent>().ToList();
+        if (chores.Count > 0 || events.Count > 0)
+        {
+            var members = (await db.Memberships.Where(m => m.HouseholdId == householdId).Select(m => m.UserId).ToListAsync(ct))
+                .ToHashSet();
+            var now = clock.GetUtcNow();
+            foreach (var chore in chores)
+            {
+                foreach (var gone in chore.RotationUserIds.Append(chore.AssigneeUserId ?? Guid.Empty)
+                    .Where(id => id != Guid.Empty && !members.Contains(id)).Distinct().ToList())
+                {
+                    chore.RemoveMember(gone, now);
+                }
+            }
+
+            foreach (var calendarEvent in events)
+            {
+                var referenced = calendarEvent.ParticipantUserIds
+                    .Append(calendarEvent.DropOffUserId ?? Guid.Empty).Append(calendarEvent.PickUpUserId ?? Guid.Empty);
+                foreach (var gone in referenced.Where(id => id != Guid.Empty && !members.Contains(id)).Distinct().ToList())
+                {
+                    calendarEvent.RemoveMember(gone, now);
+                }
+            }
+        }
+
+        var withPhoto = restored.OfType<ChoreCompletion>().Where(c => c.PhotoId is not null).ToList();
+        if (withPhoto.Count > 0)
+        {
+            var ids = withPhoto.Select(c => c.PhotoId!.Value).ToList();
+            var existing = (await db.ChorePhotos.Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
+            foreach (var completion in withPhoto.Where(c => !existing.Contains(c.PhotoId!.Value)))
+            {
+                completion.PhotoId = null;
+            }
+        }
     }
 
     /// <summary>Só se desfaz a última alteração (ainda não desfeita) de cada uma das coisas que tocou.</summary>

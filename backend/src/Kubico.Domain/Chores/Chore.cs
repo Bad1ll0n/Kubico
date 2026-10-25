@@ -57,6 +57,12 @@ public class Chore : IVersioned
     /// <summary>Preenchido quando uma tarefa não recorrente é concluída.</summary>
     public DateTimeOffset? CompletedAt { get; set; }
 
+    /// <summary>
+    /// Apagada, mas com histórico: sai das listas e não se conclui mais, mas as conclusões (os pontos, as estatísticas
+    /// e o extra da mesada) ficam. Uma tarefa sem conclusões apaga-se de vez.
+    /// </summary>
+    public DateTimeOffset? ArchivedAt { get; set; }
+
     public Guid CreatedByUserId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
@@ -78,8 +84,9 @@ public class Chore : IVersioned
     public bool IsAvailableOn(DateOnly today) => AvailableFrom is not { } from || today >= from;
 
     /// <summary>
-    /// Uma conclusão não foi aceite: a tarefa volta a estar por fazer, hoje, por quem a fez (numa tarefa que se
-    /// repete, a rotação continua a partir dessa pessoa).
+    /// A última conclusão não foi aceite: a tarefa volta a estar por fazer por quem a fez (numa tarefa que se repete,
+    /// a rotação continua a partir dessa pessoa). Numa que se repete, volta a ocorrência que tinha sido feita (o prazo
+    /// anterior), para não mudar de dia: uma semanal à segunda continua à segunda.
     /// </summary>
     public void Reopen(Guid userId, DateOnly today, DateTimeOffset now)
     {
@@ -90,7 +97,7 @@ public class Chore : IVersioned
         }
         else
         {
-            DueDate = today;
+            DueDate = DueDate is { } due ? Previous(due, Recurrence, DueDay ?? due.Day) : today;
         }
 
         AssigneeUserId = userId;

@@ -98,11 +98,17 @@ public static class ChildProfileEndpoints
         };
         db.Users.Add(child);
         db.Memberships.Add(membership);
+        var today = (await db.Households.AsNoTracking().SingleAsync(h => h.Id == householdId, ct)).Today(now);
+        var routines = await HouseholdTemplates.GiveRoutinesToAsync(db, householdId, child.Id, today, now, ct);
         activity.Capture(householdId, principal.GetUserId(), null, $"criou o perfil de criança de {membership.User.DisplayName}", undoable: false);
         await db.SaveChangesAsync(ct);
 
         var dto = MemberEndpoints.ToDto(membership);
         await notifier.MemberUpserted(householdId, dto, ct);
+        foreach (var routine in routines)
+        {
+            await notifier.ChoreUpserted(householdId, Chores.ChoreEndpoints.ToDto(routine), ct);
+        }
         return Results.Created($"/api/households/{householdId}/members/{child.Id}", dto);
     }
 

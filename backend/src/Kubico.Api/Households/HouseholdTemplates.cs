@@ -4,6 +4,7 @@ using Kubico.Domain.Households;
 using Kubico.Domain.Rewards;
 using Kubico.Domain.Shopping;
 using Kubico.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace Kubico.Api.Households;
 
@@ -124,6 +125,7 @@ public static class HouseholdTemplates
         }
 
         var today = household.Today(now);
+        var weekly = 0;
         foreach (var name in definition.Lists)
         {
             db.ShoppingLists.Add(new ShoppingList { HouseholdId = household.Id, Name = T(name), CreatedAt = now });
@@ -131,13 +133,15 @@ public static class HouseholdTemplates
 
         foreach (var chore in definition.Chores)
         {
+            // As semanais espalham-se pelos dias seguintes (amanhã, depois, …): o primeiro dia não fica com tudo.
+            var due = chore.Recurrence == ChoreRecurrence.Weekly ? today.AddDays(Math.Min(1 + 2 * weekly++, 6)) : today;
             db.Chores.Add(new Chore
             {
                 HouseholdId = household.Id,
                 Title = T(chore.Title),
                 Points = chore.Points,
-                DueDate = today,
-                DueDay = today.Day,
+                DueDate = due,
+                DueDay = due.Day,
                 Recurrence = chore.Recurrence,
                 TimeOfDay = chore.TimeOfDay,
                 Steps = [.. (chore.Steps ?? []).Select(T)],
@@ -159,5 +163,65 @@ public static class HouseholdTemplates
                 UpdatedAt = now,
             });
         }
+    }
+
+    /// <summary>Os títulos das rotinas dos modelos (em português e em inglês), que são de cada criança.</summary>
+    private static readonly HashSet<string> RoutineTitles =
+    [
+        .. All.SelectMany(d => d.Chores).Where(c => c.Steps is { Count: > 0 })
+            .SelectMany(c => new[] { c.Title, Texts.Translate(c.Title, Texts.English) }),
+    ];
+
+    /// <summary>
+    /// Cada criança tem as suas rotinas da manhã e da noite (cada ocorrência só se conclui uma vez: partilhadas, a
+    /// primeira criança a acabar gastava a dos irmãos). A primeira criança fica com as do modelo, que nascem sem
+    /// responsável; as seguintes recebem uma cópia. Devolve as tarefas criadas ou mudadas (por gravar).
+    /// </summary>
+    public static async Task<List<Chore>> GiveRoutinesToAsync(
+        KubicoDbContext db, Guid householdId, Guid childId, DateOnly today, DateTimeOffset now, CancellationToken ct)
+    {
+        var routines = (await db.Chores
+                .Where(c => c.HouseholdId == householdId && c.ArchivedAt == null && c.Recurrence != ChoreRecurrence.None)
+                .ToListAsync(ct))
+            .Where(c => c.Steps.Count > 0 && c.RotationUserIds.Count == 0 && RoutineTitles.Contains(c.Title))
+            .ToList();
+
+        var changed = new List<Chore>();
+        foreach (var routine in routines.Where(c => c.AssigneeUserId is null))
+        {
+            routine.AssigneeUserId = childId;
+            routine.UpdatedAt = now;
+            changed.Add(routine);
+        }
+
+        foreach (var model in routines.Where(c => c.AssigneeUserId != childId).GroupBy(c => c.Title).Select(g => g.First()))
+        {
+            if (routines.Any(c => c.Title == model.Title && c.AssigneeUserId == childId))
+            {
+                continue;
+            }
+
+            var copy = new Chore
+            {
+                HouseholdId = householdId,
+                Title = model.Title,
+                Notes = model.Notes,
+                Points = model.Points,
+                DueDate = today,
+                DueDay = today.Day,
+                Recurrence = model.Recurrence,
+                TimeOfDay = model.TimeOfDay,
+                Steps = [.. model.Steps],
+                RequiresPhoto = model.RequiresPhoto,
+                AssigneeUserId = childId,
+                CreatedByUserId = model.CreatedByUserId,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.Chores.Add(copy);
+            changed.Add(copy);
+        }
+
+        return changed;
     }
 }

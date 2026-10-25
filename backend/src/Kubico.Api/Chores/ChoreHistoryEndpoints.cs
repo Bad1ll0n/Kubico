@@ -31,6 +31,9 @@ public record ChoreHistoryItemDto(
 /// </summary>
 public static class ChoreHistoryEndpoints
 {
+    /// <summary>Até quantos dias depois se pode não aceitar uma conclusão (o mesmo que o histórico mostra).</summary>
+    private const int MaxRejectDays = 30;
+
     public static RouteGroupBuilder MapChoreHistoryEndpoints(this RouteGroupBuilder api)
     {
         var chores = api.MapGroup("/households/{householdId:guid}/chores")
@@ -205,6 +208,12 @@ public static class ChoreHistoryEndpoints
             return Results.Problem(title: "Esta tarefa já não foi aceite.", statusCode: StatusCodes.Status409Conflict);
         }
 
+        if (completion.CompletedAt < clock.GetUtcNow().AddDays(-MaxRejectDays))
+        {
+            return Results.Problem(
+                title: "Só se pode não aceitar o que foi feito nos últimos 30 dias.", statusCode: StatusCodes.Status409Conflict);
+        }
+
         var now = clock.GetUtcNow();
         var chore = completion.Chore;
         var doer = await db.Users.Where(u => u.Id == completion.UserId).Select(u => u.DisplayName).SingleOrDefaultAsync(ct) ?? "antigo membro";
@@ -219,9 +228,16 @@ public static class ChoreHistoryEndpoints
             }
         }
 
+        // Só a última conclusão faz a tarefa voltar atrás; nas mais antigas (já houve outra depois) tiram-se só os pontos.
+        var isLatest = !await db.ChoreCompletions.AnyAsync(
+            c => c.ChoreId == chore.Id && c.RejectedAt == null && c.CompletedAt > completion.CompletedAt, ct);
         completion.RejectedAt = now;
         completion.RejectedByUserId = userId;
-        chore.Reopen(completion.UserId, chore.Household.Today(now), now);
+        if (isLatest && chore.ArchivedAt is null)
+        {
+            chore.Reopen(completion.UserId, chore.Household.Today(now), now);
+        }
+
         activity.Capture(householdId, userId, HouseholdModule.Chores, $"não aceitou «{chore.Title}», feita por {doer}");
         await db.SaveChangesAsync(ct);
 
