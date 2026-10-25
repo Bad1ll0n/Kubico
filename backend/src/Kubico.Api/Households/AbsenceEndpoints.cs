@@ -95,6 +95,14 @@ public static class AbsenceEndpoints
             });
         }
 
+        if (!SupportedDates.IsSupported(request.StartDate) || !SupportedDates.IsSupported(request.EndDate))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["EndDate"] = [SupportedDates.OutOfRangeMessage],
+            });
+        }
+
         if (request.EndDate < request.StartDate || request.EndDate.DayNumber - request.StartDate.DayNumber >= MaxDays)
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>

@@ -202,6 +202,14 @@ public static class AllowanceEndpoints
             return error;
         }
 
+        if (!SupportedDates.IsSupported(request.PeriodStart))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["PeriodStart"] = [SupportedDates.OutOfRangeMessage],
+            });
+        }
+
         var allowance = await db.Allowances.AsNoTracking().SingleOrDefaultAsync(a => a.HouseholdId == householdId && a.UserId == userId, ct);
         if (allowance is null)
         {

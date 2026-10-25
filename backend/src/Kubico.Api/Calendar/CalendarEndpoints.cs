@@ -115,7 +115,7 @@ public static class CalendarEndpoints
         }
 
         if (from is not { } first || to is not { } last || last < first
-            || last.DayNumber - first.DayNumber >= MaxRangeDays || !IsSupported(first) || !IsSupported(last))
+            || last.DayNumber - first.DayNumber >= MaxRangeDays || !SupportedDates.IsSupported(first) || !SupportedDates.IsSupported(last))
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>
             {
@@ -575,9 +575,9 @@ public static class CalendarEndpoints
             {
                 errors["EndDate"] = ["O último dia não pode ser antes do primeiro."];
             }
-            else if (!IsSupported(startDate) || !IsSupported(request.EndDate ?? startDate))
+            else if (!SupportedDates.IsSupported(startDate) || !SupportedDates.IsSupported(request.EndDate ?? startDate))
             {
-                errors["StartDate"] = [OutOfRangeMessage];
+                errors["StartDate"] = [SupportedDates.OutOfRangeMessage];
             }
         }
         else if (request.StartsAt is not { } startsAt || request.EndsAt is not { } endsAt)
@@ -588,10 +588,10 @@ public static class CalendarEndpoints
         {
             errors["EndsAt"] = ["O fim tem de ser depois do início."];
         }
-        else if (!IsSupported(DateOnly.FromDateTime(startsAt.UtcDateTime))
-            || !IsSupported(DateOnly.FromDateTime(endsAt.UtcDateTime)))
+        else if (!SupportedDates.IsSupported(DateOnly.FromDateTime(startsAt.UtcDateTime))
+            || !SupportedDates.IsSupported(DateOnly.FromDateTime(endsAt.UtcDateTime)))
         {
-            errors["StartsAt"] = [OutOfRangeMessage];
+            errors["StartsAt"] = [SupportedDates.OutOfRangeMessage];
         }
 
         if (!string.IsNullOrWhiteSpace(request.Recurrence) && !RecurrenceRule.TryParse(request.Recurrence, out _))
@@ -632,10 +632,6 @@ public static class CalendarEndpoints
 
         return errors.Count == 0 ? null : Results.ValidationProblem(errors);
     }
-
-    private const string OutOfRangeMessage = "As datas têm de estar entre 1900 e 2200.";
-
-    private static bool IsSupported(DateOnly date) => date.Year is >= 1900 and <= 2200;
 
     private static bool HasControl(string? text, char[]? allowed = null) =>
         text is not null && text.Any(c => char.IsControl(c) && (allowed is null || !allowed.Contains(c)));

@@ -554,6 +554,11 @@ public static class ChoreEndpoints
                 .ToListAsync(ct);
 
         var errors = new Dictionary<string, string[]>();
+        if (!SupportedDates.IsSupported(request.DueDate))
+        {
+            errors["DueDate"] = [SupportedDates.OutOfRangeMessage];
+        }
+
         if (!Enum.IsDefined(request.Recurrence))
         {
             errors["Recurrence"] = ["Essa repetição não existe."];

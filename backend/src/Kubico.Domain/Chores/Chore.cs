@@ -231,12 +231,12 @@ public class Chore : IVersioned
 
         if (Recurrence == ChoreRecurrence.None)
         {
-            DueDate = absence.EndDate.AddDays(1);
+            DueDate = absence.EndDate == DateOnly.MaxValue ? DateOnly.MaxValue : absence.EndDate.AddDays(1);
         }
         else
         {
             var anchor = DueDay ?? due.Day;
-            while (due <= absence.EndDate)
+            while (due <= absence.EndDate && due != DateOnly.MaxValue)
             {
                 due = Advance(due, Recurrence, anchor);
             }
@@ -283,17 +283,20 @@ public class Chore : IVersioned
         return next;
     }
 
+    /// <summary>A ocorrência seguinte a <paramref name="date"/>; no fim do calendário fica lá (nunca lança).</summary>
     private static DateOnly Advance(DateOnly date, ChoreRecurrence recurrence, int anchor) => recurrence switch
     {
+        _ when date.Year == DateOnly.MaxValue.Year && date.Month == 12 => DateOnly.MaxValue,
         ChoreRecurrence.Daily => date.AddDays(1),
         ChoreRecurrence.Weekly => date.AddDays(7),
         ChoreRecurrence.Monthly => OnDay(date.AddMonths(1), anchor),
         _ => throw new InvalidOperationException("Tarefa sem recorrência não tem próximo prazo."),
     };
 
-    /// <summary>A ocorrência anterior a <paramref name="date"/>.</summary>
+    /// <summary>A ocorrência anterior a <paramref name="date"/>; no início do calendário fica lá (nunca lança).</summary>
     private static DateOnly Previous(DateOnly date, ChoreRecurrence recurrence, int anchor) => recurrence switch
     {
+        _ when date.Year == DateOnly.MinValue.Year && date.Month == 1 => DateOnly.MinValue,
         ChoreRecurrence.Daily => date.AddDays(-1),
         ChoreRecurrence.Weekly => date.AddDays(-7),
         ChoreRecurrence.Monthly => OnDay(date.AddMonths(-1), anchor),
