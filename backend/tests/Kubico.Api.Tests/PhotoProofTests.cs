@@ -12,8 +12,16 @@ namespace Kubico.Api.Tests;
 /// <summary>Fotos de prova: a tarefa só se conclui com a foto, e quem gere as tarefas pode não aceitar.</summary>
 public class PhotoProofTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFactory>
 {
-    /// <summary>Um "JPEG" pequeno: basta o início certo para o servidor o reconhecer.</summary>
-    internal static readonly byte[] Jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, .. "JFIF"u8, 0x00, 0x01, 0x02, 0x03];
+    /// <summary>Um "JPEG" pequeno: a estrutura certa (SOF com 16 × 16, SOS, EOI) para o servidor o reconhecer.</summary>
+    internal static readonly byte[] Jpeg = JpegOf(16, 16);
+
+    internal static byte[] JpegOf(int width, int height) =>
+    [
+        0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, .. "JFIF"u8, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
+        0xFF, 0xC0, 0x00, 0x0B, 0x08, (byte)(height >> 8), (byte)height, (byte)(width >> 8), (byte)width, 0x01, 0x01, 0x11, 0x00,
+        0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00, 0x12, 0x34, 0xFF, 0x00, 0x56,
+        0xFF, 0xD9,
+    ];
 
     [Fact]
     public async Task A_chore_that_needs_a_photo_is_completed_with_one_and_the_adults_can_see_it()

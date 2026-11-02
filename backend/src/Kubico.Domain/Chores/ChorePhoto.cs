@@ -21,6 +21,9 @@ public class ChorePhoto
 
     public const int MaxBytes = 5 * 1024 * 1024;
 
+    /// <summary>Quantas fotos por usar (que ainda não provam nenhuma tarefa) cada pessoa pode ter numa casa.</summary>
+    public const int MaxUnusedPerPerson = 20;
+
     /// <summary>O tipo da imagem pelos primeiros bytes (JPEG, PNG ou WebP), ou null se não for nenhum destes.</summary>
     public static string? DetectContentType(ReadOnlySpan<byte> data)
     {

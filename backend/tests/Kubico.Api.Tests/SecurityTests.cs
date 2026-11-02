@@ -218,7 +218,8 @@ public class SecurityTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFa
     {
         var (admin, _, household) = await Fase1.HouseholdAsync(factory);
         var exif = Encoding.ASCII.GetBytes("Exif\0\0GPSLatitude=38.7223;GPSLongitude=-9.1393");
-        byte[] jpeg = [0xFF, 0xD8, 0xFF, 0xE1, 0x00, (byte)(exif.Length + 2), .. exif, 0xFF, 0xDB, 0x00, 0x03, 0x01, 0xFF, 0xD9];
+        byte[] image = PhotoProofTests.Jpeg[20..];
+        byte[] jpeg = [0xFF, 0xD8, 0xFF, 0xE1, 0x00, (byte)(exif.Length + 2), .. exif, .. image, .. "<script>alert(1)</script>"u8];
         byte[] html = [0xFF, 0xD8, 0xFF, .. "<html><script>alert(1)</script></html>"u8];
 
         var stored = await PhotoProofTests.Upload(admin, household, jpeg);
@@ -226,7 +227,7 @@ public class SecurityTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFa
         var disguised = await PhotoProofTests.UploadRaw(admin, household, html);
 
         Assert.DoesNotContain("GPS", Encoding.ASCII.GetString(served));
-        Assert.Equal([0xFF, 0xD8, 0xFF, 0xDB, 0x00, 0x03, 0x01, 0xFF, 0xD9], served);
+        Assert.Equal([0xFF, 0xD8, .. image], served);
         Assert.Equal(HttpStatusCode.BadRequest, disguised.StatusCode);
     }
 

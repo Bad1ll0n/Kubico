@@ -8,6 +8,7 @@ using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
 using Kubico.Domain.Notifications;
 using Kubico.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Kubico.Api.Chores;
@@ -41,7 +42,9 @@ public static class ChoreHistoryEndpoints
             .RequireAuthorization();
 
         // A app autentica-se com o token no cabeçalho (sem cookies): não há pedidos forjados por outro site.
-        chores.MapPost("/photos", UploadPhoto).DisableAntiforgery();
+        chores.MapPost("/photos", UploadPhoto).DisableAntiforgery()
+            // Um pedido maior do que a foto máxima (mais a margem do multipart) é cortado logo, sem o ler todo.
+            .WithMetadata(new RequestSizeLimitAttribute(ChorePhoto.MaxBytes + 64 * 1024));
         chores.MapGet("/photos/{photoId:guid}", GetPhoto);
         chores.MapGet("/history", GetHistory);
         chores.MapPost("/completions/{completionId:guid}/reject", Reject);
@@ -80,8 +83,29 @@ public static class ChoreHistoryEndpoints
             return Invalid("Isto não parece uma foto (JPEG, PNG ou WebP).");
         }
 
+        if (PhotoMetadata.ReadSize(data, contentType) is not { Width: > 0, Height: > 0 } size)
+        {
+            return Invalid("Isto não parece uma foto (JPEG, PNG ou WebP).");
+        }
+
+        if (size.Width > PhotoMetadata.MaxSide || size.Height > PhotoMetadata.MaxSide)
+        {
+            return Invalid("A foto é grande demais (no máximo 4096 × 4096 píxeis).");
+        }
+
         var now = clock.GetUtcNow();
         await CleanUpAsync(db, householdId, now, ct);
+
+        // Cada pessoa só tem algumas fotos por usar de cada vez (as que não provam nenhuma tarefa saem ao fim de um dia):
+        // um convidado ou uma criança não enchem a base de dados com envios seguidos.
+        var unused = await db.ChorePhotos.CountAsync(p => p.HouseholdId == householdId && p.UploadedByUserId == userId
+            && !db.ChoreCompletions.Any(c => c.PhotoId == p.Id), ct);
+        if (unused >= ChorePhoto.MaxUnusedPerPerson)
+        {
+            return Results.Problem(
+                title: "Tens demasiadas fotos por usar. Conclui as tarefas com elas ou espera até amanhã.",
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
         var stored = new ChorePhoto
         {
             HouseholdId = householdId, UploadedByUserId = userId, ContentType = contentType, Data = data, CreatedAt = now,

@@ -97,7 +97,12 @@ class _ChorePhotoImageState extends State<ChorePhotoImage> {
         AsyncSnapshot(:final data?) => Image.memory(
           data,
           fit: widget.fit,
-          cacheWidth: widget.size == null ? null : (widget.size! * MediaQuery.devicePixelRatioOf(context) * 2).round(),
+          // Na vista completa, no máximo a largura do ecrã: uma imagem enorme (o servidor aceita até 4096 px) não
+          // chega a ser descodificada inteira.
+          cacheWidth:
+              ((widget.size == null ? MediaQuery.sizeOf(context).width : widget.size! * 2) *
+                      MediaQuery.devicePixelRatioOf(context))
+                  .round(),
         ),
         AsyncSnapshot(hasError: true) => const Icon(Icons.broken_image_outlined),
         _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),

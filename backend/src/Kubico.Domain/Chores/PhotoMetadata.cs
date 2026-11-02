@@ -7,10 +7,89 @@ namespace Kubico.Domain.Chores;
 /// sem bibliotecas de imagem: no JPEG os segmentos APP1 e APP13; no PNG os blocos eXIf, tEXt, iTXt e zTXt; no WebP
 /// os blocos EXIF e "XMP " (e os avisos deles no VP8X). O resto da imagem fica igual. Confirma também o início da
 /// estrutura (um ficheiro com 3 bytes de JPEG à frente e HTML a seguir não passa); daí em diante, se a estrutura
-/// estiver estragada, o resto fica como veio.
+/// estiver estragada, o resto fica como veio. No JPEG e no PNG, o que vem depois do fim da imagem sai.
 /// </summary>
 public static class PhotoMetadata
 {
+    /// <summary>
+    /// O lado maior que se aceita, em píxeis. A app envia no máximo 1600; uma imagem de 20 000 × 20 000 de uma só cor
+    /// pesa pouco mas, ao abrir, pedia 1,6 GB de memória ao telemóvel.
+    /// </summary>
+    public const int MaxSide = 4096;
+
+    /// <summary>A largura e a altura da imagem (lidas do cabeçalho), ou null se não se encontrarem.</summary>
+    public static (int Width, int Height)? ReadSize(byte[] data, string contentType) => contentType switch
+    {
+        "image/jpeg" => JpegSize(data),
+        "image/png" when data.Length >= 24 => (
+            (int)Math.Min(BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(16, 4)), int.MaxValue),
+            (int)Math.Min(BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(20, 4)), int.MaxValue)),
+        "image/webp" => WebpSize(data),
+        _ => null,
+    };
+
+    private static (int Width, int Height)? JpegSize(byte[] data)
+    {
+        var pos = 2;
+        while (pos + 9 < data.Length && data[pos] == 0xFF)
+        {
+            var marker = data[pos + 1];
+            if (marker == 0xFF)
+            {
+                pos++;
+                continue;
+            }
+
+            if (marker is 0x01 or (>= 0xD0 and <= 0xD7))
+            {
+                pos += 2;
+                continue;
+            }
+
+            // SOF0–SOF15 (menos DHT, JPG e DAC, que partilham a gama): altura e largura.
+            if (marker is >= 0xC0 and <= 0xCF and not (0xC4 or 0xC8 or 0xCC))
+            {
+                return ((data[pos + 7] << 8) | data[pos + 8], (data[pos + 5] << 8) | data[pos + 6]);
+            }
+
+            if (marker is 0xDA or 0xD9)
+            {
+                return null;
+            }
+
+            pos += 2 + ((data[pos + 2] << 8) | data[pos + 3]);
+        }
+
+        return null;
+    }
+
+    private static (int Width, int Height)? WebpSize(byte[] data)
+    {
+        if (data.Length < 30)
+        {
+            return null;
+        }
+
+        var chunk = data.AsSpan(12, 4);
+        if (chunk.SequenceEqual("VP8X"u8))
+        {
+            return (1 + (data[24] | (data[25] << 8) | (data[26] << 16)), 1 + (data[27] | (data[28] << 8) | (data[29] << 16)));
+        }
+
+        if (chunk.SequenceEqual("VP8L"u8) && data[20] == 0x2F)
+        {
+            var bits = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(21, 4));
+            return (1 + (int)(bits & 0x3FFF), 1 + (int)((bits >> 14) & 0x3FFF));
+        }
+
+        if (chunk.SequenceEqual("VP8 "u8) && data[23] == 0x9D && data[24] == 0x01 && data[25] == 0x2A)
+        {
+            return (BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(26, 2)) & 0x3FFF,
+                BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(28, 2)) & 0x3FFF);
+        }
+
+        return null;
+    }
     /// <summary>A foto sem metadados, ou null se não for um JPEG, PNG ou WebP com um início válido.</summary>
     public static byte[]? Strip(byte[] data, string contentType) => contentType switch
     {
@@ -58,8 +137,22 @@ public static class PhotoMetadata
                 continue;
             }
 
-            // A partir do início dos dados da imagem (SOS), copia-se tudo.
-            if (marker == 0xDA || pos + 4 > data.Length)
+            // A partir do início dos dados da imagem (SOS), copia-se tudo até ao fim da imagem (EOI) e mais nada: o que
+            // viesse depois (por exemplo, HTML) ficava guardado e era servido com a foto. Nos dados da imagem, um FF
+            // vem sempre seguido de 00 (ou de um marcador), por isso o primeiro FF D9 é o fim.
+            if (marker == 0xDA)
+            {
+                var end = data.AsSpan(pos).IndexOf([(byte)0xFF, (byte)0xD9]);
+                if (end < 0)
+                {
+                    return null;
+                }
+
+                output.Write(data, pos, end + 2);
+                return output.ToArray();
+            }
+
+            if (pos + 4 > data.Length)
             {
                 break;
             }

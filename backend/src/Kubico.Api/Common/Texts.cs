@@ -218,6 +218,8 @@ public static partial class Texts
         ["PIN errado."] = "Wrong PIN.",
         ["Código da família inválido. Pede-o a um adulto da casa."] =
             "Invalid family code. Ask an adult in the household for it.",
+        ["A foto é grande demais (no máximo 4096 × 4096 píxeis)."] = "The photo is too large (at most 4096 × 4096 pixels).",
+        ["Tens demasiadas fotos por usar. Conclui as tarefas com elas ou espera até amanhã."] = "You have too many unused photos. Complete the chores with them or wait until tomorrow.",
         ["Só se pode não aceitar o que foi feito nos últimos 30 dias."] = "Only chores done in the last 30 days can be turned down.",
         ["Demasiados PINs errados. Tenta outra vez daqui a {0} minutos."] = "Too many wrong PINs. Try again in {0} minutes.",
         ["Demasiados PINs errados. Tenta outra vez daqui a {0} horas ou pede a um adulto para mudar o PIN."] = "Too many wrong PINs. Try again in {0} hours or ask an adult to change the PIN.",
