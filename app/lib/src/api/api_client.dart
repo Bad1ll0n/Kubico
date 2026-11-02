@@ -54,6 +54,13 @@ class ApiClient {
   /// o pedido repete-se uma vez. Quem o define é o SessionController.
   Future<bool> Function()? onUnauthorized;
 
+  /// Quanto se espera por uma resposta. Numa rede fraca (portal cativo, Wi-Fi do supermercado que "liga" mas não
+  /// passa nada) o pedido ficava pendurado minutos; assim passa a "sem ligação" e entra o modo sem rede.
+  Duration timeout = const Duration(seconds: 20);
+
+  /// O mesmo para os envios de ficheiros (fotos), mais lentos.
+  Duration uploadTimeout = const Duration(seconds: 60);
+
   /// Pedidos de autenticação: um 401 aqui não se resolve renovando a sessão.
   static const _authPaths = {
     '/api/auth/login/2fa',
@@ -645,7 +652,8 @@ class ApiClient {
 
     final http.Response response;
     try {
-      response = await http.Response.fromStream(await _http.send(request));
+      final limit = upload == null ? timeout : uploadTimeout;
+      response = await http.Response.fromStream(await _http.send(request).timeout(limit)).timeout(limit);
     } on Exception {
       throw ApiException(0, 'Sem ligação ao servidor. Verifica a tua internet.'.tr);
     }

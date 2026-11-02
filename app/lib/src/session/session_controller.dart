@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
@@ -21,6 +22,9 @@ class SessionController extends ChangeNotifier {
   static const _refreshKey = 'kubico.refreshToken';
   static const _householdKey = 'kubico.householdId';
 
+  /// A última resposta de /api/me (quem é e as casas; sem segredos): abre a app sem rede.
+  static const _meKey = 'kubico.me';
+
   final ApiClient api;
   final TokenStore _store;
 
@@ -36,6 +40,12 @@ class SessionController extends ChangeNotifier {
   String? _selectedHouseholdId;
   DateTime? _accessExpiresAt;
   Future<bool>? _renewing;
+  Timer? _retry;
+  var _retryDelay = const Duration(seconds: 5);
+
+  /// A sessão abriu com a cópia guardada, porque o servidor não respondeu (sem rede ou em baixo); volta a tentar
+  /// sozinha ([retryIfOffline]).
+  bool isOffline = false;
 
   /// Chamado sempre que a sessão deste aparelho acaba (terminou aqui, noutro aparelho, expirou ou a conta foi
   /// apagada): apaga o que a app guardou (a cópia das listas, a fila, os avisos) e desliga o tempo real.
@@ -60,12 +70,62 @@ class SessionController extends ChangeNotifier {
       await refresh();
     } on ApiException catch (e) {
       if (e.isUnauthorized) {
+        // Só um 401 do próprio servidor termina a sessão (uma falha de rede ao renovar não chega aqui como 401).
+        await signOut();
+        return;
+      }
+      // Sem rede ou o servidor em baixo: abre com a última cópia (a lista de compras sem rede funciona) e volta a
+      // tentar sozinha. Sem cópia, fica o ecrã de entrada.
+      final cached = await _store.read(_meKey);
+      if (cached == null) {
+        _setSignedOut();
+        return;
+      }
+      _apply(Me.fromJson(jsonDecode(cached) as Map<String, dynamic>));
+      isOffline = true;
+      notifyListeners();
+      _scheduleRetry();
+    }
+  }
+
+  /// Volta a falar com o servidor se a sessão abriu sem ele (ao voltar à app, por exemplo).
+  Future<void> retryIfOffline() async {
+    if (!isOffline) return;
+    _retry?.cancel();
+    _retry = null;
+    try {
+      await refresh();
+      _retryDelay = const Duration(seconds: 5);
+    } on ApiException catch (e) {
+      if (e.isUnauthorized) {
         await signOut();
       } else {
-        // Sem rede: mantém o ecrã de entrada em vez de ficar preso a carregar.
-        _setSignedOut();
+        _scheduleRetry();
       }
     }
+  }
+
+  void _scheduleRetry() {
+    _retry ??= Timer(_retryDelay, () {
+      _retry = null;
+      unawaited(retryIfOffline());
+    });
+    // 5 s, 10 s, 20 s… até 2 minutos.
+    final next = _retryDelay * 2;
+    _retryDelay = next > const Duration(minutes: 2) ? const Duration(minutes: 2) : next;
+  }
+
+  void _apply(Me me) {
+    user = me.user;
+    households = me.households;
+    isSupport = me.isSupport;
+    status = SessionStatus.signedIn;
+  }
+
+  @override
+  void dispose() {
+    _retry?.cancel();
+    super.dispose();
   }
 
   /// Com verificação em dois passos, lança [TwoFactorRequired]; depois entra-se com [signInWithCode].
@@ -141,14 +201,19 @@ class SessionController extends ChangeNotifier {
   }
 
   /// Troca o refresh token guardado por um par novo. Só há um pedido de cada vez: vários 401 ao mesmo tempo
-  /// esperam pelo mesmo. Devolve false se não houver sessão para renovar (ou se a rede falhar).
+  /// esperam pelo mesmo. Devolve false se não houver sessão para renovar (ou se o servidor a terminou); sem rede, lança
+  /// o erro de ligação.
   Future<bool> renewSession() => _renewing ??= _renew().whenComplete(() => _renewing = null);
 
   /// Para o tempo real (o SignalR só envia o token ao ligar): um token de acesso que dure pelo menos mais um minuto.
   Future<String> freshAccessToken() async {
     final expiresAt = _accessExpiresAt;
     if (api.accessToken != null && (expiresAt == null || expiresAt.isBefore(clock.now().add(_margin)))) {
-      await renewSession();
+      try {
+        await renewSession();
+      } on ApiException {
+        // Sem rede: a ligação vai falhar e voltar a tentar mais tarde.
+      }
     }
     return api.accessToken ?? '';
   }
@@ -163,8 +228,13 @@ class SessionController extends ChangeNotifier {
       return true;
     } on ApiException catch (e) {
       // O servidor terminou a sessão (expirou, ou terminou-se em todos os dispositivos).
-      if (e.isUnauthorized) await _forgetSession();
-      return false;
+      if (e.isUnauthorized) {
+        await _forgetSession();
+        return false;
+      }
+      // Sem rede ou o servidor em baixo: não é o fim da sessão. O erro segue para quem fez o pedido (como "sem
+      // ligação"), em vez de um 401 que a terminava e apagava a fila das compras.
+      rethrow;
     }
   }
 
@@ -174,6 +244,10 @@ class SessionController extends ChangeNotifier {
     _accessExpiresAt = null;
     await _store.write(_tokenKey, null);
     await _store.write(_refreshKey, null);
+    await _store.write(_meKey, null);
+    _retry?.cancel();
+    _retry = null;
+    isOffline = false;
     if (hadSession) {
       try {
         await onSessionEnded?.call();
@@ -187,11 +261,10 @@ class SessionController extends ChangeNotifier {
   /// Volta a pedir o utilizador e os agregados ao servidor.
   Future<void> refresh() async {
     final me = await api.getMe();
-    user = me.user;
-    households = me.households;
-    isSupport = me.isSupport;
-    status = SessionStatus.signedIn;
+    _apply(me);
+    isOffline = false;
     notifyListeners();
+    await _store.write(_meKey, jsonEncode(me.toJson()));
     // Os avisos chegam na língua da conta: acerta-a com a que a app está a usar.
     if (me.user.language != AppLanguage.code) unawaited(_saveLanguage(AppLanguage.code));
   }

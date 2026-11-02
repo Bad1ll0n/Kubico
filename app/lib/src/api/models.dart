@@ -117,6 +117,14 @@ class User {
     isChildProfile: json['isChildProfile'] as bool? ?? false,
     language: json['language'] as String? ?? 'pt',
   );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'email': email,
+    'displayName': displayName,
+    'isChildProfile': isChildProfile,
+    'language': language,
+  };
 }
 
 /// Sessão iniciada: o token de acesso (dura pouco) e o refresh token, para pedir um par novo.
@@ -184,6 +192,13 @@ class HouseholdSummary {
       access: ModuleAccess.parse(json['access'], role),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'role': role.apiValue,
+    'access': ModuleAccess.toJson(access),
+  };
 }
 
 /// Uma alteração no histórico da casa. [canUndo]: quem está a usar a app pode desfazê-la agora.
@@ -309,6 +324,13 @@ class Me {
     households: (json['households'] as List).map((h) => HouseholdSummary.fromJson(h as Map<String, dynamic>)).toList(),
     isSupport: json['isSupport'] as bool? ?? false,
   );
+
+  /// Para guardar no aparelho a última resposta (sem segredos) e abrir a app sem rede.
+  Map<String, dynamic> toJson() => {
+    'user': user.toJson(),
+    'households': [for (final h in households) h.toJson()],
+    'isSupport': isSupport,
+  };
 }
 
 enum FeedbackKind {

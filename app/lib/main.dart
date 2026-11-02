@@ -47,7 +47,16 @@ Future<void> main() async {
   };
 
   // A cópia das listas grava-se com um pequeno atraso; ao ir para segundo plano (ou fechar), grava-se já.
-  AppLifecycleListener(onPause: shopping.flush, onHide: shopping.flush, onDetach: shopping.flush);
+  AppLifecycleListener(
+    onPause: shopping.flush,
+    onHide: shopping.flush,
+    onDetach: shopping.flush,
+    // Ao voltar: a ligação de tempo real pode ter caído e a sessão pode ter aberto sem servidor.
+    onResume: () {
+      unawaited(realtime.resume());
+      unawaited(session.retryIfOffline().then((_) => shopping.sync()));
+    },
+  );
 
   // Avisos fora da app (Firebase, no Android e na web). O Firebase só arranca quando a pessoa entra (P8).
   final push = PushRegistration.lazy(api: api, create: createPushTokenSource);

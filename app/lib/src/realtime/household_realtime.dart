@@ -134,6 +134,12 @@ class HouseholdRealtime {
   final _reconnected = StreamController<void>.broadcast();
   HubConnection? _connection;
   String? _householdId;
+  Timer? _retry;
+  var _attempt = 0;
+
+  /// Esperas entre tentativas de voltar a ligar quando a ligação caiu de vez (sem limite de tentativas).
+  static const _backoff = [Duration(seconds: 2), Duration(seconds: 5), Duration(seconds: 15), Duration(seconds: 30)];
+  static const _maxBackoff = Duration(minutes: 1);
 
   Stream<HouseholdEvent> get events => _events.stream;
   Stream<void> get reconnected => _reconnected.stream;
@@ -222,13 +228,54 @@ class HouseholdRealtime {
       _reconnected.add(null);
     });
 
+    // O reconectar automático do SignalR desiste ao fim de ~47 s (um túnel, o metro, a app em segundo plano). Daí
+    // em diante tenta-se aqui, para sempre, com esperas crescentes até um minuto.
+    connection.onclose(({error}) {
+      if (identical(_connection, connection)) _scheduleRetry(connection, householdId);
+    });
+
     _connection = connection;
     try {
       await connection.start();
       await _join(connection, householdId);
+      _attempt = 0;
     } catch (e) {
-      // A app continua a funcionar sem tempo real; os dados recarregam ao abrir cada ecrã.
+      // A app continua a funcionar sem tempo real e volta a tentar ligar.
       debugPrint('Kubico: tempo real indisponível ($e)');
+      if (identical(_connection, connection)) _scheduleRetry(connection, householdId);
+    }
+  }
+
+  /// Ao voltar à app (o sistema corta a ligação em segundo plano): se a ligação caiu, tenta já.
+  Future<void> resume() async {
+    final connection = _connection;
+    final householdId = _householdId;
+    if (connection == null || householdId == null || connection.state != HubConnectionState.Disconnected) return;
+    _retry?.cancel();
+    _retry = null;
+    await _restart(connection, householdId);
+  }
+
+  void _scheduleRetry(HubConnection connection, String householdId) {
+    if (_retry != null) return;
+    final delay = _attempt < _backoff.length ? _backoff[_attempt] : _maxBackoff;
+    _attempt++;
+    _retry = Timer(delay, () {
+      _retry = null;
+      unawaited(_restart(connection, householdId));
+    });
+  }
+
+  Future<void> _restart(HubConnection connection, String householdId) async {
+    if (!identical(_connection, connection) || connection.state != HubConnectionState.Disconnected) return;
+    try {
+      await connection.start();
+      await _join(connection, householdId);
+      _attempt = 0;
+      // Enquanto esteve desligada podem ter mudado coisas: os ecrãs recarregam.
+      _reconnected.add(null);
+    } catch (e) {
+      if (identical(_connection, connection)) _scheduleRetry(connection, householdId);
     }
   }
 
@@ -236,6 +283,9 @@ class HouseholdRealtime {
     final connection = _connection;
     _connection = null;
     _householdId = null;
+    _retry?.cancel();
+    _retry = null;
+    _attempt = 0;
     if (connection != null) {
       try {
         await connection.stop();
