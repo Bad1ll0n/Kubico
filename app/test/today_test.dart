@@ -11,6 +11,9 @@ import 'package:kubico/src/realtime/household_realtime.dart';
 import 'package:kubico/src/session/session_controller.dart';
 import 'package:kubico/src/session/token_store.dart';
 import 'package:kubico/src/ui/theme.dart';
+import 'package:kubico/src/shopping/shopping_repository.dart';
+import 'package:kubico/src/storage/key_value_store.dart';
+import 'package:kubico/src/ui/kitchen_panel.dart';
 import 'package:kubico/src/ui/today_view.dart';
 import 'package:provider/provider.dart';
 
@@ -53,7 +56,7 @@ class _Server {
 
   late final client = MockClient((request) async {
     final path = request.url.path;
-    requests.add('${request.method} $path');
+    requests.add('${request.method} $path${request.body.isEmpty ? '' : ' ${request.body}'}');
     return switch (path) {
       '/api/me' => _json({
         'user': {
@@ -153,6 +156,24 @@ class _Server {
           },
         ],
       }),
+      '/api/households/h1/lists/l1/items' => _json([
+        for (final (id, name) in [('i1', 'Bananas'), ('i2', 'Leite')])
+          {
+            'id': id,
+            'listId': 'l1',
+            'name': name,
+            'quantity': null,
+            'category': null,
+            'isChecked': false,
+            'addedByUserId': 'mae',
+            'createdAt': '2026-11-01T10:00:00Z',
+            'updatedAt': '2026-11-01T10:00:00Z',
+          },
+      ]),
+      '/api/households/h1/chores/c1/complete' => _json({
+        'chore': {..._chore('c1', 'Pôr a mesa', 'rita', '2026-11-10', points: 5), 'isDone': true},
+        'pointsEarned': 5,
+      }),
       _ => http.Response('', 404),
     };
   });
@@ -230,6 +251,64 @@ void main() {
       expect(find.text('Regar as plantas'), findsNothing, reason: 'é da Mãe');
       expect(find.text('Faltam 20 para «Gelado»'), findsOneWidget);
       expect(find.text('À espera de ti'), findsNothing);
+    });
+  });
+
+  Future<void> pumpPanel(WidgetTester tester, _Server server) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = ApiClient(baseUrl: 'http://api', httpClient: server.client)..accessToken = 't';
+    final session = SessionController(api: api, store: MemoryTokenStore());
+    await session.refresh();
+    final shopping = ShoppingRepository(api: api, store: MemoryKeyValueStore(), saveDelay: Duration.zero);
+    addTearDown(shopping.dispose);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider.value(value: api),
+          ChangeNotifierProvider.value(value: session),
+          ChangeNotifierProvider.value(value: shopping),
+          Provider.value(
+            value: HouseholdRealtime(baseUrl: 'http://api', accessToken: () => 't'),
+          ),
+        ],
+        child: MaterialApp(home: KitchenPanelScreen(household: session.currentHousehold!)),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('o painel de cozinha: agenda, tarefas, compras e pontos; conclui-se dizendo quem fez', (tester) async {
+    await withClock(Clock.fixed(DateTime(2026, 11, 10, 10, 5)), () async {
+      final server = _Server(me: 'mae', role: 'Admin');
+      await pumpPanel(tester, server);
+
+      expect(find.text('10:05'), findsOneWidget);
+      expect(find.text('Natação'), findsOneWidget);
+      expect(find.text('Supermercado'), findsOneWidget, reason: 'a lista com mais por comprar');
+      expect(find.text('Bananas'), findsOneWidget);
+      expect(find.text('Pôr a mesa'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Marcar «Pôr a mesa» como feita'));
+      await tester.pumpAndSettle();
+      expect(find.text('Quem fez «Pôr a mesa»?'), findsOneWidget);
+      await tester.tap(find.text('Rita').last);
+      await tester.pumpAndSettle();
+
+      expect(server.requests, contains('POST /api/households/h1/chores/c1/complete {"doneByUserId":"rita"}'));
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
+
+  testWidgets('à noite o painel mostra só o relógio e o primeiro evento de amanhã', (tester) async {
+    await withClock(Clock.fixed(DateTime(2026, 11, 9, 23, 30)), () async {
+      await pumpPanel(tester, _Server(me: 'mae', role: 'Admin'));
+
+      expect(find.text('23:30'), findsOneWidget);
+      expect(find.textContaining('Natação'), findsOneWidget);
+      expect(find.text('Agenda'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
     });
   });
 }

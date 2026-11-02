@@ -17,6 +17,7 @@ import 'chores_view.dart';
 import 'devices_screen.dart';
 import 'help_screen.dart';
 import 'household_screen.dart';
+import 'kitchen_panel.dart';
 import 'notifications_screen.dart';
 import 'onboarding_screen.dart';
 import 'rewards_view.dart';
@@ -302,6 +303,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     context,
                   ).push(MaterialPageRoute<void>(builder: (_) => const DevicesScreen())),
                   'account' => _openAccount(),
+                  'panel' => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      fullscreenDialog: true,
+                      builder: (_) => KitchenPanelScreen(household: household),
+                    ),
+                  ),
                   'activity' => Navigator.of(
                     context,
                   ).push(MaterialPageRoute<void>(builder: (_) => ActivityScreen(household: household))),
@@ -312,6 +319,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
                 itemBuilder: (_) => [
                   PopupMenuItem(enabled: false, child: Text(session.user?.email ?? session.user?.displayName ?? '')),
+                  // O painel de cozinha funciona com a sessão de um adulto (conclui tarefas por quem as fez).
+                  if (household.role.canManageContent)
+                    PopupMenuItem(value: 'panel', child: Text('Modo painel de cozinha'.tr)),
                   PopupMenuItem(value: 'activity', child: Text('Histórico de alterações'.tr)),
                   PopupMenuItem(value: 'account', child: Text('A minha conta'.tr)),
                   PopupMenuItem(value: 'devices', child: Text('Dispositivos com sessão iniciada'.tr)),
