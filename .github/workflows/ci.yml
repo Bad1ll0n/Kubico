@@ -21,6 +21,38 @@ jobs:
       - run: dotnet build --no-restore -warnaserror
       - run: dotnet test --no-build
 
+  # Os mesmos testes no motor de produção: aplicam as migrações numa base PostgreSQL por servidor de testes e provam
+  # a concorrência, as consultas e os índices únicos onde contam (em SQLite só se viam metade das diferenças).
+  backend-postgres:
+    name: Backend (.NET, PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: kubico
+          POSTGRES_PASSWORD: kubico-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kubico"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      KUBICO_TEST_POSTGRES: Host=localhost;Port=5432;Username=kubico;Password=kubico-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet restore
+      - run: dotnet build --no-restore
+      - run: dotnet test --no-build
+
   app:
     name: App (Flutter)
     runs-on: ubuntu-latest

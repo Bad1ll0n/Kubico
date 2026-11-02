@@ -10,8 +10,10 @@ using Microsoft.Extensions.Time.Testing;
 namespace Kubico.Api.Tests;
 
 /// <summary>
-/// Arranca a API real em memória com uma base de dados SQLite temporária,
-/// para os testes não dependerem de Docker nem de PostgreSQL.
+/// Arranca a API real em memória com uma base de dados SQLite temporária, para os testes não dependerem de Docker nem
+/// de PostgreSQL. Com a variável KUBICO_TEST_POSTGRES (uma ligação a um PostgreSQL, sem base), cada servidor de testes
+/// usa uma base PostgreSQL própria, criada pelas migrações e apagada no fim: é assim que o CI prova as migrações, a
+/// concorrência e as consultas no motor de produção.
 /// </summary>
 public sealed class KubicoApiFactory : WebApplicationFactory<Program>
 {
@@ -29,11 +31,25 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
 
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"kubico-tests-{Guid.NewGuid():N}.db");
 
+    /// <summary>A ligação ao PostgreSQL dos testes (sem base), ou null para usar SQLite.</summary>
+    private static readonly string? Postgres = Environment.GetEnvironmentVariable("KUBICO_TEST_POSTGRES");
+
+    private readonly string _postgresDatabase = $"kubico_test_{Guid.NewGuid():N}";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.UseSetting("ConnectionStrings:Kubico", $"Data Source={_databasePath}");
-        builder.UseSetting("Database:Provider", "Sqlite");
+        if (Postgres is null)
+        {
+            builder.UseSetting("ConnectionStrings:Kubico", $"Data Source={_databasePath}");
+            builder.UseSetting("Database:Provider", "Sqlite");
+        }
+        else
+        {
+            builder.UseSetting("ConnectionStrings:Kubico", $"{Postgres};Database={_postgresDatabase}");
+            builder.UseSetting("Database:Provider", "Postgres");
+        }
+
         builder.UseSetting("Database:MigrateOnStartup", "true");
         builder.UseSetting("Jwt:SigningKey", "test-signing-key-that-is-long-enough-0123456789");
 
@@ -82,6 +98,17 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
+        if (Postgres is not null)
+        {
+            Npgsql.NpgsqlConnection.ClearAllPools();
+            using var connection = new Npgsql.NpgsqlConnection(Postgres);
+            connection.Open();
+            using var drop = connection.CreateCommand();
+            drop.CommandText = $"DROP DATABASE IF EXISTS \"{_postgresDatabase}\" WITH (FORCE)";
+            drop.ExecuteNonQuery();
+            return;
+        }
+
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         try
         {
