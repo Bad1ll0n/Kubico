@@ -18,12 +18,14 @@ import 'src/session/token_store.dart';
 import 'src/shopping/shopping_repository.dart';
 import 'src/storage/key_value_store.dart';
 import 'src/ui/app.dart';
+import 'src/ui/design/reading_mode.dart';
 
 Future<void> main() async {
   // O Firebase (quando arrancar) e as preferências precisam dos canais da plataforma já prontos.
   WidgetsFlutterBinding.ensureInitialized();
   final preferences = PreferencesStore();
   await AppLanguage.restore(preferences);
+  await ReadingMode.restore(preferences);
   final api = ApiClient(baseUrl: AppConfig.apiUrl, deviceKind: currentDeviceKind());
   final session = SessionController(api: api, store: const SecureTokenStore());
   final restoringSession = session.restore();

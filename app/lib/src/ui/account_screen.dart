@@ -7,6 +7,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../session/session_controller.dart';
+import 'design/reading_mode.dart';
 import 'theme.dart';
 import 'two_factor_section.dart';
 
@@ -113,6 +114,8 @@ class _AccountScreenState extends State<AccountScreen> {
           ),
           const SizedBox(height: 12),
           const LanguageCard(),
+          const SizedBox(height: 12),
+          const ReadingModeCard(),
           if (!child) ...[const SizedBox(height: 12), const TwoFactorSection()],
           const SizedBox(height: 12),
           Card(
@@ -251,6 +254,41 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
 }
 
 /// A língua da app e dos avisos. Ao mudar, a app desenha-se outra vez já na língua nova.
+/// O tamanho da letra neste aparelho (normal ou conforto).
+class ReadingModeCard extends StatelessWidget {
+  const ReadingModeCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Tamanho da letra'.tr, style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'Conforto: letra maior e botões maiores, neste aparelho (bom para avós e crianças).'.tr,
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            ValueListenableBuilder<ReadingMode>(
+              valueListenable: ReadingMode.current,
+              builder: (context, mode, _) => SegmentedButton<ReadingMode>(
+                segments: [for (final m in ReadingMode.values) ButtonSegment(value: m, label: Text(m.label))],
+                selected: {mode},
+                onSelectionChanged: (selected) => ReadingMode.set(selected.single),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class LanguageCard extends StatelessWidget {
   const LanguageCard({super.key});
 

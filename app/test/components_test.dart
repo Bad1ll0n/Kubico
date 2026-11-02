@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kubico/src/storage/key_value_store.dart';
 import 'package:kubico/src/ui/design/components.dart';
+import 'package:kubico/src/ui/design/reading_mode.dart';
 import 'package:kubico/src/ui/theme.dart';
 
 Widget _app({bool reduceMotion = false}) => MaterialApp(
@@ -48,5 +50,37 @@ void main() {
     expect(find.text('12'), findsOneWidget);
     expect(find.text('deve 3'), findsOneWidget);
     expect(find.byIcon(Icons.star_rounded), findsOneWidget);
+  });
+
+  testWidgets('o modo Conforto aumenta a letra por cima da do sistema (até 2×) e fica guardado no aparelho', (
+    tester,
+  ) async {
+    final store = MemoryKeyValueStore();
+    await ReadingMode.restore(store);
+    addTearDown(() => ReadingMode.current.value = ReadingMode.normal);
+    double? scale;
+    Widget app(double system) => MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(system)),
+        child: Builder(builder: (context) => ReadingMode.current.value.apply(context, child!)),
+      ),
+      home: Builder(
+        builder: (context) {
+          scale = MediaQuery.textScalerOf(context).scale(10);
+          return const SizedBox();
+        },
+      ),
+    );
+
+    await ReadingMode.set(ReadingMode.comfort);
+    await tester.pumpWidget(app(1));
+    expect(scale, closeTo(11.5, 0.001));
+
+    await tester.pumpWidget(app(1.9));
+    expect(scale, closeTo(20, 0.001), reason: 'no máximo o dobro');
+
+    ReadingMode.current.value = ReadingMode.normal;
+    await ReadingMode.restore(store);
+    expect(ReadingMode.current.value, ReadingMode.comfort);
   });
 }

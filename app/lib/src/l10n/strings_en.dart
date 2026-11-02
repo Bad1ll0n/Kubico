@@ -11,6 +11,11 @@ const englishTexts = <String, String>{
   'Não encontrado.': 'Not found.',
   'Ocorreu um erro inesperado ({0}).': 'An unexpected error occurred ({0}).',
   'Sem ligação': 'Offline',
+  'Normal': 'Normal',
+  'Conforto': 'Comfort',
+  'Tamanho da letra': 'Text size',
+  'Conforto: letra maior e botões maiores, neste aparelho (bom para avós e crianças).':
+      'Comfort: bigger text and buttons on this device (good for grandparents and children).',
   '«{0}» saiu da lista.': '“{0}” was removed from the list.',
   'Outros': 'Other',
   'Escreve o teu PIN.': 'Type your PIN.',

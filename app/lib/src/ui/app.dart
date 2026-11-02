@@ -5,6 +5,7 @@ import '../l10n/flutter_localizations_pt_en.dart';
 import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'auth_screen.dart';
+import 'design/reading_mode.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
 import 'theme.dart';
@@ -31,6 +32,11 @@ class KubicoApp extends StatelessWidget {
         supportedLocales: const [kubicoLocale, Locale('en', 'GB')],
         // Só pt e en (o Material traz ~80 línguas): menos ~300 KB no main.dart.js da web (P8).
         localizationsDelegates: kubicoLocalizationsDelegates,
+        // O modo de leitura (normal ou conforto) aplica-se a todos os ecrãs, sem recriar a app.
+        builder: (context, child) => ValueListenableBuilder<ReadingMode>(
+          valueListenable: ReadingMode.current,
+          builder: (context, mode, _) => mode.apply(context, child!),
+        ),
         home: const _Root(),
       ),
     );
