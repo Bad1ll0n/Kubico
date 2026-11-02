@@ -5,6 +5,7 @@ import '../api/api_client.dart';
 import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'child_sign_in_screen.dart';
+import 'design/brand.dart';
 import 'theme.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -150,7 +151,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             AppLanguage.set(AppLanguage.isEnglish ? AppLanguage.portuguese : AppLanguage.english),
                       ),
                     ),
-                    Icon(Icons.cottage_rounded, size: 56, color: theme.colorScheme.primary),
+                    const Center(child: KubicoMark(size: 72)),
                     const SizedBox(height: 12),
                     Text('Kubico', textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
                     const SizedBox(height: 4),
