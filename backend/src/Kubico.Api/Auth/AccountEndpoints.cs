@@ -17,6 +17,11 @@ namespace Kubico.Api.Auth;
 
 public record DeleteAccountRequest([property: Required] string Password);
 
+/// <summary>Mudar a palavra-passe sabendo a atual (a nova tem as mesmas regras do registo).</summary>
+public record ChangePasswordRequest(
+    [property: Required] string CurrentPassword,
+    [property: Required, StringLength(128, MinimumLength = 8)] string NewPassword);
+
 public record TwoFactorStatusDto(bool Enabled, int RecoveryCodesLeft);
 
 /// <summary>Para ligar: o segredo (para escrever à mão) e o endereço que vai no código QR.</summary>
@@ -68,6 +73,7 @@ public static class AccountEndpoints
         account.MapPost("/2fa/enable", EnableTwoFactor).RequireActiveSession();
         account.MapPost("/2fa/disable", DisableTwoFactor).RequireActiveSession();
         account.MapPut("/language", SetLanguage);
+        account.MapPut("/password", ChangePassword).RequireActiveSession();
         return api;
     }
 
@@ -207,6 +213,45 @@ public static class AccountEndpoints
     /// Começa a ligar a verificação em dois passos: um segredo novo para a app de autenticação. Pede a palavra-passe
     /// (com o limite de tentativas da entrada).
     /// </summary>
+    /// <summary>
+    /// Muda a palavra-passe (pede a atual, com o mesmo limite de tentativas da entrada). As outras sessões terminam e
+    /// os endereços de calendário subscritos deixam de servir: quem soubesse a antiga deixa de entrar.
+    /// </summary>
+    private static async Task<IResult> ChangePassword(
+        ChangePasswordRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        IPasswordHasher<User> hasher,
+        LoginThrottle throttle,
+        SessionService sessions,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (user.IsChildProfile)
+        {
+            return Results.Problem(
+                title: "Os perfis de criança entram com o PIN: pede a um adulto para o mudar.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        if (AuthEndpoints.CheckPassword(throttle, hasher, http, user, request.CurrentPassword) is { } wrong)
+        {
+            return wrong;
+        }
+
+        user.PasswordHash = hasher.HashPassword(user, request.NewPassword);
+        await db.SaveChangesAsync(ct);
+        await sessions.SignOutEverywhereAsync(userId, ct, keep: HouseholdHub.SessionOf(principal));
+        return Results.NoContent();
+    }
+
     private static async Task<IResult> SetUpTwoFactor(
         TwoFactorSetupRequest request,
         ClaimsPrincipal principal,

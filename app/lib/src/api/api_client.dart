@@ -157,6 +157,10 @@ class ApiClient {
       HouseholdSummary.fromJson(await _send('POST', '/api/households', body: {'name': name, 'template': ?template}));
 
   /// A língua da conta: os avisos (na app e no telemóvel) passam a chegar nela.
+  /// Muda a palavra-passe (com a atual). As outras sessões terminam.
+  Future<void> changePassword(String currentPassword, String newPassword) =>
+      _send('PUT', '/api/account/password', body: {'currentPassword': currentPassword, 'newPassword': newPassword});
+
   Future<User> setLanguage(String language) async =>
       User.fromJson(await _send('PUT', '/api/account/language', body: {'language': language}));
 

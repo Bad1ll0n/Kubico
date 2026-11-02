@@ -7,6 +7,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../session/session_controller.dart';
+import 'change_password.dart';
 import 'design/reading_mode.dart';
 import 'theme.dart';
 import 'two_factor_section.dart';
@@ -116,7 +117,12 @@ class _AccountScreenState extends State<AccountScreen> {
           const LanguageCard(),
           const SizedBox(height: 12),
           const ReadingModeCard(),
-          if (!child) ...[const SizedBox(height: 12), const TwoFactorSection()],
+          if (!child) ...[
+            const SizedBox(height: 12),
+            const ChangePasswordCard(),
+            const SizedBox(height: 12),
+            const TwoFactorSection(),
+          ],
           const SizedBox(height: 12),
           Card(
             child: Padding(
