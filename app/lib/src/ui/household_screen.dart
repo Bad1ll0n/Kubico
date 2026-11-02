@@ -13,6 +13,7 @@ import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import 'dates_pt.dart';
+import 'design/components.dart';
 import 'permissions_screen.dart';
 import 'theme.dart';
 
@@ -440,11 +441,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
     ];
     return Card(
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: colorFromHex(member.color),
-          foregroundColor: Colors.white,
-          child: Text(member.displayName.isEmpty ? '?' : member.displayName[0].toUpperCase()),
-        ),
+        leading: MemberAvatar(name: member.displayName, color: member.color, size: 40),
         title: Text(isMe ? '${member.displayName} (tu)'.tr : member.displayName),
         subtitle: Text(
           [

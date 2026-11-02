@@ -8,6 +8,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
 import 'dates_pt.dart';
+import 'design/components.dart';
 import 'theme.dart';
 
 /// Uma foto escolhida ou tirada, pronta a enviar.
@@ -263,11 +264,7 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
     final name = member?.displayName ?? 'Antigo membro'.tr;
     return Card(
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: member == null ? null : colorFromHex(member.color),
-          foregroundColor: Colors.white,
-          child: Text(name.isEmpty ? '?' : name[0].toUpperCase()),
-        ),
+        leading: MemberAvatar(name: name, color: member?.color ?? '', size: 40),
         title: Text(
           item.choreTitle,
           style: item.rejected

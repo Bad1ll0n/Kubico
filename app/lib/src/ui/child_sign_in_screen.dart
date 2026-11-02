@@ -6,6 +6,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../session/session_controller.dart';
+import 'design/components.dart';
 import 'theme.dart';
 
 /// Entrada de uma criança sem email: o código da família (que um adulto vê no ecrã dos membros), o seu nome e o PIN.
@@ -106,23 +107,14 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
                   for (final p in profiles)
                     Card(
                       child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: colorFromHex(p.color),
-                          foregroundColor: Colors.white,
-                          child: Text(p.displayName.isEmpty ? '?' : p.displayName[0].toUpperCase()),
-                        ),
+                        leading: MemberAvatar(name: p.displayName, color: p.color, size: 48),
                         title: Text(p.displayName, style: theme.textTheme.titleMedium),
                         onTap: () => setState(() => _chosen = p),
                       ),
                     ),
                   TextButton(onPressed: () => setState(() => _profiles = null), child: Text('Mudar o código'.tr)),
                 ] else ...[
-                  CircleAvatar(
-                    radius: 32,
-                    backgroundColor: colorFromHex(chosen.color),
-                    foregroundColor: Colors.white,
-                    child: Text(chosen.displayName.isEmpty ? '?' : chosen.displayName[0].toUpperCase()),
-                  ),
+                  MemberAvatar(name: chosen.displayName, color: chosen.color, size: 88),
                   const SizedBox(height: 12),
                   Text(
                     'Olá, ${chosen.displayName}!'.tr,

@@ -11,6 +11,7 @@ import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import 'allowance_section.dart';
 import 'dates_pt.dart';
+import 'design/components.dart';
 import 'reward_editor.dart';
 import 'theme.dart';
 
@@ -280,7 +281,7 @@ class _PointsCard extends StatelessWidget {
                 children: [
                   for (final p in others)
                     Chip(
-                      avatar: CircleAvatar(backgroundColor: colorFromHex(p.color)),
+                      avatar: MemberAvatar(name: p.displayName, color: p.color, size: 24),
                       label: Text('${p.displayName} · ${pointsText(p.available)}'),
                     ),
                 ],
@@ -338,11 +339,7 @@ class _RedemptionTile extends StatelessWidget {
     final status = redemption.status == RedemptionStatus.pending ? 'pediu a $when'.tr : redemption.status.label;
     return Card(
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: member == null ? null : colorFromHex(member!.color),
-          foregroundColor: Colors.white,
-          child: Text(name.isEmpty ? '?' : name[0].toUpperCase()),
-        ),
+        leading: MemberAvatar(name: name, color: member?.color ?? '', size: 40),
         title: Text(redemption.rewardTitle),
         subtitle: Text('$name · ${redemption.points} pts · $status'),
         trailing: Row(

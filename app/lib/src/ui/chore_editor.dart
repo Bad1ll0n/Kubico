@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../api/models.dart';
 import '../l10n/strings.dart';
-import 'theme.dart';
+import 'design/components.dart';
 
 /// Resultado do editor: guardar (com os dados) ou apagar.
 sealed class ChoreEditorResult {
@@ -220,7 +220,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                 children: [
                   for (final m in widget.members)
                     FilterChip(
-                      avatar: CircleAvatar(backgroundColor: colorFromHex(m.color)),
+                      avatar: MemberAvatar(name: m.displayName, color: m.color, size: 24),
                       label: Text(m.displayName),
                       selected: _rotation.contains(m.userId),
                       onSelected: (selected) => setState(() {

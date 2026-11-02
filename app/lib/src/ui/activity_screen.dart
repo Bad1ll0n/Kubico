@@ -149,8 +149,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
     return Card(
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: member == null ? null : colorFromHex(member.color),
-          foregroundColor: Colors.white,
+          backgroundColor: member == null ? null : context.memberTones(member.color).fill,
+          foregroundColor: member == null ? null : context.memberTones(member.color).onFill,
           child: Icon(_icon(item.module), size: 18),
         ),
         title: Text(

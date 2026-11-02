@@ -76,6 +76,16 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Nunito (títulos e números) e Atkinson Hyperlegible Next (texto), variáveis, licença OFL (ver assets/fonts/OFL-*).
+  # Vão com a app: sem pedidos ao Google Fonts (CSP da web, modo sem rede).
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito.ttf
+    - family: AtkinsonHyperlegibleNext
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegibleNext.ttf
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

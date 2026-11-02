@@ -10,6 +10,8 @@ const englishTexts = <String, String>{
   'Não tens permissão para fazer isto.': 'You don\'t have permission to do this.',
   'Não encontrado.': 'Not found.',
   'Ocorreu um erro inesperado ({0}).': 'An unexpected error occurred ({0}).',
+  'Sem ligação': 'Offline',
+  'Algo correu mal': 'Something went wrong',
   'Não foi possível guardar uma alteração à lista: {0}': 'A change to the list could not be saved: {0}',
   'Administrador': 'Admin',
   'Adulto': 'Adult',

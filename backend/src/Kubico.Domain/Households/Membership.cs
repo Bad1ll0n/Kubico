@@ -19,7 +19,7 @@ public class Membership : IVersioned
     public HouseholdRole Role { get; set; }
 
     /// <summary>Cor do membro em hexadecimal (#RRGGBB), usada no calendário, tarefas, etc.</summary>
-    public string Color { get; set; } = "#4F7CAC";
+    public string Color { get; set; } = "#2F64A8";
     public DateTimeOffset JoinedAt { get; set; }
 
     /// <summary>

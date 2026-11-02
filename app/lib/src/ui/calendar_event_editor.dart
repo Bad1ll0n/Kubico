@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
 import 'dates_pt.dart';
-import 'theme.dart';
+import 'design/components.dart';
 
 /// Resultado do editor: guardar (com os dados) ou apagar.
 sealed class CalendarEventEditorResult {
@@ -348,7 +348,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
               children: [
                 for (final m in widget.members)
                   FilterChip(
-                    avatar: CircleAvatar(backgroundColor: colorFromHex(m.color)),
+                    avatar: MemberAvatar(name: m.displayName, color: m.color, size: 24),
                     label: Text(m.displayName),
                     selected: _participants.contains(m.userId),
                     onSelected: (selected) => setState(() {

@@ -56,9 +56,14 @@ public static class HouseholdEndpoints
     private const string InviteAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
     private const int InviteCodeLength = 8;
 
-    // Cores dos membros: cada um fica com uma que ninguém da casa usa (só se repetem quando as 8 estão em uso).
+    // Cores dos membros: cada um fica com uma que ninguém da casa usa (só se repetem quando as 11 estão em uso). São
+    // os tons fortes da paleta da app (design/tokens.dart), todos com ≥ 4,5:1 para as iniciais; a app resolve também
+    // os hex da paleta antiga, que já estão gravados.
     private static readonly string[] MemberColors =
-        ["#4F7CAC", "#E07A5F", "#81B29A", "#F2CC8F", "#9C6ADE", "#3D9970", "#D96C9C", "#5BC0BE"];
+    [
+        "#2F64A8", "#A9500B", "#4F6B1F", "#7A6200", "#7449B8", "#2E7550", "#B23A73", "#12737A", "#B23B3B", "#4A55B0",
+        "#7B3F8C",
+    ];
 
     public static RouteGroupBuilder MapHouseholdEndpoints(this RouteGroupBuilder api)
     {

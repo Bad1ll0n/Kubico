@@ -12,6 +12,7 @@ import '../realtime/household_realtime.dart';
 import 'calendar_event_editor.dart';
 import 'calendar_feed_dialog.dart';
 import 'dates_pt.dart';
+import 'design/components.dart';
 import 'theme.dart';
 
 enum CalendarMode {
@@ -76,8 +77,6 @@ String describeRecurrence(Recurrence r) {
   if (r.count != null) text.write(', ${r.count} vezes'.tr);
   return text.toString();
 }
-
-String _initial(String name) => name.isEmpty ? '?' : name[0].toUpperCase();
 
 /// A que ocorrências de um evento que se repete se aplica uma alteração.
 enum RecurringScope {
@@ -233,7 +232,7 @@ class _CalendarViewState extends State<CalendarView> {
   Color _colorFor(CalendarEvent event) {
     for (final id in event.participantUserIds) {
       final member = _details?.member(id);
-      if (member != null) return colorFromHex(member.color);
+      if (member != null) return memberColor(context, member.color);
     }
     return Theme.of(context).colorScheme.primary;
   }
@@ -670,12 +669,7 @@ class _OccurrenceTile extends StatelessWidget {
             for (final member in participants.take(3))
               Padding(
                 padding: const EdgeInsets.only(left: 4),
-                child: CircleAvatar(
-                  radius: 12,
-                  backgroundColor: colorFromHex(member.color),
-                  foregroundColor: Colors.white,
-                  child: Text(_initial(member.displayName), style: const TextStyle(fontSize: 11)),
-                ),
+                child: MemberAvatar(name: member.displayName, color: member.color, size: 24),
               ),
           ],
         ),

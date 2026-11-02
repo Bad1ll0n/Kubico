@@ -9,6 +9,7 @@ import '../l10n/strings.dart';
 import '../realtime/coalesced_reload.dart';
 import '../realtime/household_realtime.dart';
 import 'dates_pt.dart';
+import 'design/components.dart';
 import 'theme.dart';
 
 /// A mesada, no ecrã das recompensas: quem gere as recompensas define-a e marca os períodos como pagos; cada
@@ -187,12 +188,7 @@ class _AllowanceSectionState extends State<AllowanceSection> {
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 14,
-                  backgroundColor: member == null ? null : colorFromHex(member.color),
-                  foregroundColor: Colors.white,
-                  child: Text(name.isEmpty ? '?' : name[0].toUpperCase(), style: const TextStyle(fontSize: 12)),
-                ),
+                MemberAvatar(name: name, color: member?.color ?? '', size: 28),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

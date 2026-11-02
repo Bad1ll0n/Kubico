@@ -13,6 +13,7 @@ import '../session/session_controller.dart';
 import 'chore_editor.dart';
 import 'chore_history_screen.dart';
 import 'dates_pt.dart';
+import 'design/components.dart';
 import 'theme.dart';
 
 enum ChoreGroup {
@@ -165,15 +166,7 @@ class _ChoresViewState extends State<ChoresView> {
               onPressed: () => Navigator.pop(context, member.userId),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 12,
-                    backgroundColor: colorFromHex(member.color),
-                    foregroundColor: Colors.white,
-                    child: Text(
-                      member.displayName.isEmpty ? '?' : member.displayName[0].toUpperCase(),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
+                  MemberAvatar(name: member.displayName, color: member.color, size: 32),
                   const SizedBox(width: 12),
                   Expanded(child: Text(member.displayName)),
                   if (member.userId == assignee) const Icon(Icons.check, size: 18),
@@ -461,19 +454,13 @@ class _ChoreTile extends StatelessWidget {
             ),
           Tooltip(
             message: assignee?.displayName ?? 'Qualquer pessoa'.tr,
-            child: CircleAvatar(
-              radius: 14,
-              backgroundColor: assignee == null
-                  ? theme.colorScheme.surfaceContainerHighest
-                  : colorFromHex(assignee!.color),
-              foregroundColor: Colors.white,
-              child: assignee == null
-                  ? Icon(Icons.groups_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant)
-                  : Text(
-                      assignee!.displayName.isEmpty ? '?' : assignee!.displayName[0].toUpperCase(),
-                      style: const TextStyle(fontSize: 12),
-                    ),
-            ),
+            child: assignee == null
+                ? CircleAvatar(
+                    radius: 14,
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                    child: Icon(Icons.groups_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                  )
+                : MemberAvatar(name: assignee!.displayName, color: assignee!.color, size: 28),
           ),
         ],
       ),
@@ -544,7 +531,7 @@ class _StatsCard extends StatelessWidget {
                         child: LinearProgressIndicator(
                           value: maxPoints == 0 ? 0 : s.points / maxPoints,
                           minHeight: 8,
-                          color: colorFromHex(s.color),
+                          color: memberColor(context, s.color),
                           backgroundColor: theme.colorScheme.surfaceContainerHighest,
                         ),
                       ),
