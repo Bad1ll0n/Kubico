@@ -16,6 +16,7 @@ using Kubico.Domain.Users;
 using Kubico.Infrastructure;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -156,7 +157,7 @@ builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = context =>
     Texts.Localize(context.ProblemDetails, Texts.LanguageOf(context.HttpContext)));
 builder.Services.AddOpenApi();
-builder.Services.AddHealthChecks().AddDbContextCheck<KubicoDbContext>();
+builder.Services.AddHealthChecks().AddDbContextCheck<KubicoDbContext>(tags: ["ready"]);
 
 // Origens da app web. "http://localhost:*" aceita qualquer porta desse endereço (desenvolvimento: o Flutter web corre
 // numa porta aleatória); "*" só é aceite em Development (ver ProductionChecks).
@@ -214,7 +215,11 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.MapHealthChecks("/health");
+// "Vivo" (o processo responde, sem tocar na base: um orquestrador reinicia-o se falhar) e "pronto" (a base de dados
+// também responde: só então recebe tráfego). "/health" fica como sinónimo de "pronto".
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
+app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
 
 var api = app.MapGroup("/api");
 api.MapAuthEndpoints();

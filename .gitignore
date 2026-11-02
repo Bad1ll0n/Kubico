@@ -24,3 +24,6 @@ appsettings.Local.json
 # Contas de teste locais (com palavras-passe) e definições pessoais do Claude Code
 .claude/contas-de-teste.md
 .claude/settings.local.json
+
+# Cópias de segurança locais da base (docker compose, serviço backup).
+backups/

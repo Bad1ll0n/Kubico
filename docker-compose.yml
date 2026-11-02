@@ -6,6 +6,7 @@
 services:
   db:
     image: postgres:17
+    restart: unless-stopped
     environment:
       POSTGRES_DB: kubico
       POSTGRES_USER: kubico
@@ -23,6 +24,7 @@ services:
 
   api:
     build: ./backend
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -38,6 +40,42 @@ services:
       Https__Enforce: ${HTTPS_ENFORCE:-false}
     ports:
       - "127.0.0.1:5281:8080"
+    # A imagem não tem curl: o bash fala HTTP com o próprio processo. "Vivo" chega (a base tem o seu healthcheck).
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 &&
+          printf "GET /health/live HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 && grep -q "200 OK" <&3'
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Cópia de segurança da base, uma vez por dia, em ./backups (fora do Git); guardam-se 14 dias. Para repor:
+  #   docker compose exec -T db pg_restore -U kubico -d kubico --clean --if-exists < backups/kubico-AAAA-MM-DD.dump
+  # A DataProtection:MasterKey (no .env) não vai na cópia: guarda-a noutro sítio, sem ela os segredos da 2FA e das
+  # contas de calendário ligadas não se leem.
+  backup:
+    image: postgres:17
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        while true; do
+        pg_dump -h db -U kubico -Fc kubico > /backups/kubico-$$(date +%F).dump.tmp &&
+        mv /backups/kubico-$$(date +%F).dump.tmp /backups/kubico-$$(date +%F).dump &&
+        find /backups -name 'kubico-*.dump' -mtime +14 -delete;
+        sleep 86400;
+        done
 
 volumes:
   kubico-db:
