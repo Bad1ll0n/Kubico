@@ -105,34 +105,46 @@ class SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(top: KubicoSpace.s16, bottom: KubicoSpace.s8),
       child: Row(
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 22, color: color ?? theme.colorScheme.onSurfaceVariant),
-            const SizedBox(width: KubicoSpace.s8),
-          ],
-          Flexible(
-            child: Text(
-              title,
-              style: theme.textTheme.titleLarge?.copyWith(color: color ?? theme.colorScheme.onSurface),
+          // O título, o ícone e o contador ocupam o que a ação deixa; o título só se corta se não couber mesmo.
+          Expanded(
+            child: Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 22, color: color ?? theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(width: KubicoSpace.s8),
+                ],
+                Flexible(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    // No telemóvel, um pouco mais pequeno: o título, o contador e a ação cabem numa linha.
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: color ?? theme.colorScheme.onSurface,
+                      fontSize: MediaQuery.sizeOf(context).width < 600 ? 19 : null,
+                    ),
+                  ),
+                ),
+                if (count != null) ...[
+                  const SizedBox(width: KubicoSpace.s8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          if (count != null) ...[
-            const SizedBox(width: KubicoSpace.s8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                '$count',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-          ],
-          const Spacer(),
           ?action,
         ],
       ),

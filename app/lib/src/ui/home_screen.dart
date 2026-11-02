@@ -23,8 +23,10 @@ import 'rewards_view.dart';
 import 'shopping_items_view.dart';
 import 'shopping_lists_view.dart';
 import 'theme.dart';
+import 'today_view.dart';
 
-/// Ecrã principal de uma casa, com as secções Compras, Tarefas, Calendário e Recompensas.
+/// Ecrã principal de uma casa: abre no Hoje (o resumo do dia) e tem as secções Compras, Tarefas, Calendário e
+/// Recompensas.
 /// Em ecrãs largos (PC, tablet) usa uma barra lateral e mostra listas e artigos lado a lado;
 /// no telemóvel usa a barra inferior e abre cada lista num ecrã próprio.
 class HomeScreen extends StatefulWidget {
@@ -37,17 +39,39 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const _sections = [
-    (module: HouseholdModule.shopping, icon: Icons.shopping_cart_outlined, selectedIcon: Icons.shopping_cart),
-    (module: HouseholdModule.chores, icon: Icons.task_alt_outlined, selectedIcon: Icons.task_alt),
-    (module: HouseholdModule.calendar, icon: Icons.calendar_month_outlined, selectedIcon: Icons.calendar_month),
-    (module: HouseholdModule.rewards, icon: Icons.card_giftcard_outlined, selectedIcon: Icons.card_giftcard),
+  // module null é o Hoje.
+  static const _sections = <({HouseholdModule? module, IconData icon, IconData selectedIcon, KubicoArea area})>[
+    (module: null, icon: Icons.home_outlined, selectedIcon: Icons.home_rounded, area: KubicoArea.today),
+    (
+      module: HouseholdModule.shopping,
+      icon: Icons.shopping_cart_outlined,
+      selectedIcon: Icons.shopping_cart_rounded,
+      area: KubicoArea.shopping,
+    ),
+    (
+      module: HouseholdModule.chores,
+      icon: Icons.check_circle_outline_rounded,
+      selectedIcon: Icons.check_circle_rounded,
+      area: KubicoArea.chores,
+    ),
+    (
+      module: HouseholdModule.calendar,
+      icon: Icons.calendar_month_outlined,
+      selectedIcon: Icons.calendar_month_rounded,
+      area: KubicoArea.calendar,
+    ),
+    (
+      module: HouseholdModule.rewards,
+      icon: Icons.star_outline_rounded,
+      selectedIcon: Icons.star_rounded,
+      area: KubicoArea.rewards,
+    ),
   ];
 
   String? _connectedHouseholdId;
   var _pushRegistered = false;
   ShoppingList? _selectedList;
-  HouseholdModule _section = HouseholdModule.shopping;
+  HouseholdModule? _section;
   StreamSubscription<HouseholdEvent>? _membership;
 
   @override
@@ -234,18 +258,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               )
             : lists;
-        // Só aparecem as áreas a que o meu papel dá acesso nesta casa.
-        final sections = [
+        // Só aparecem as áreas a que o meu papel dá acesso nesta casa (e o Hoje, se houver alguma).
+        final visible = [
           for (final s in _sections)
-            if (household.accessTo(s.module).canView) s,
+            if (s.module != null && household.accessTo(s.module!).canView) s,
         ];
+        final sections = [if (visible.isNotEmpty) _sections.first, ...visible];
         final section = sections.where((s) => s.module == _section).firstOrNull ?? sections.firstOrNull;
         // Se a área aberta deixou de se ver, fica-se na que a substituiu (mesmo que a outra volte).
         if (section != null) _section = section.module;
         final index = section == null ? 0 : sections.indexOf(section);
         void select(int i) => setState(() => _section = sections[i].module);
         final Widget content = switch (section?.module) {
-          null => const _NoAreas(),
+          null when section == null => const _NoAreas(),
+          null => TodayView(
+            key: ValueKey('today-${household.id}'),
+            household: household,
+            onOpen: (module) => setState(() => _section = module),
+          ),
           HouseholdModule.shopping => shopping,
           HouseholdModule.chores => ChoresView(key: ValueKey('chores-${household.id}'), household: household),
           HouseholdModule.calendar => CalendarView(key: ValueKey('calendar-${household.id}'), household: household),
@@ -303,8 +333,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         for (final s in sections)
                           NavigationRailDestination(
                             icon: Icon(s.icon),
-                            selectedIcon: Icon(s.selectedIcon),
-                            label: Text(s.module.label),
+                            selectedIcon: Icon(s.selectedIcon, color: context.kubico.area(s.area).onContainer),
+                            indicatorColor: context.kubico.area(s.area).container,
+                            label: Text(s.module?.label ?? 'Hoje'.tr),
                           ),
                       ],
                     ),
@@ -318,12 +349,13 @@ class _HomeScreenState extends State<HomeScreen> {
               : NavigationBar(
                   selectedIndex: index,
                   onDestinationSelected: select,
+                  indicatorColor: context.kubico.area(sections[index].area).container,
                   destinations: [
                     for (final s in sections)
                       NavigationDestination(
                         icon: Icon(s.icon),
-                        selectedIcon: Icon(s.selectedIcon),
-                        label: s.module.label,
+                        selectedIcon: Icon(s.selectedIcon, color: context.kubico.area(s.area).onContainer),
+                        label: s.module?.label ?? 'Hoje'.tr,
                       ),
                   ],
                 ),

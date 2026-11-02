@@ -72,7 +72,8 @@ ThemeData buildTheme(Brightness brightness) {
       height: 72,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       backgroundColor: scheme.surfaceContainer,
-      labelTextStyle: WidgetStatePropertyAll(text.labelSmall),
+      // 5 destinos num telemóvel de 360 dp: "Recompensas" tem de caber numa linha.
+      labelTextStyle: WidgetStatePropertyAll(text.labelSmall?.copyWith(fontSize: 11, letterSpacing: -0.2)),
     ),
     navigationRailTheme: NavigationRailThemeData(
       backgroundColor: scheme.surfaceContainer,
