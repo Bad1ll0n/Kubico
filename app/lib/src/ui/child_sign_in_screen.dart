@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
@@ -7,6 +6,7 @@ import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'design/components.dart';
+import 'design/pin_pad.dart';
 import 'theme.dart';
 
 /// Entrada de uma criança sem email: o código da família (que um adulto vê no ecrã dos membros), o seu nome e o PIN.
@@ -102,38 +102,59 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
                   const SizedBox(height: 16),
                   FilledButton(onPressed: _busy ? null : _findProfiles, child: Text('Continuar'.tr)),
                 ] else if (chosen == null) ...[
-                  Text('Quem és tu?'.tr, style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
+                  Text('Quem és tu?'.tr, style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
+                  const SizedBox(height: 24),
+                  // Avatares grandes em grelha: uma criança pequena encontra-se pela cor e pela letra.
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 16,
+                    runSpacing: 16,
+                    children: [
+                      for (final p in profiles)
+                        InkWell(
+                          borderRadius: BorderRadius.circular(KubicoRadius.lg),
+                          onTap: () => setState(() => _chosen = p),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: SizedBox(
+                              width: 104,
+                              child: Column(
+                                children: [
+                                  MemberAvatar(name: p.displayName, color: p.color, size: 88),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    p.displayName,
+                                    style: theme.textTheme.titleMedium,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 16),
-                  for (final p in profiles)
-                    Card(
-                      child: ListTile(
-                        leading: MemberAvatar(name: p.displayName, color: p.color, size: 48),
-                        title: Text(p.displayName, style: theme.textTheme.titleMedium),
-                        onTap: () => setState(() => _chosen = p),
-                      ),
-                    ),
                   TextButton(onPressed: () => setState(() => _profiles = null), child: Text('Mudar o código'.tr)),
                 ] else ...[
                   MemberAvatar(name: chosen.displayName, color: chosen.color, size: 88),
                   const SizedBox(height: 12),
                   Text(
                     'Olá, ${chosen.displayName}!'.tr,
-                    style: theme.textTheme.titleLarge,
+                    style: theme.textTheme.headlineSmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Escreve o teu PIN.'.tr,
+                    style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
-                  TextField(
-                    controller: _pin,
-                    autofocus: true,
-                    decoration: const InputDecoration(labelText: 'PIN'),
-                    keyboardType: TextInputType.number,
-                    obscureText: true,
-                    maxLength: 6,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    onSubmitted: (_) => _signIn(),
-                  ),
+                  PinPad(controller: _pin, onSubmit: _busy ? () {} : _signIn),
                   const SizedBox(height: 8),
-                  FilledButton(onPressed: _busy ? null : _signIn, child: Text('Entrar'.tr)),
                   TextButton(
                     onPressed: () => setState(() {
                       _chosen = null;

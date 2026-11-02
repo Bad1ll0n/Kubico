@@ -11,6 +11,8 @@ const englishTexts = <String, String>{
   'Não encontrado.': 'Not found.',
   'Ocorreu um erro inesperado ({0}).': 'An unexpected error occurred ({0}).',
   'Sem ligação': 'Offline',
+  'Escreve o teu PIN.': 'Type your PIN.',
+  '{0} algarismos escritos': '{0} digits typed',
   'Agenda de hoje': "Today's agenda",
   'Ver': 'See all',
   'Feriado': 'Public holiday',

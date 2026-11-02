@@ -60,6 +60,12 @@ void main() {
       ),
     );
 
+    // Um telemóvel ao alto: o teclado do PIN cabe no ecrã.
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pump();
+
     await tester.tap(find.text('Entrar com perfil de criança'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Código da família'), 'famil-ia23');
@@ -71,14 +77,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Olá, Rita!'), findsOneWidget);
 
-    await tester.enterText(find.widgetWithText(TextField, 'PIN'), '0000');
-    await tester.tap(find.text('Entrar'));
+    for (final d in '0000'.split('')) {
+      await tester.tap(find.byKey(ValueKey('pin-key-$d')));
+    }
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('pin-key-ok')));
     await tester.pumpAndSettle();
     expect(find.text('PIN errado.'), findsOneWidget);
-    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'PIN')).controller!.text, isEmpty);
+    expect(find.byKey(const ValueKey('pin-dots-0')), findsOneWidget, reason: 'o PIN errado apaga-se');
 
-    await tester.enterText(find.widgetWithText(TextField, 'PIN'), '1234');
-    await tester.tap(find.text('Entrar'));
+    for (final d in '1234'.split('')) {
+      await tester.tap(find.byKey(ValueKey('pin-key-$d')));
+    }
+    await tester.pump();
+    expect(find.byKey(const ValueKey('pin-dots-4')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('pin-key-ok')));
     await tester.pumpAndSettle();
 
     expect(logins.last, {'familyCode': 'famil-ia23', 'userId': 'rita', 'pin': '1234'});
