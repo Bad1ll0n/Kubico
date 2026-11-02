@@ -225,12 +225,8 @@ class _Header extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
-      child: Text(text, style: Theme.of(context).textTheme.titleSmall),
-    );
-  }
+  Widget build(BuildContext context) =>
+      Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: SectionHeader(text));
 }
 
 /// O meu saldo em destaque e o dos outros membros por baixo.
@@ -251,11 +247,22 @@ class _PointsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Os teus pontos'.tr, style: theme.textTheme.titleSmall),
-            const SizedBox(height: 4),
-            Text(
-              (mine?.available ?? 0) < 0 ? 'Deves ${-(mine!.available)}'.tr : '${mine?.available ?? 0}',
-              style: theme.textTheme.displaySmall,
+            Text('Os teus pontos'.tr, style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            // O saldo em grande; uma dívida em cor de aviso (não é um erro da criança).
+            Row(
+              children: [
+                Icon(
+                  (mine?.available ?? 0) < 0 ? Icons.error_outline_rounded : Icons.star_rounded,
+                  size: 40,
+                  color: (mine?.available ?? 0) < 0 ? context.kubico.warning : theme.colorScheme.tertiary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  (mine?.available ?? 0) < 0 ? 'Deves ${-(mine!.available)}'.tr : '${mine?.available ?? 0}',
+                  style: theme.textTheme.displaySmall?.copyWith(fontFeatures: tabularFigures),
+                ),
+              ],
             ),
             if (mine != null && mine.available < 0)
               Text(
@@ -296,18 +303,76 @@ class _RewardTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final missing = reward.cost - available;
-    final details = [
-      if (reward.description != null) reward.description!,
-      if (missing > 0) 'Faltam $missing pontos'.tr,
-    ].join(' · ');
+    // A barra mostra quanto falta (progresso pessoal). Quando ainda não chega não há botão desativado (para uma
+    // criança, um botão cinzento lê-se como "não podes"): só a barra e quanto falta.
     return Card(
-      child: ListTile(
+      child: InkWell(
         onTap: onTap,
-        leading: const CircleAvatar(child: Icon(Icons.card_giftcard)),
-        title: Text(reward.title),
-        subtitle: details.isEmpty ? null : Text(details),
-        trailing: FilledButton.tonal(onPressed: missing > 0 ? null : onRedeem, child: Text('${reward.cost} pts')),
+        borderRadius: BorderRadius.circular(KubicoRadius.md),
+        child: Padding(
+          padding: const EdgeInsets.all(KubicoSpace.s16),
+          child: Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: scheme.tertiaryContainer,
+                  borderRadius: BorderRadius.circular(KubicoRadius.md),
+                ),
+                child: Icon(Icons.card_giftcard_rounded, size: 30, color: scheme.onTertiaryContainer),
+              ),
+              const SizedBox(width: KubicoSpace.s16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text(reward.title, style: theme.textTheme.titleMedium)),
+                        PointsBadge(reward.cost),
+                      ],
+                    ),
+                    if (reward.description != null)
+                      Text(
+                        reward.description!,
+                        style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                    const SizedBox(height: KubicoSpace.s8),
+                    LinearProgressIndicator(
+                      value: reward.cost <= 0 ? 1 : (available / reward.cost).clamp(0, 1).toDouble(),
+                      minHeight: 8,
+                      borderRadius: BorderRadius.circular(4),
+                      color: scheme.tertiary,
+                    ),
+                    const SizedBox(height: KubicoSpace.s8),
+                    if (missing > 0)
+                      Text(
+                        'Faltam $missing pontos'.tr,
+                        style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                      )
+                    else if (onRedeem != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: scheme.tertiary,
+                            foregroundColor: scheme.onTertiary,
+                          ),
+                          onPressed: onRedeem,
+                          icon: const Icon(Icons.redeem_rounded),
+                          label: Text('Trocar'.tr),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

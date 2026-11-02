@@ -257,3 +257,85 @@ class StateView extends StatelessWidget {
     );
   }
 }
+
+/// Uma estrela que cresce e se desvanece no centro do ecrã com "+N": a recompensa visual de concluir uma tarefa
+/// com pontos (para as crianças, a mensagem em texto não chega). Não leva texto que se leia como mensagem (essa
+/// continua no SnackBar) e, com menos movimento pedido, não aparece.
+void celebratePoints(BuildContext context, int points) {
+  if (points <= 0 || MediaQuery.disableAnimationsOf(context)) return;
+  final overlay = Overlay.maybeOf(context, rootOverlay: true);
+  if (overlay == null) return;
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (_) => _Celebration(points: points, onDone: () => entry.remove()),
+  );
+  overlay.insert(entry);
+}
+
+class _Celebration extends StatefulWidget {
+  const _Celebration({required this.points, required this.onDone});
+
+  final int points;
+  final VoidCallback onDone;
+
+  @override
+  State<_Celebration> createState() => _CelebrationState();
+}
+
+class _CelebrationState extends State<_Celebration> with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))
+    ..addStatusListener((status) {
+      if (status == AnimationStatus.completed) widget.onDone();
+    })
+    ..forward();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    // Entra a crescer (com um pequeno ressalto) e sai a desvanecer.
+    final scale = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0, 0.45, curve: Curves.easeOutBack),
+    );
+    final fade = Tween<double>(begin: 1, end: 0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.7, 1, curve: Curves.easeIn),
+      ),
+    );
+    return IgnorePointer(
+      child: ExcludeSemantics(
+        child: Center(
+          child: FadeTransition(
+            opacity: fade,
+            child: ScaleTransition(
+              scale: scale,
+              child: Container(
+                width: 160,
+                height: 160,
+                decoration: BoxDecoration(color: scheme.tertiaryContainer, shape: BoxShape.circle),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.star_rounded, size: 72, color: scheme.tertiary),
+                    Text(
+                      '+${widget.points}',
+                      textScaler: TextScaler.noScaling,
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: scheme.onTertiaryContainer),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

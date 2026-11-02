@@ -197,6 +197,7 @@ class _ChoresViewState extends State<ChoresView> {
       _upsert(updated);
       _loadStats();
       if (!mounted) return;
+      celebratePoints(context, points);
       final next = updated.isDone ? null : _details?.member(updated.assigneeUserId)?.displayName;
       final doer = doneBy == _myUserId ? null : _details?.member(doneBy)?.displayName;
       ScaffoldMessenger.of(context)
@@ -244,6 +245,7 @@ class _ChoresViewState extends State<ChoresView> {
       if (!result.completed) return;
       _loadStats();
       if (!mounted) return;
+      celebratePoints(context, result.points);
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(

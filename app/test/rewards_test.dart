@@ -120,12 +120,12 @@ void main() {
     expect(find.byTooltip('Aprovar'), findsNothing, reason: 'só os adultos aprovam pedidos');
     expect(find.widgetWithText(TextButton, 'Cancelar'), findsNothing, reason: 'o pedido do Rui não é dela');
 
-    final expensive = tester.widget<FilledButton>(find.widgetWithText(FilledButton, '100 pts'));
-    expect(expensive.onPressed, isNull);
+    // A que ainda não dá não tem botão (só a barra e quanto falta); a que dá tem "Trocar".
+    expect(find.text('Trocar'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(FilledButton, '25 pts'));
+    await tester.tap(find.text('Trocar'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Trocar'));
+    await tester.tap(find.text('Trocar').last);
     await tester.pumpAndSettle();
 
     expect(fake.actions, ['POST /api/households/h1/rewards/r1/redeem']);
