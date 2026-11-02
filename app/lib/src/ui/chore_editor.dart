@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 
 import '../api/models.dart';
@@ -102,13 +103,13 @@ class _ChoreEditorState extends State<_ChoreEditor> {
   /// Uma tarefa que se repete tem sempre prazo: sem ele, começa hoje.
   void _setRecurrence(ChoreRecurrence recurrence) {
     _recurrence = recurrence;
-    if (recurrence != ChoreRecurrence.none) _dueDate ??= DateUtils.dateOnly(DateTime.now());
+    if (recurrence != ChoreRecurrence.none) _dueDate ??= DateUtils.dateOnly(clock.now());
   }
 
   void _removeStep(int index) => setState(() => _steps.removeAt(index).dispose());
 
   Future<void> _pickDate() async {
-    final now = DateTime.now();
+    final now = clock.now();
     final picked = await showDatePicker(
       context: context,
       initialDate: _dueDate ?? now,

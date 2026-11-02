@@ -27,8 +27,11 @@ public class CalendarFeedTests(KubicoApiFactory factory) : IClassFixture<KubicoA
         (await client.PutAsJsonAsync($"{url}/{swimming.Id}/occurrences/2026-11-10", new SaveEventRequest(
             "Natação (quarta)", StartsAt: Utc(2026, 11, 11, 18), EndsAt: Utc(2026, 11, 11, 19)), TestJson.Options))
             .EnsureSuccessStatusCode();
+        // Um evento único entra no feed só a partir do último ano: a data acompanha o relógio dos testes (que é o dia
+        // em que correm), senão o teste deixava de passar no fim de 2027.
+        var holidays = factory.Today.AddDays(60);
         await CreateEvent(client, household.Id, new SaveEventRequest(
-            "Férias", IsAllDay: true, StartDate: new DateOnly(2026, 12, 21), EndDate: new DateOnly(2026, 12, 23)));
+            "Férias", IsAllDay: true, StartDate: holidays, EndDate: holidays.AddDays(2)));
 
         var feed = await GetFeedAddress(client, household.Id);
         var sameFeed = await GetFeedAddress(client, household.Id);
@@ -50,8 +53,8 @@ public class CalendarFeedTests(KubicoApiFactory factory) : IClassFixture<KubicoA
         Assert.Contains("RECURRENCE-ID;TZID=Europe/Lisbon:20261110T180000", lines);
         Assert.Contains("SUMMARY:Natação\\, piscina", lines);
         Assert.Contains("DESCRIPTION:Levar touca\\nParticipantes: Filipe\\nLeva: Filipe", lines);
-        Assert.Contains("DTSTART;VALUE=DATE:20261221", lines);
-        Assert.Contains("DTEND;VALUE=DATE:20261224", lines);
+        Assert.Contains($"DTSTART;VALUE=DATE:{holidays:yyyyMMdd}", lines);
+        Assert.Contains($"DTEND;VALUE=DATE:{holidays.AddDays(3):yyyyMMdd}", lines);
         Assert.Equal(3, lines.Count(l => l == "BEGIN:VEVENT"));
     }
 

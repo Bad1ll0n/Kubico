@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +12,7 @@ import 'package:kubico/src/session/session_controller.dart';
 import 'package:kubico/src/session/token_store.dart';
 import 'package:kubico/src/ui/activity_screen.dart';
 import 'package:kubico/src/ui/calendar_event_editor.dart';
+import 'package:kubico/src/ui/calendar_view.dart';
 import 'package:kubico/src/ui/chore_editor.dart';
 import 'package:kubico/src/ui/chores_view.dart';
 import 'package:kubico/src/ui/household_screen.dart';
@@ -206,24 +208,60 @@ void main() {
     });
   });
 
+  // No dia da mudança de hora de outubro (25 horas), "amanhã" é o dia seguinte, não "hoje + 24 h" (QA-03).
   testWidgets('T1: uma tarefa que se repete e já foi feita espera pelo seu dia', (tester) async {
-    final tomorrow = DateUtils.dateOnly(DateTime.now()).add(const Duration(days: 1));
-    final server = _Server(
-      chores: [
-        _chore('c1', 'Fazer a cama', recurrence: 'Daily', due: tomorrow, availableFrom: tomorrow, assignee: 'mae'),
-      ],
-    );
-    await _pump(tester, server, (session) => ChoresView(household: session.currentHousehold!));
+    await withClock(Clock.fixed(DateTime(2026, 10, 25, 9)), () async {
+      final today = DateUtils.dateOnly(clock.now());
+      final tomorrow = DateTime(today.year, today.month, today.day + 1);
+      final server = _Server(
+        chores: [
+          _chore('c1', 'Fazer a cama', recurrence: 'Daily', due: tomorrow, availableFrom: tomorrow, assignee: 'mae'),
+        ],
+      );
+      await _pump(tester, server, (session) => ChoresView(household: session.currentHousehold!));
 
-    final tooltip =
-        'Já está feita. Volta a estar disponível a ${tomorrow.day.toString().padLeft(2, '0')}/'
-        '${tomorrow.month.toString().padLeft(2, '0')}.';
-    final button = tester.widget<IconButton>(
-      find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton)),
+      final tooltip =
+          'Já está feita. Volta a estar disponível a ${tomorrow.day.toString().padLeft(2, '0')}/'
+          '${tomorrow.month.toString().padLeft(2, '0')}.';
+      final button = tester.widget<IconButton>(
+        find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton)),
+      );
+
+      expect(button.onPressed, isNull);
+      expect(find.textContaining('disponível a'), findsOneWidget);
+    });
+  });
+
+  test('passar uma série a dia inteiro no dia da mudança de hora não perde o último dia (QA-04)', () {
+    final series = CalendarEvent.fromJson({
+      'id': 's1',
+      'householdId': 'h1',
+      'title': 'Natação',
+      'isAllDay': false,
+      'startsAt': DateTime(2026, 10, 25, 10).toUtc().toIso8601String(),
+      'endsAt': DateTime(2026, 10, 25, 11).toUtc().toIso8601String(),
+      'recurrence': 'FREQ=WEEKLY',
+      'participantUserIds': <String>[],
+      'updatedAt': '2026-10-01T10:00:00Z',
+    });
+    final occurrence = CalendarOccurrence(
+      eventId: 's1',
+      occurrenceDate: DateTime(2026, 10, 25),
+      startsAt: DateTime(2026, 10, 25, 10),
+      endsAt: DateTime(2026, 10, 25, 11),
+      startDate: null,
+      endDate: null,
+      conflictUserIds: const [],
+    );
+    // Domingo, 25/10/2026, tem 25 horas em Portugal: "+ 24 h" dava 25/10 às 23:00 e o evento perdia a segunda.
+    final edited = CalendarEventDraft(
+      title: 'Natação',
+      isAllDay: true,
+      start: DateTime(2026, 10, 25),
+      end: DateTime(2026, 10, 26),
     );
 
-    expect(button.onPressed, isNull);
-    expect(find.textContaining('disponível a'), findsOneWidget);
+    expect(draftForSeries(edited, series, occurrence).end, DateTime(2026, 10, 26));
   });
 
   testWidgets('A1: a mãe marca a tarefa da Rita e escolhe quem a fez', (tester) async {

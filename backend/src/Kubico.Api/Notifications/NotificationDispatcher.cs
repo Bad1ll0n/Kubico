@@ -46,6 +46,7 @@ public class NotificationDispatcher(KubicoDbContext db, IPushSender sender, Time
                 .Select(n => n.UserId)
                 .Distinct()
                 .Where(id => !seen.Contains(id))
+                .OrderBy(id => id) // Lotes deterministas (e sem o aviso do EF "Take sem OrderBy" a cada minuto).
                 .Take(BatchSize)
                 .ToListAsync(ct);
             if (users.Count == 0)

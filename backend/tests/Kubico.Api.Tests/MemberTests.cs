@@ -269,7 +269,7 @@ public class ChildProfileTests(KubicoApiFactory factory) : IClassFixture<KubicoA
         var guestCode = await guest.PostAsync($"/api/households/{household.Id}/family-code", null);
         var otherHouseKid = await anonymous.PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, neighbourKid.UserId, "4829"));
         var renamed = await admin.PutAsJsonAsync($"/api/households/{household.Id}/children/{rita.UserId}",
-            new UpdateChildProfileRequest("Rita Maria", new DateOnly(2016, 5, 3)), TestJson.Options);
+            new UpdateChildProfileRequest("Rita Maria", factory.Today.AddYears(-10)), TestJson.Options);
         var renamedDto = (await renamed.Content.ReadFromJsonAsync<MemberDto>(TestJson.Options))!;
         (await admin.DeleteAsync($"/api/households/{household.Id}/family-code")).EnsureSuccessStatusCode();
         var oldCode = await anonymous.PostAsJsonAsync("/api/auth/child/login", new ChildLoginRequest(code, rita.UserId, "4829"));
@@ -280,7 +280,7 @@ public class ChildProfileTests(KubicoApiFactory factory) : IClassFixture<KubicoA
         Assert.Equal(HttpStatusCode.Forbidden, guestCreates.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, guestCode.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, otherHouseKid.StatusCode);
-        Assert.Equal(("Rita Maria", new DateOnly(2016, 5, 3)), (renamedDto.DisplayName, renamedDto.BirthDate!.Value));
+        Assert.Equal(("Rita Maria", factory.Today.AddYears(-10)), (renamedDto.DisplayName, renamedDto.BirthDate!.Value));
         Assert.Equal(HttpStatusCode.NotFound, oldCode.StatusCode);
         Assert.NotEqual(code, newCode);
         Assert.Equal(HttpStatusCode.NotFound, removedProfile.StatusCode);

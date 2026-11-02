@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -26,7 +27,7 @@ class HouseholdScreen extends StatefulWidget {
   final Future<DateTimeRange?> Function(BuildContext context) pickAbsenceDates;
 
   static Future<DateTimeRange?> _pickDates(BuildContext context) {
-    final today = DateUtils.dateOnly(DateTime.now());
+    final today = DateUtils.dateOnly(clock.now());
     return showDateRangePicker(
       context: context,
       firstDate: today,
@@ -450,7 +451,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
             member.role.label,
             if (member.isChildProfile) 'entra com PIN'.tr,
             if (absence != null)
-              absence.covers(DateTime.now())
+              absence.covers(clock.now())
                   ? 'fora até ${formatDayMonthShort(absence.endDate)}'.tr
                   : 'fora ${_period(absence.startDate, absence.endDate)}'.tr,
           ].join(' · '),

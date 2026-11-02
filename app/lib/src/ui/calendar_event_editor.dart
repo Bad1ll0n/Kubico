@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 
 import '../api/models.dart';
@@ -123,7 +124,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
 
   /// Um evento novo começa à próxima hora certa (se for hoje) ou às 9:00.
   static DateTime _defaultStart(DateTime day) {
-    final now = DateTime.now();
+    final now = clock.now();
     if (DateUtils.isSameDay(day, now)) return DateTime(now.year, now.month, now.day, now.hour + 1);
     return DateTime(day.year, day.month, day.day, 9);
   }

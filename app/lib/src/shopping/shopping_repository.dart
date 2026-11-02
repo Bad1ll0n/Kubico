@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
@@ -212,7 +213,7 @@ class ShoppingRepository extends ChangeNotifier {
       quantity: quantity,
       category: category,
       barcode: barcode,
-      at: DateTime.now().toUtc(),
+      at: clock.now().toUtc(),
     );
     _enqueue(change);
     return change.toItem();
@@ -225,7 +226,7 @@ class ShoppingRepository extends ChangeNotifier {
       listId: listId,
       itemId: itemId,
       isChecked: isChecked,
-      at: DateTime.now().toUtc(),
+      at: clock.now().toUtc(),
     ),
   );
 
@@ -235,17 +236,12 @@ class ShoppingRepository extends ChangeNotifier {
       householdId: householdId,
       listId: listId,
       itemId: itemId,
-      at: DateTime.now().toUtc(),
+      at: clock.now().toUtc(),
     ),
   );
 
   void clearChecked(String householdId, String listId) => _enqueue(
-    ShoppingChange(
-      type: ShoppingChangeType.clear,
-      householdId: householdId,
-      listId: listId,
-      at: DateTime.now().toUtc(),
-    ),
+    ShoppingChange(type: ShoppingChangeType.clear, householdId: householdId, listId: listId, at: clock.now().toUtc()),
   );
 
   /// Envia as alterações por ordem. Sem rede, sem sessão ou com o servidor em baixo (0, 401, 408, 429, 5xx), pára e

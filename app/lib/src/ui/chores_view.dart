@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -144,7 +145,7 @@ class _ChoresViewState extends State<ChoresView> {
   /// Quem gere conclui qualquer tarefa; quem usa, as suas e as de ninguém; quem só vê, nenhuma. Uma tarefa que se
   /// repete só se faz uma vez em cada ocorrência: a seguinte fica à espera do seu dia.
   bool _canComplete(Chore chore) =>
-      chore.isAvailableOn(DateTime.now()) &&
+      chore.isAvailableOn(clock.now()) &&
       (_access.canManage ||
           (_access.canParticipate && (chore.assigneeUserId == null || chore.assigneeUserId == _myUserId)));
 
@@ -304,7 +305,7 @@ class _ChoresViewState extends State<ChoresView> {
       );
     }
 
-    final today = DateTime.now();
+    final today = clock.now();
     final grouped = <ChoreGroup, List<Chore>>{};
     final sorted = chores.values.toList()
       ..sort((a, b) {

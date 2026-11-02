@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
+
 /// Junta numa só as recargas pedidas em rajada pelos eventos do tempo real (P2): a recarga corre [delay] depois do
 /// último pedido (no máximo [maxWait] depois do primeiro, para uma rajada sem fim não a adiar para sempre). Nunca há
 /// duas ao mesmo tempo: um pedido que chegue durante uma recarga faz mais uma no fim.
@@ -32,7 +34,7 @@ class CoalescedReload {
       _again = true;
       return;
     }
-    final now = DateTime.now();
+    final now = clock.now();
     _firstRequest ??= now;
     final waited = now.difference(_firstRequest!);
     _timer?.cancel();

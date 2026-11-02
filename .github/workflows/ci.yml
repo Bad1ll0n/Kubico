@@ -37,4 +37,11 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter analyze
       - run: flutter test
+      # Em UTC não há mudanças de hora: os erros de "+ 24 h" (dias de 23 ou 25 horas) só aparecem num fuso com elas.
+      - run: flutter test
+        env:
+          TZ: Europe/Lisbon
+      - run: flutter test
+        env:
+          TZ: America/Sao_Paulo
       - run: flutter build web

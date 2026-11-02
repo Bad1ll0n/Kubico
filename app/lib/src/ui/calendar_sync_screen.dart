@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -243,7 +244,7 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
 
   static String _syncedText(DateTime? at) {
     if (at == null) return 'À espera da primeira sincronização.'.tr;
-    return DateUtils.isSameDay(at, DateTime.now())
+    return DateUtils.isSameDay(at, clock.now())
         ? 'Sincronizado hoje às ${formatTime(at)}.'.tr
         : 'Sincronizado a ${formatDayMonth(at)}, às ${formatTime(at)}.'.tr;
   }

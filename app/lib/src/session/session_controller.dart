@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
@@ -146,7 +147,7 @@ class SessionController extends ChangeNotifier {
   /// Para o tempo real (o SignalR só envia o token ao ligar): um token de acesso que dure pelo menos mais um minuto.
   Future<String> freshAccessToken() async {
     final expiresAt = _accessExpiresAt;
-    if (api.accessToken != null && (expiresAt == null || expiresAt.isBefore(DateTime.now().add(_margin)))) {
+    if (api.accessToken != null && (expiresAt == null || expiresAt.isBefore(clock.now().add(_margin)))) {
       await renewSession();
     }
     return api.accessToken ?? '';

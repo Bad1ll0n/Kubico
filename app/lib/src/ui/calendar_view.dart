@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -111,10 +112,12 @@ CalendarEventDraft draftForSeries(CalendarEventDraft edited, CalendarEvent serie
   // Passou de dia inteiro para hora marcada (ou o contrário): fica no primeiro dia da série, com as horas novas.
   final first = series.startDate ?? series.startsAt!;
   final start = DateTime(first.year, first.month, first.day, edited.start.hour, edited.start.minute);
-  final length = edited.isAllDay
-      ? Duration(days: _daysBetween(edited.start, edited.end))
-      : edited.end.difference(edited.start);
-  return edited.copyWith(start: start, end: start.add(length));
+  if (edited.isAllDay) {
+    // Em dias, não em horas: no dia da mudança de hora de outubro, "+ 24 h" ainda é o mesmo dia (QA-04).
+    final span = _daysBetween(edited.start, edited.end);
+    return edited.copyWith(start: start, end: DateTime(start.year, start.month, start.day + span));
+  }
+  return edited.copyWith(start: start, end: start.add(edited.end.difference(edited.start)));
 }
 
 /// Calendário partilhado da casa: vistas de dia, semana e mês, com a cor de cada membro,
@@ -134,7 +137,7 @@ class CalendarView extends StatefulWidget {
 class _CalendarViewState extends State<CalendarView> {
   final _subscriptions = <StreamSubscription<Object?>>[];
   var _mode = CalendarMode.month;
-  late DateTime _selected = DateUtils.dateOnly(widget.initialDate ?? DateTime.now());
+  late DateTime _selected = DateUtils.dateOnly(widget.initialDate ?? clock.now());
   CalendarRange? _calendar;
   (DateTime, DateTime)? _loadedRange;
   HouseholdDetails? _details;
@@ -356,7 +359,7 @@ class _CalendarViewState extends State<CalendarView> {
                 onPressed: () => _go(shiftFocus(_mode, _selected, 1)),
                 icon: const Icon(Icons.chevron_right),
               ),
-              TextButton(onPressed: () => _go(DateTime.now()), child: Text('Hoje'.tr)),
+              TextButton(onPressed: () => _go(clock.now()), child: Text('Hoje'.tr)),
               // As crianças veem o calendário só na app (o endereço funcionaria fora dela, sem sessão).
               if (widget.household.role != HouseholdRole.child)
                 IconButton(
@@ -466,7 +469,7 @@ class _MonthGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final today = DateUtils.dateOnly(DateTime.now());
+    final today = DateUtils.dateOnly(clock.now());
     return Column(
       children: [
         Row(
