@@ -521,33 +521,47 @@ class _DayCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final dayColor = isHoliday ? scheme.error : (inMonth ? scheme.onSurface : scheme.outline);
+    // Feriado em cor de informação (não de erro); os dias de fora do mês em onSurfaceVariant (o outline falhava AA).
+    final dayColor = isToday
+        ? scheme.onPrimary
+        : isHoliday
+        ? context.kubico.info
+        : (inMonth ? scheme.onSurface : scheme.onSurfaceVariant);
     return Padding(
       padding: const EdgeInsets.all(2),
       child: Material(
         color: isSelected ? scheme.primaryContainer : Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: isToday ? BorderSide(color: scheme.primary) : BorderSide.none,
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide.none),
         child: InkWell(
           onTap: onTap,
           customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: SizedBox(
-            height: 48,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '${day.day}',
-                  style: TextStyle(color: dayColor, fontWeight: isToday ? FontWeight.bold : null),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [for (final color in dots) _Dot(color: color)],
-                ),
-              ],
+          // Altura mínima, não fixa: com letra grande a célula cresce em vez de cortar o número.
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // O hoje num círculo cheio (não só um contorno), para se ver de relance.
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(minWidth: 28),
+                    decoration: isToday ? BoxDecoration(color: scheme.primary, shape: BoxShape.circle) : null,
+                    child: Text(
+                      '${day.day}',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.labelLarge
+                          ?.copyWith(color: dayColor, fontFeatures: tabularFigures),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [for (final color in dots) _Dot(color: color)],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -620,50 +634,83 @@ class _OccurrenceTile extends StatelessWidget {
     ].join(' · ');
     final participants = [for (final id in event.participantUserIds) details?.member(id)].whereType<Member>();
 
+    // Sem ListTile (que limita a altura do que vai à esquerda): com letra grande, as horas, o título e o conflito
+    // crescem em vez de cortar.
     return Card(
-      child: ListTile(
+      child: InkWell(
         onTap: onTap,
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 4,
-              height: 36,
-              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
-            ),
-            const SizedBox(width: 12),
-            // As horas encolhem em vez de partir em várias linhas (ecrãs estreitos, letra grande).
-            SizedBox(
-              width: 52,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(from, style: theme.textTheme.labelLarge),
-                    if (to != null) Text(to, style: theme.textTheme.bodySmall),
-                  ],
+        borderRadius: BorderRadius.circular(KubicoRadius.md),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 4,
+                  decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
                 ),
-              ),
+                const SizedBox(width: 12),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 52),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(from, style: theme.textTheme.labelLarge?.copyWith(fontFeatures: tabularFigures)),
+                      if (to != null)
+                        Text(
+                          to,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontFeatures: tabularFigures,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(event.title, style: theme.textTheme.titleMedium),
+                      if (subtitle.isNotEmpty)
+                        Text(
+                          subtitle,
+                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      // O conflito vê-se sempre (não só numa tooltip, que não aparece com toque).
+                      if (conflicts != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.error_rounded, size: 18, color: context.kubico.warning),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  conflicts!,
+                                  style: theme.textTheme.bodySmall?.copyWith(color: context.kubico.onWarningContainer),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                for (final member in participants.take(3))
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Center(
+                      child: MemberAvatar(name: member.displayName, color: member.color, size: 24),
+                    ),
+                  ),
+              ],
             ),
-          ],
-        ),
-        title: Text(event.title),
-        subtitle: subtitle.isEmpty ? null : Text(subtitle),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (conflicts != null)
-              Tooltip(
-                message: conflicts!,
-                child: Icon(Icons.error_rounded, color: context.kubico.warning),
-              ),
-            for (final member in participants.take(3))
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: MemberAvatar(name: member.displayName, color: member.color, size: 24),
-              ),
-          ],
+          ),
         ),
       ),
     );

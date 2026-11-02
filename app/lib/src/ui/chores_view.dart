@@ -511,27 +511,30 @@ class _StatsCard extends StatelessWidget {
             for (final s in stats)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
+                // O nome e os números numa linha que parte se não couber (letra grande), a barra por baixo.
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(width: 96, child: Text(s.displayName, overflow: TextOverflow.ellipsis)),
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: maxPoints == 0 ? 0 : s.points / maxPoints,
-                          minHeight: 8,
-                          color: memberColor(context, s.color),
-                          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      spacing: 8,
+                      children: [
+                        Text(s.displayName, style: theme.textTheme.titleSmall),
+                        Text(
+                          '${s.points} pts · ${s.completed} ${s.completed == 1 ? 'tarefa'.tr : 'tarefas'.tr}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontFeatures: tabularFigures,
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                    SizedBox(
-                      width: 120,
-                      child: Text(
-                        '${s.points} pts · ${s.completed} ${s.completed == 1 ? 'tarefa'.tr : 'tarefas'.tr}',
-                        textAlign: TextAlign.end,
-                        style: theme.textTheme.bodySmall,
-                      ),
+                    const SizedBox(height: 4),
+                    LinearProgressIndicator(
+                      value: maxPoints == 0 ? 0 : s.points / maxPoints,
+                      minHeight: 8,
+                      borderRadius: BorderRadius.circular(4),
+                      color: memberColor(context, s.color),
                     ),
                   ],
                 ),

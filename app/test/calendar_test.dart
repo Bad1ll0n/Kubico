@@ -175,7 +175,7 @@ class _FakeApi {
   });
 }
 
-Future<void> _pump(WidgetTester tester, _FakeApi api, HouseholdRole role) async {
+Future<void> _pump(WidgetTester tester, _FakeApi api, HouseholdRole role, {double textScale = 1}) async {
   tester.view.physicalSize = const Size(1000, 2000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -190,6 +190,10 @@ Future<void> _pump(WidgetTester tester, _FakeApi api, HouseholdRole role) async 
         ),
       ],
       child: MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
         home: CalendarView(
           household: HouseholdSummary(id: 'h1', name: 'Casa', role: role),
           initialDate: DateTime(2026, 11, 10),
@@ -309,7 +313,7 @@ void main() {
     expect(find.text('Terça-feira, 10 de novembro'), findsOneWidget);
     expect(find.text('Futebol'), findsOneWidget);
     expect(find.textContaining('Leva: Mãe · Vai buscar: Pai'), findsOneWidget);
-    expect(find.byTooltip('Mãe tem outro compromisso a essa hora'), findsOneWidget);
+    expect(find.text('Mãe tem outro compromisso a essa hora'), findsOneWidget, reason: 'o conflito vê-se sem tooltip');
     expect(find.text('Novo evento'), findsNothing, reason: 'crianças não criam eventos');
 
     await tester.tap(find.byKey(ValueKey(DateTime(2026, 11, 1))));
@@ -424,5 +428,16 @@ void main() {
     expect(DateUtils.dateOnly(start), DateTime(2026, 11, 10));
     expect(end.difference(start), const Duration(hours: 1));
     expect(find.text('Atenção: Rita tem outro compromisso a essa hora.'), findsOneWidget);
+  });
+
+  testWidgets('com a letra a 200 % (avós, baixa visão), a lista e o mês não cortam nada', (tester) async {
+    await _pump(tester, _FakeApi(), HouseholdRole.adult, textScale: 2);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Mês'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('10'), findsWidgets);
   });
 }
