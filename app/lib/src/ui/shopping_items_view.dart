@@ -234,6 +234,27 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
       _sorted = null;
     });
     _shopping.deleteItem(_householdId, _listId, item.id);
+    // Apagar com um deslize engana-se facilmente (sobretudo num tablet partilhado): dá para voltar atrás logo.
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('«${item.name}» saiu da lista.'.tr),
+          action: SnackBarAction(
+            label: 'Desfazer'.tr,
+            onPressed: () => _upsert(
+              _shopping.addItem(
+                _householdId,
+                _listId,
+                name: item.name,
+                quantity: item.quantity,
+                category: item.category,
+                barcode: item.barcode,
+              ),
+            ),
+          ),
+        ),
+      );
   }
 
   void _clearChecked() {
@@ -263,7 +284,8 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     // Uma lista plana de linhas (artigos por comprar, o cabeçalho do carrinho e os artigos comprados), construída só
     // à medida que aparecem no ecrã: o custo de um toque deixa de depender do tamanho da lista (P10).
     final empty = pending.isEmpty && done.isEmpty;
-    final rowCount = empty ? 1 : pending.length + (done.isEmpty ? 0 : 1 + done.length);
+    final pendingRows = _pendingRows(pending);
+    final rowCount = empty ? 1 : pendingRows.length + (done.isEmpty ? 0 : 1 + done.length);
 
     return Column(
       children: [
@@ -275,6 +297,31 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(widget.list.name, style: theme.textTheme.titleLarge),
+            ),
+          ),
+        // Quanto já está no carrinho ("6 de 14").
+        if (!empty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: LinearProgressIndicator(
+                    value: done.length / (pending.length + done.length),
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(3),
+                    color: context.kubico.area(KubicoArea.shopping).color,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '${done.length} de ${pending.length + done.length}'.tr,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontFeatures: tabularFigures,
+                  ),
+                ),
+              ],
             ),
           ),
         if (widget.canEdit)
@@ -321,8 +368,14 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
                     ),
                   );
                 }
-                if (index < pending.length) return _itemTile(pending[index]);
-                if (index > pending.length) return _itemTile(done[index - pending.length - 1]);
+                if (index < pendingRows.length) {
+                  return switch (pendingRows[index]) {
+                    final ShoppingItem item => _itemTile(item),
+                    final (String, int) header => _categoryHeader(header.$1, header.$2),
+                    _ => const SizedBox.shrink(),
+                  };
+                }
+                if (index > pendingRows.length) return _itemTile(done[index - pendingRows.length - 1]);
                 return Padding(
                   key: const ValueKey('carrinho'),
                   padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
@@ -332,7 +385,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
                       if (widget.canEdit)
                         TextButton.icon(
                           onPressed: _clearChecked,
-                          icon: const Icon(Icons.cleaning_services_outlined, size: 18),
+                          icon: const Icon(Icons.remove_shopping_cart_rounded, size: 18),
                           label: Text('Limpar'.tr),
                         ),
                     ],
@@ -346,9 +399,48 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     );
   }
 
+  /// Os artigos por comprar com um cabeçalho por categoria ("Lacticínios · 2"), quando a lista tem categorias (já
+  /// estão ordenados por categoria). Guarda-se para a mesma lista ordenada: não se refaz a cada desenho.
+  List<Object> _pendingRows(List<ShoppingItem> pending) {
+    if (identical(pending, _rowsFor)) return _rows;
+    _rowsFor = pending;
+    if (pending.every((i) => i.category == null)) return _rows = pending;
+    final counts = <String?, int>{};
+    for (final i in pending) {
+      counts[i.category] = (counts[i.category] ?? 0) + 1;
+    }
+    final rows = <Object>[];
+    String? current;
+    var first = true;
+    for (final item in pending) {
+      if (first || item.category != current) {
+        rows.add((item.category ?? 'Outros'.tr, counts[item.category]!));
+        current = item.category;
+        first = false;
+      }
+      rows.add(item);
+    }
+    return _rows = rows;
+  }
+
+  List<ShoppingItem>? _rowsFor;
+  List<Object> _rows = const [];
+
+  Widget _categoryHeader(String category, int count) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
+      child: Text(
+        '${category.toUpperCase()} · $count',
+        style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, letterSpacing: 0.6),
+      ),
+    );
+  }
+
   Widget _itemTile(ShoppingItem item) {
     final theme = Theme.of(context);
-    final subtitle = [item.quantity, item.category].whereType<String>().join(' · ');
+    // A categoria já está no cabeçalho (quando há cabeçalhos); a quantidade fica.
+    final subtitle = [item.quantity, if (item.isChecked) item.category].whereType<String>().join(' · ');
     return Dismissible(
       key: ValueKey(item.id),
       direction: widget.canEdit ? DismissDirection.endToStart : DismissDirection.none,

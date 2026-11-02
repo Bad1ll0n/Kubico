@@ -252,4 +252,47 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     shopping.dispose();
   });
+
+  testWidgets('a lista mostra as categorias e o progresso, e apagar um artigo tem Desfazer', (tester) async {
+    final server = _Server();
+    server.items
+      ..['milk'] = {..._Server._item('milk', 'Leite'), 'category': 'Lacticínios'}
+      ..['yogurt'] = {..._Server._item('yogurt', 'Iogurtes'), 'category': 'Lacticínios'}
+      ..['done'] = _Server._item('done', 'Ovos', checked: true);
+    final shopping = _repository(server, MemoryKeyValueStore());
+    const list = ShoppingList(id: 'l1', householdId: 'h1', name: 'Supermercado', itemCount: 4, checkedCount: 1);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: shopping),
+          Provider.value(
+            value: HouseholdRealtime(baseUrl: 'http://api', accessToken: () => 't'),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: ShoppingItemsView(householdId: 'h1', list: list),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('LACTICÍNIOS · 2'), findsOneWidget);
+    expect(find.text('OUTROS · 1'), findsOneWidget);
+    expect(find.text('1 de 4'), findsOneWidget);
+
+    await tester.drag(find.text('Leite'), const Offset(-600, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Leite'), findsNothing);
+    expect(find.text('«Leite» saiu da lista.'), findsOneWidget);
+
+    await tester.tap(find.text('Desfazer'));
+    await tester.pumpAndSettle();
+    expect(find.text('Leite'), findsOneWidget, reason: 'volta à lista (e o servidor recebe-o outra vez)');
+
+    await tester.pumpWidget(const SizedBox());
+    shopping.dispose();
+  });
 }
