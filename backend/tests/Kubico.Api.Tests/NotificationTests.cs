@@ -269,6 +269,41 @@ public class NotificationDispatchTests
         Assert.Empty(setup.Push.Sent);
     }
 
+    [Fact]
+    public async Task A_phone_that_fails_or_throws_neither_blocks_the_others_nor_makes_them_receive_twice()
+    {
+        using var setup = await Setup.CreateAsync();
+        await setup.AddDevice("tablet-do-pai");
+        await setup.AddDevice("telemovel-velho");
+        setup.Push.Failing.Add("tablet-do-pai");
+        setup.Push.Throwing.Add("telemovel-velho");
+        await setup.AssignChore("Loiça");
+
+        await setup.Dispatch();
+        await setup.Dispatch();
+        var pending = await setup.Count(db => db.Notifications.Count(n => n.PushedAt == null));
+
+        Assert.Single(setup.Push.Sent, s => s.Token == "telemovel-do-pai");
+        Assert.Equal(0, pending);
+    }
+
+    [Fact]
+    public async Task A_notification_that_never_reaches_any_phone_is_given_up_after_an_hour()
+    {
+        using var setup = await Setup.CreateAsync();
+        setup.Push.Failing.Add("telemovel-do-pai");
+        await setup.AssignChore("Loiça");
+
+        await setup.Dispatch();
+        var stillTrying = await setup.Count(db => db.Notifications.Count(n => n.PushedAt == null));
+        setup.Clock.Advance(NotificationDispatcher.GiveUpAfter + TimeSpan.FromMinutes(1));
+        await setup.Dispatch();
+        var givenUp = await setup.Count(db => db.Notifications.Count(n => n.PushedAt == null));
+
+        Assert.Equal(1, stillTrying);
+        Assert.Equal(0, givenUp);
+    }
+
     /// <summary>A mãe atribui tarefas ao pai, que tem um telemóvel registado e preferências no fuso UTC.</summary>
     private sealed class Setup : IDisposable
     {
@@ -316,6 +351,18 @@ public class NotificationDispatchTests
                 _householdId, [_partnerId], Guid.Empty, NotificationKind.ChoreAssigned, $"Tarefa para ti: {title}", null, null, default);
         }
 
+        /// <summary>Mais um telemóvel do pai (diretamente na base: a API guarda um por sessão).</summary>
+        public async Task AddDevice(string token)
+        {
+            await using var scope = _app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<Kubico.Infrastructure.Persistence.KubicoDbContext>();
+            db.PushDevices.Add(new PushDevice
+            {
+                UserId = _partnerId, Token = token, Platform = "android", CreatedAt = Clock.GetUtcNow(), LastSeenAt = Clock.GetUtcNow(),
+            });
+            await db.SaveChangesAsync();
+        }
+
         public async Task<int> Dispatch()
         {
             await using var scope = _app.Services.CreateAsyncScope();
@@ -353,14 +400,30 @@ public sealed class RecordingPushSender : IPushSender
     public List<(string Token, PushMessage Message)> Sent { get; } = [];
     public HashSet<string> InvalidTokens { get; } = [];
 
+    /// <summary>Telemóveis cujo envio falha (o FCM não respondeu bem).</summary>
+    public HashSet<string> Failing { get; } = [];
+
+    /// <summary>Telemóveis cujo envio lança (rede, tempo esgotado).</summary>
+    public HashSet<string> Throwing { get; } = [];
+
     /// <summary>Os envios correm em paralelo (NotificationDispatcher.Parallelism).</summary>
     public Task<PushResult> SendAsync(string deviceToken, PushMessage message, CancellationToken ct)
     {
         lock (Sent)
         {
+            if (Throwing.Contains(deviceToken))
+            {
+                throw new HttpRequestException("Sem rede");
+            }
+
             if (InvalidTokens.Contains(deviceToken))
             {
                 return Task.FromResult(PushResult.InvalidToken);
+            }
+
+            if (Failing.Contains(deviceToken))
+            {
+                return Task.FromResult(PushResult.Failed);
             }
 
             Sent.Add((deviceToken, message));

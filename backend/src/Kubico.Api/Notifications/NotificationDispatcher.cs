@@ -17,7 +17,8 @@ namespace Kubico.Api.Notifications;
 /// minuto, com uma consulta por pessoa).
 /// </para>
 /// </summary>
-public class NotificationDispatcher(KubicoDbContext db, IPushSender sender, TimeProvider clock)
+public class NotificationDispatcher(
+    KubicoDbContext db, IPushSender sender, TimeProvider clock, ILogger<NotificationDispatcher> logger)
 {
     /// <summary>Quantos títulos entram no texto do resumo.</summary>
     private const int DigestTitles = 3;
@@ -113,7 +114,7 @@ public class NotificationDispatcher(KubicoDbContext db, IPushSender sender, Time
         await Parallel.ForEachAsync(
             jobs.SelectMany(job => job.Devices.SelectMany(device => job.Messages.Select(message => (job, device, message)))),
             new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = ct },
-            async (send, token) => results.Add((send.job, send.device, await sender.SendAsync(send.device.Token, send.message, token))));
+            async (send, token) => results.Add((send.job, send.device, await TrySendAsync(send.device, send.message, token))));
 
         var sent = results.Count(r => r.Result == PushResult.Sent);
         foreach (var device in results.Where(r => r.Result == PushResult.InvalidToken).Select(r => r.Device).Distinct())
@@ -121,7 +122,12 @@ public class NotificationDispatcher(KubicoDbContext db, IPushSender sender, Time
             db.PushDevices.Remove(device);
         }
 
-        var failed = results.Where(r => r.Result == PushResult.Failed).Select(r => r.Job).ToHashSet();
+        // Só se repete quem não recebeu em nenhum telemóvel (antes, uma falha num aparelho fazia reenviar tudo a
+        // todos os outros a cada minuto). Ao fim de uma hora a falhar, desiste-se (o aviso continua na app).
+        var received = results.Where(r => r.Result == PushResult.Sent).Select(r => r.Job).ToHashSet();
+        var failed = results.Where(r => r.Result == PushResult.Failed).Select(r => r.Job)
+            .Where(job => !received.Contains(job) && job.Notifications.Any(n => now - n.CreatedAt < GiveUpAfter))
+            .ToHashSet();
         foreach (var job in jobs.Where(j => !failed.Contains(j)))
         {
             // Falhas passageiras ficam para a próxima volta; o resto fica tratado (mesmo sem telemóveis).
@@ -138,6 +144,23 @@ public class NotificationDispatcher(KubicoDbContext db, IPushSender sender, Time
 
         await db.SaveChangesAsync(ct);
         return sent;
+    }
+
+    /// <summary>Quanto tempo se continua a tentar enviar um aviso que falha para o telemóvel.</summary>
+    public static readonly TimeSpan GiveUpAfter = TimeSpan.FromHours(1);
+
+    /// <summary>Um envio que lança (rede, tempo esgotado) conta como falhado, em vez de abortar o lote todo.</summary>
+    private async Task<PushResult> TrySendAsync(PushDevice device, PushMessage message, CancellationToken ct)
+    {
+        try
+        {
+            return await sender.SendAsync(device.Token, message, ct);
+        }
+        catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            logger.LogWarning(e, "Falha ao enviar um aviso para um telemóvel; volta a tentar.");
+            return PushResult.Failed;
+        }
     }
 
     private sealed record Job(

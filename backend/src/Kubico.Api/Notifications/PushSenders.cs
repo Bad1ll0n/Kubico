@@ -96,7 +96,11 @@ public class FcmPushSender(HttpClient http, IOptions<FcmOptions> options, TimePr
         }
 
         var error = await response.Content.ReadAsStringAsync(ct);
-        if (response.StatusCode == HttpStatusCode.NotFound || error.Contains("UNREGISTERED", StringComparison.Ordinal))
+        // O destino já não existe, está mal formado ou é de outro projeto Firebase: repetir não adianta.
+        if (response.StatusCode == HttpStatusCode.NotFound
+            || error.Contains("UNREGISTERED", StringComparison.Ordinal)
+            || error.Contains("INVALID_ARGUMENT", StringComparison.Ordinal)
+            || error.Contains("SENDER_ID_MISMATCH", StringComparison.Ordinal))
         {
             return PushResult.InvalidToken;
         }
