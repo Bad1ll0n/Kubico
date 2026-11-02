@@ -374,17 +374,9 @@ class _CalendarViewState extends State<CalendarView> {
   }
 
   Widget _placeholder() {
-    return Center(
-      child: _error == null
-          ? const CircularProgressIndicator()
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(errorText(_error!)),
-                TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
-              ],
-            ),
-    );
+    return _error == null
+        ? const Center(child: CircularProgressIndicator())
+        : StateView.error(message: errorText(_error!), offline: isOffline(_error!), onRetry: _load);
   }
 
   Widget _content(CalendarRange calendar) {
@@ -422,13 +414,13 @@ class _CalendarViewState extends State<CalendarView> {
         padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
         child: Text(
           holiday == null ? formatLongDate(day) : '${formatLongDate(day)} · ${holiday.name}',
-          style: theme.textTheme.titleSmall?.copyWith(color: holiday == null ? null : theme.colorScheme.error),
+          style: theme.textTheme.titleSmall?.copyWith(color: holiday == null ? null : context.kubico.info),
         ),
       ),
       if (occurrences.isEmpty)
         (_) => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Text('Sem eventos.'.tr, style: TextStyle(color: theme.colorScheme.outline)),
+          child: Text('Sem eventos.'.tr, style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
         ),
       for (final o in occurrences) (_) => _tile(o, calendar.events[o.eventId]!, day),
     ];
@@ -664,7 +656,7 @@ class _OccurrenceTile extends StatelessWidget {
             if (conflicts != null)
               Tooltip(
                 message: conflicts!,
-                child: Icon(Icons.warning_amber_rounded, color: theme.colorScheme.error),
+                child: Icon(Icons.error_rounded, color: context.kubico.warning),
               ),
             for (final member in participants.take(3))
               Padding(

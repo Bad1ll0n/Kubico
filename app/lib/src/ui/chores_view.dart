@@ -285,17 +285,9 @@ class _ChoresViewState extends State<ChoresView> {
     final canManage = _access.canManage;
 
     if (chores == null) {
-      return Center(
-        child: _error == null
-            ? const CircularProgressIndicator()
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(errorText(_error!)),
-                  TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
-                ],
-              ),
-      );
+      return _error == null
+          ? const Center(child: CircularProgressIndicator())
+          : StateView.error(message: errorText(_error!), offline: isOffline(_error!), onRetry: _load);
     }
 
     final today = clock.now();
@@ -341,11 +333,13 @@ class _ChoresViewState extends State<ChoresView> {
             for (final group in ChoreGroup.values)
               if (grouped[group] case final items?) ...[
                 (context) => Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
-                  child: Text(
-                    '${group.label} (${items.length})',
-                    style: Theme.of(context).textTheme.titleSmall
-                        ?.copyWith(color: group == ChoreGroup.overdue ? Theme.of(context).colorScheme.error : null),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  // Em atraso vai em cor de aviso (não de erro), com um ícone: a cor nunca vai sozinha.
+                  child: SectionHeader(
+                    group.label,
+                    count: items.length,
+                    icon: group == ChoreGroup.overdue ? Icons.schedule_rounded : null,
+                    color: group == ChoreGroup.overdue ? context.kubico.warning : null,
                   ),
                 ),
                 for (final chore in items)
@@ -444,14 +438,7 @@ class _ChoreTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (chore.points > 0)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Text(
-                '${chore.points} pts',
-                style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.primary),
-              ),
-            ),
+          if (chore.points > 0) Padding(padding: const EdgeInsets.only(right: 8), child: PointsBadge(chore.points)),
           Tooltip(
             message: assignee?.displayName ?? 'Qualquer pessoa'.tr,
             child: assignee == null
@@ -481,7 +468,7 @@ class _ChoreTile extends StatelessWidget {
               title: Text(
                 step,
                 style: chore.doneSteps.contains(i)
-                    ? TextStyle(decoration: TextDecoration.lineThrough, color: theme.colorScheme.outline)
+                    ? TextStyle(decoration: TextDecoration.lineThrough, color: theme.colorScheme.onSurfaceVariant)
                     : null,
               ),
             ),

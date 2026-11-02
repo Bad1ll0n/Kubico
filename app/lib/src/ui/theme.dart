@@ -165,6 +165,9 @@ Future<bool> confirmPointsDebt(BuildContext context, ApiException error) async =
 /// não foi aceite).
 String pointsText(int points) => points < 0 ? 'deve ${-points} pts'.tr : '$points pts';
 
+/// O pedido falhou por falta de ligação (não por uma resposta do servidor).
+bool isOffline(Object error) => error is ApiException && error.statusCode == 0;
+
 /// A mensagem a mostrar para um erro: a do servidor (já traduzida), ou uma frase simples para os outros (uma
 /// resposta que a app não percebe, por exemplo), em vez do texto técnico da exceção.
 String errorText(Object error) {

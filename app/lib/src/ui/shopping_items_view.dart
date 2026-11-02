@@ -9,6 +9,7 @@ import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
 import '../shopping/shopping_repository.dart';
 import '../shopping/voice_input.dart';
+import 'design/components.dart';
 import 'scanner_screen.dart';
 import 'shopping_add_dialogs.dart';
 import 'theme.dart';
@@ -249,17 +250,9 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     final items = _items;
 
     if (items == null) {
-      return Center(
-        child: _error == null
-            ? const CircularProgressIndicator()
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(errorText(_error!)),
-                  TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
-                ],
-              ),
-      );
+      return _error == null
+          ? const Center(child: CircularProgressIndicator())
+          : StateView.error(message: errorText(_error!), offline: isOffline(_error!), onRetry: _load);
     }
 
     final (pending, done) = _sorted ??= (
@@ -304,7 +297,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
                         onPressed: _scan,
                       ),
                     IconButton(icon: const Icon(Icons.mic_none), tooltip: 'Ditar artigos'.tr, onPressed: _dictate),
-                    IconButton(icon: const Icon(Icons.send), tooltip: 'Adicionar'.tr, onPressed: _add),
+                    IconButton(icon: const Icon(Icons.add_rounded), tooltip: 'Adicionar'.tr, onPressed: _add),
                   ],
                 ),
               ),
@@ -373,7 +366,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
         title: Text(
           item.name,
           style: item.isChecked
-              ? TextStyle(decoration: TextDecoration.lineThrough, color: theme.colorScheme.outline)
+              ? TextStyle(decoration: TextDecoration.lineThrough, color: theme.colorScheme.onSurfaceVariant)
               : null,
         ),
         subtitle: subtitle.isEmpty ? null : Text(subtitle),
@@ -396,17 +389,23 @@ class _SyncBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final waiting = switch (pending) {
       0 => '',
       1 => ' 1 alteração por enviar.'.tr,
       _ => ' $pending alterações por enviar.'.tr,
     };
+    // Sem ligação é um estado que se tem de perceber (as alterações ficam à espera): cor de aviso; a enviar, informação.
+    final colors = context.kubico;
+    final (background, foreground) = offline
+        ? (colors.warningContainer, colors.onWarningContainer)
+        : (colors.infoContainer, colors.onInfoContainer);
     return Material(
-      color: theme.colorScheme.secondaryContainer,
+      color: background,
       child: ListTile(
         dense: true,
-        leading: Icon(offline ? Icons.cloud_off : Icons.cloud_upload_outlined),
+        iconColor: foreground,
+        textColor: foreground,
+        leading: Icon(offline ? Icons.cloud_off_rounded : Icons.cloud_upload_rounded),
         title: Text(offline ? 'Sem ligação: podes continuar a usar a lista.$waiting'.tr : 'A enviar as alterações…'.tr),
       ),
     );

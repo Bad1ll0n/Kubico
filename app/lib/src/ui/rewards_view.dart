@@ -154,17 +154,9 @@ class _RewardsViewState extends State<RewardsView> {
   Widget build(BuildContext context) {
     final overview = _overview;
     if (overview == null) {
-      return Center(
-        child: _error == null
-            ? const CircularProgressIndicator()
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(errorText(_error!)),
-                  TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
-                ],
-              ),
-      );
+      return _error == null
+          ? const Center(child: CircularProgressIndicator())
+          : StateView.error(message: errorText(_error!), offline: isOffline(_error!), onRetry: _load);
     }
 
     final me = overview.pointsOf(_myUserId);

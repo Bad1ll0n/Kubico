@@ -268,7 +268,7 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
         title: Text(
           item.choreTitle,
           style: item.rejected
-              ? TextStyle(decoration: TextDecoration.lineThrough, color: theme.colorScheme.outline)
+              ? TextStyle(decoration: TextDecoration.lineThrough, color: theme.colorScheme.onSurfaceVariant)
               : null,
         ),
         subtitle: Text(

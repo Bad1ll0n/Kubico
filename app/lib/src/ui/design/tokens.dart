@@ -322,7 +322,12 @@ abstract final class KubicoMotion {
 }
 
 extension KubicoThemeX on BuildContext {
-  KubicoColors get kubico => Theme.of(this).extension<KubicoColors>()!;
+  /// As cores extra do tema (as do Kubico por omissão, num tema que não as tenha, como o dos testes).
+  KubicoColors get kubico {
+    final theme = Theme.of(this);
+    return theme.extension<KubicoColors>() ??
+        (theme.brightness == Brightness.dark ? KubicoColors.dark : KubicoColors.light);
+  }
 
   /// Os tons da cor de um membro (o hex que vem do servidor) para o tema atual.
   MemberTones memberTones(String hexOrKey) => MemberPalette.tones(hexOrKey, Theme.of(this).brightness);

@@ -155,7 +155,9 @@ class _ActivityScreenState extends State<ActivityScreen> {
         ),
         title: Text(
           '$name ${item.summary}',
-          style: undone ? TextStyle(decoration: TextDecoration.lineThrough, color: theme.colorScheme.outline) : null,
+          style: undone
+              ? TextStyle(decoration: TextDecoration.lineThrough, color: theme.colorScheme.onSurfaceVariant)
+              : null,
         ),
         subtitle: Text(
           [
