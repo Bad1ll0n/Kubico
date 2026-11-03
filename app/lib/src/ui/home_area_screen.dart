@@ -319,7 +319,7 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+    padding: readablePadding(context, top: 12),
     children: [
       if (onAdd != null)
         Align(

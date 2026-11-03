@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show CustomSemanticsAction;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -474,34 +475,58 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     final theme = Theme.of(context);
     // A categoria já está no cabeçalho (quando há cabeçalhos); a quantidade fica.
     final subtitle = [item.quantity, if (item.isChecked) item.category].whereType<String>().join(' · ');
+    final animate = !MediaQuery.disableAnimationsOf(context);
+    // Gestos (F4-04): para a direita marca (ou desmarca), para a esquerda apaga. O leitor de ecrã tem as mesmas ações.
     return Dismissible(
       key: ValueKey(item.id),
-      direction: widget.canEdit ? DismissDirection.endToStart : DismissDirection.none,
+      direction: widget.canEdit ? DismissDirection.horizontal : DismissDirection.none,
       background: Container(
+        color: context.kubico.successContainer,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Icon(
+          item.isChecked ? Icons.undo_rounded : Icons.check_rounded,
+          color: context.kubico.onSuccessContainer,
+        ),
+      ),
+      secondaryBackground: Container(
         color: theme.colorScheme.errorContainer,
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Icon(Icons.delete_outline_rounded, color: theme.colorScheme.onErrorContainer),
       ),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.endToStart) return true;
+        _toggle(item);
+        return false;
+      },
       onDismissed: (_) => _delete(item),
-      child: CheckboxListTile(
-        value: item.isChecked,
-        onChanged: widget.canEdit ? (_) => _toggle(item) : null,
-        secondary: widget.canEdit
-            ? IconButton(
-                tooltip: 'Repetir «${item.name}»'.tr,
-                icon: const Icon(Icons.repeat_rounded),
-                onPressed: () => _repeat(item),
-              )
-            : null,
-        controlAffinity: ListTileControlAffinity.leading,
-        title: Text(
-          item.name,
-          style: item.isChecked
-              ? TextStyle(decoration: TextDecoration.lineThrough, color: theme.colorScheme.onSurfaceVariant)
+      child: Semantics(
+        customSemanticsActions: widget.canEdit
+            ? {CustomSemanticsAction(label: 'Apagar «${item.name}»'.tr): () => _delete(item)}
+            : const {},
+        child: CheckboxListTile(
+          value: item.isChecked,
+          onChanged: widget.canEdit ? (_) => _toggle(item) : null,
+          secondary: widget.canEdit
+              ? IconButton(
+                  tooltip: 'Repetir «${item.name}»'.tr,
+                  icon: const Icon(Icons.repeat_rounded),
+                  onPressed: () => _repeat(item),
+                )
               : null,
+          controlAffinity: ListTileControlAffinity.leading,
+          // Marcar risca o nome com uma pequena animação (F4-05), sem ela com menos movimento pedido.
+          title: AnimatedDefaultTextStyle(
+            duration: animate ? const Duration(milliseconds: 250) : Duration.zero,
+            style: (theme.textTheme.bodyLarge ?? const TextStyle()).copyWith(
+              decoration: item.isChecked ? TextDecoration.lineThrough : TextDecoration.none,
+              color: item.isChecked ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.onSurface,
+            ),
+            child: Text(item.name),
+          ),
+          subtitle: subtitle.isEmpty ? null : Text(subtitle),
         ),
-        subtitle: subtitle.isEmpty ? null : Text(subtitle),
       ),
     );
   }

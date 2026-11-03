@@ -203,7 +203,7 @@ class _RewardsViewState extends State<RewardsView> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+          padding: readablePadding(context),
           children: [
             _PointsCard(points: overview.points, me: me),
             AllowanceSection(household: widget.household, members: overview.points),
@@ -380,11 +380,22 @@ class _RewardTile extends StatelessWidget {
                         style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                       ),
                     const SizedBox(height: KubicoSpace.s8),
-                    LinearProgressIndicator(
-                      value: reward.cost <= 0 ? 1 : (available / reward.cost).clamp(0, 1).toDouble(),
-                      minHeight: 8,
-                      borderRadius: BorderRadius.circular(4),
-                      color: scheme.tertiary,
+                    // A barra enche-se devagar até aos pontos que já há (F4-05).
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(
+                        begin: 0,
+                        end: reward.cost <= 0 ? 1 : (available / reward.cost).clamp(0, 1).toDouble(),
+                      ),
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 600),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, value, _) => LinearProgressIndicator(
+                        value: value,
+                        minHeight: 8,
+                        borderRadius: BorderRadius.circular(4),
+                        color: scheme.tertiary,
+                      ),
                     ),
                     const SizedBox(height: KubicoSpace.s8),
                     if (missing > 0)

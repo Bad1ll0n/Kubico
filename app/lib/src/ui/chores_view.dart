@@ -358,7 +358,7 @@ class _ChoresViewState extends State<ChoresView> {
         // As linhas só se constroem quando aparecem no ecrã (P10): numa casa com 300 tarefas, cada alteração já não
         // reconstrói as 300.
         child: _LazyList(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+          padding: readablePadding(context),
           rows: [
             if (_stats.any((s) => s.points > 0 || s.completed > 0))
               (context) => _StatsCard(
@@ -508,7 +508,26 @@ class _ChoreTile extends StatelessWidget {
       ),
     );
 
-    if (!chore.isRoutine) return Card(child: tile);
+    // Gesto (F4-04): deslizar para a direita conclui (a tarefa fica no sítio até o servidor responder).
+    if (!chore.isRoutine) {
+      return canComplete
+          ? Dismissible(
+              key: ValueKey('swipe-${chore.id}'),
+              direction: DismissDirection.startToEnd,
+              background: Container(
+                color: context.kubico.successContainer,
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Icon(Icons.check_rounded, color: context.kubico.onSuccessContainer),
+              ),
+              confirmDismiss: (_) async {
+                onComplete();
+                return false;
+              },
+              child: Card(child: tile),
+            )
+          : Card(child: tile);
+    }
     return Card(
       child: Column(
         children: [

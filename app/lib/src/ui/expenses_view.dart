@@ -143,7 +143,7 @@ class _ExpensesViewState extends State<ExpensesView> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+          padding: readablePadding(context),
           children: [
             SectionHeader('Saldos'.tr),
             if (overview.balances.isEmpty)

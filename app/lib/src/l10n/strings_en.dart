@@ -429,6 +429,7 @@ const englishTexts = <String, String>{
   '1 dia antes': '1 day before',
   '{0} minutos antes': '{0} minutes before',
   'Lembrete': 'Reminder',
+  'Apagar «{0}»': 'Delete "{0}"',
   'deixa recados e guarda os seus documentos': 'leaves notes and keeps their documents',
   'A casa': 'Home',
   'Recados': 'Notes',

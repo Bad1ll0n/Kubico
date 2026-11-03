@@ -141,4 +141,20 @@ void main() {
     );
     expect(find.text('«Pão» volta à lista sozinho.'), findsOneWidget);
   });
+
+  testWidgets('deslizar um artigo para a direita marca-o como comprado (F4-04)', (tester) async {
+    final server = _Server();
+    await _pump(tester, server);
+
+    await tester.drag(find.text('Pão'), const Offset(400, 0));
+    await tester.pumpAndSettle();
+
+    expect(
+      server.posts.any(
+        (p) => p.startsWith('PATCH /api/households/h1/lists/l1/items/a') && p.contains('"isChecked":true'),
+      ),
+      isTrue,
+    );
+    expect(find.text('Pão'), findsOneWidget, reason: 'o artigo fica na lista, agora no carrinho');
+  });
 }

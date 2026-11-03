@@ -366,3 +366,11 @@ class _CelebrationState extends State<_Celebration> with SingleTickerProviderSta
     );
   }
 }
+
+/// A margem de uma lista para o texto não ficar esticado num ecrã largo (F4-02): no telemóvel 12 px de cada lado; num
+/// tablet ou PC, o conteúdo fica com 720 px no máximo, ao centro.
+EdgeInsets readablePadding(BuildContext context, {double top = 8, double bottom = 96, double maxWidth = 720}) {
+  final width = MediaQuery.sizeOf(context).width;
+  final side = width > maxWidth + 24 ? (width - maxWidth) / 2 : 12.0;
+  return EdgeInsets.fromLTRB(side, top, side, bottom);
+}

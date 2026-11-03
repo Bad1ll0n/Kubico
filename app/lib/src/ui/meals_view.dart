@@ -202,7 +202,7 @@ class _MealsViewState extends State<MealsView> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+        padding: readablePadding(context),
         children: [
           Row(
             children: [
@@ -289,7 +289,7 @@ class _MealsViewState extends State<MealsView> {
                   : null,
             )
           : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+              padding: readablePadding(context),
               itemCount: recipes.length,
               itemBuilder: (context, index) {
                 final r = recipes[index];
