@@ -11,7 +11,7 @@ import '../realtime/coalesced_reload.dart';
 import '../realtime/household_realtime.dart';
 import 'calendar_event_editor.dart';
 import 'calendar_week_grid.dart';
-import 'calendar_feed_dialog.dart';
+import 'calendar_feed_dialog.dart' deferred as feed;
 import 'dates_pt.dart';
 import 'design/components.dart';
 import 'theme.dart';
@@ -398,7 +398,16 @@ class _CalendarViewState extends State<CalendarView> {
                 if (widget.household.role != HouseholdRole.child)
                   IconButton(
                     tooltip: 'Ver noutros calendários'.tr,
-                    onPressed: () => showCalendarFeedDialog(context, householdId: _householdId),
+                    onPressed: () async {
+                      // O endereço subscrito e as ligações ao Google, Outlook e iCloud carregam-se só quando se abrem.
+                      try {
+                        await feed.loadLibrary();
+                      } catch (e) {
+                        if (context.mounted) showError(context, e);
+                        return;
+                      }
+                      if (context.mounted) await feed.showCalendarFeedDialog(context, householdId: _householdId);
+                    },
                     icon: const Icon(Icons.share_rounded),
                   ),
               ],

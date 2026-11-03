@@ -6,7 +6,7 @@ import '../api/models.dart';
 import '../households/invite_link.dart';
 import '../l10n/strings.dart';
 import '../session/session_controller.dart';
-import 'scanner_screen.dart';
+import 'scanner_support.dart';
 import 'design/illustrations.dart';
 import 'theme.dart';
 
@@ -48,14 +48,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _scan() async {
-    final code = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => ScannerScreen<String>(
-          title: 'Ler o convite'.tr,
-          hint: 'Aponta para o QR do convite, no telemóvel de quem já está na casa.'.tr,
-          accept: inviteCodeFrom,
-        ),
-      ),
+    final code = await scanCode(
+      context,
+      title: 'Ler o convite'.tr,
+      hint: 'Aponta para o QR do convite, no telemóvel de quem já está na casa.'.tr,
+      accept: inviteCodeFrom,
     );
     if (code != null) _inviteCode.text = code;
   }

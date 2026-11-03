@@ -87,6 +87,12 @@ flutter:
     - family: AtkinsonHyperlegibleNext
       fonts:
         - asset: assets/fonts/AtkinsonHyperlegibleNext.ttf
+    # Na web, o motor usa "Roboto" como fonte de recurso e, se a app não tiver uma família com esse nome, vai
+    # buscá-la ao Google Fonts em cada arranque (envia o IP de cada pessoa à Google). Com este nome a apontar para a
+    # nossa fonte de texto, não sai nenhum pedido (F4-18).
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegibleNext.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

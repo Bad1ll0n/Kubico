@@ -12,14 +12,15 @@ import '../realtime/household_realtime.dart';
 import '../session/child_device.dart';
 import '../session/session_controller.dart';
 import '../shopping/shopping_repository.dart';
-import 'account_screen.dart';
-import 'activity_screen.dart';
+import 'account_screen.dart' deferred as account;
+import 'activity_screen.dart' deferred as activity;
 import 'calendar_view.dart';
 import 'chores_view.dart';
-import 'devices_screen.dart';
-import 'help_screen.dart';
+import 'deferred.dart';
+import 'devices_screen.dart' deferred as devices;
+import 'help_screen.dart' deferred as help;
 import 'household_screen.dart';
-import 'kitchen_panel.dart';
+import 'kitchen_panel.dart' deferred as kitchen;
 import 'notifications_screen.dart';
 import 'onboarding_screen.dart';
 import 'rewards_view.dart';
@@ -226,15 +227,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final realtime = context.read<HouseholdRealtime>();
     final shopping = context.read<ShoppingRepository>();
     final notifications = context.read<NotificationCenter>();
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AccountScreen(
-          onDeleted: () async {
-            await realtime.disconnect();
-            await shopping.clear();
-            notifications.clear();
-          },
-        ),
+    return pushDeferred<void>(
+      context,
+      account.loadLibrary,
+      () => account.AccountScreen(
+        onDeleted: () async {
+          await realtime.disconnect();
+          await shopping.clear();
+          notifications.clear();
+        },
       ),
     );
   }
@@ -338,22 +339,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               PopupMenuButton<String>(
                 onSelected: (value) => switch (value) {
-                  'devices' => Navigator.of(
-                    context,
-                  ).push(MaterialPageRoute<void>(builder: (_) => const DevicesScreen())),
+                  'devices' => pushDeferred<void>(context, devices.loadLibrary, () => devices.DevicesScreen()),
                   'account' => _openAccount(),
-                  'panel' => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      fullscreenDialog: true,
-                      builder: (_) => KitchenPanelScreen(household: household),
-                    ),
+                  'panel' => pushDeferred<void>(
+                    context,
+                    kitchen.loadLibrary,
+                    () => kitchen.KitchenPanelScreen(household: household),
+                    fullscreenDialog: true,
                   ),
-                  'activity' => Navigator.of(
+                  'activity' => pushDeferred<void>(
                     context,
-                  ).push(MaterialPageRoute<void>(builder: (_) => ActivityScreen(household: household))),
-                  'help' => Navigator.of(
+                    activity.loadLibrary,
+                    () => activity.ActivityScreen(household: household),
+                  ),
+                  'help' => pushDeferred<void>(
                     context,
-                  ).push(MaterialPageRoute<void>(builder: (_) => HelpScreen(householdId: household.id))),
+                    help.loadLibrary,
+                    () => help.HelpScreen(householdId: household.id),
+                  ),
                   'switch-child' => _switchChild(session),
                   'members' => openMembers(),
                   _ => _signOut(session, everywhere: value == 'logout-all'),

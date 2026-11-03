@@ -20,7 +20,7 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
 
   <!--
-    Content Security Policy: só corre o código da própria app (e o CanvasKit e o Firebase do gstatic, e o leitor de
+    Content Security Policy: só corre o código da própria app (o motor gráfico vai com ela; do gstatic só o Firebase, depois de entrar, e o leitor de
     códigos de barras do jsdelivr). Os quatro hashes são os pequenos scripts com que o firebase_core e o
     firebase_messaging carregam o Firebase JS 13.0.0 (com e sem Trusted Types): se o Firebase for atualizado, a
     consola do browser diz o hash novo. connect-src deixa falar com a API: em produção, troca "https: wss:" pelo

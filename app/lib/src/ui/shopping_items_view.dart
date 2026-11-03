@@ -11,7 +11,7 @@ import '../realtime/household_realtime.dart';
 import '../shopping/shopping_repository.dart';
 import '../shopping/voice_input.dart';
 import 'design/components.dart';
-import 'scanner_screen.dart';
+import 'scanner_support.dart';
 import 'shopping_add_dialogs.dart';
 import 'theme.dart';
 
@@ -156,14 +156,11 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     _upsert(_shopping.addItem(_householdId, _listId, name: name, quantity: quantity));
   }
 
-  static Future<String?> _scanWithCamera(BuildContext context) => Navigator.of(context).push<String>(
-    MaterialPageRoute(
-      builder: (_) => ScannerScreen<String>(
-        title: 'Ler código de barras'.tr,
-        hint: 'Aponta para o código de barras do produto'.tr,
-        accept: (raw) => isValidBarcode(raw.trim()) ? raw.trim() : null,
-      ),
-    ),
+  static Future<String?> _scanWithCamera(BuildContext context) => scanCode(
+    context,
+    title: 'Ler código de barras'.tr,
+    hint: 'Aponta para o código de barras do produto'.tr,
+    accept: (raw) => isValidBarcode(raw.trim()) ? raw.trim() : null,
   );
 
   void _tell(String message) => ScaffoldMessenger.of(context)

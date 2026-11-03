@@ -76,4 +76,13 @@ jobs:
       - run: flutter test
         env:
           TZ: America/Sao_Paulo
-      - run: flutter build web
+      # WebAssembly (skwasm) com JS de reserva para os browsers sem WasmGC; o motor vai com a app (F4-17, F4-18).
+      - run: flutter build web --wasm
+      # Orçamento de tamanho: o código principal (comprimido) não pode crescer sem se dar por isso.
+      - name: Tamanho da app web
+        run: |
+          js=$(gzip -c build/web/main.dart.js | wc -c)
+          wasm=$(gzip -c build/web/main.dart.wasm | wc -c)
+          echo "main.dart.js: $js bytes comprimidos; main.dart.wasm: $wasm"
+          test "$js" -le 1250000
+          test "$wasm" -le 1400000

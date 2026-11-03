@@ -8,7 +8,7 @@ import '../session/child_device.dart';
 import '../session/session_controller.dart';
 import 'design/components.dart';
 import 'design/pin_pad.dart';
-import 'scanner_screen.dart';
+import 'scanner_support.dart';
 import 'theme.dart';
 
 /// Entrada de uma criança sem email: o código da família (que um adulto vê no ecrã dos membros), o seu nome e o PIN.
@@ -69,14 +69,11 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
 
   /// Lê o QR do código da família (no ecrã dos membros, no telemóvel de um adulto).
   Future<void> _scan() async {
-    final code = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => ScannerScreen<String>(
-          title: 'Ler o código da família'.tr,
-          hint: 'Aponta para o QR do código da família, no telemóvel de um adulto da casa.'.tr,
-          accept: familyCodeFrom,
-        ),
-      ),
+    final code = await scanCode(
+      context,
+      title: 'Ler o código da família'.tr,
+      hint: 'Aponta para o QR do código da família, no telemóvel de um adulto da casa.'.tr,
+      accept: familyCodeFrom,
     );
     if (code == null || !mounted) return;
     _code.text = code;

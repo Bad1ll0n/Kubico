@@ -1,16 +1,9 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../l10n/strings.dart';
 
-/// Há câmara para ler códigos? (O leitor não funciona no Windows nem no Linux.)
-bool get scannerAvailable =>
-    kIsWeb ||
-    defaultTargetPlatform == TargetPlatform.android ||
-    defaultTargetPlatform == TargetPlatform.iOS ||
-    defaultTargetPlatform == TargetPlatform.macOS;
-
+/// Abre-se com `scanCode` (scanner_support.dart), que carrega esta biblioteca só quando é precisa.
 /// Lê um código com a câmara (QR de um convite, código de barras de um produto) e devolve o que [accept] aceitar.
 class ScannerScreen<T extends Object> extends StatefulWidget {
   const ScannerScreen({super.key, required this.title, required this.hint, required this.accept});
