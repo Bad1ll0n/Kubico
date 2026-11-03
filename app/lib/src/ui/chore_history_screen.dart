@@ -218,9 +218,12 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
     final theme = Theme.of(context);
     final rows = <WidgetBuilder>[
       if (items != null && items.isEmpty)
-        (_) => Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text('Ainda ninguém fez tarefas nos últimos 30 dias.'.tr, textAlign: TextAlign.center),
+        (_) => StateView(
+          inList: true,
+          icon: Icons.history_rounded,
+          color: context.kubico.area(KubicoArea.chores).color,
+          title: 'Ainda ninguém fez tarefas'.tr,
+          message: 'Aqui fica o que se fez nos últimos 30 dias.'.tr,
         ),
       if (items != null)
         for (final (i, item) in items.indexed) ...[

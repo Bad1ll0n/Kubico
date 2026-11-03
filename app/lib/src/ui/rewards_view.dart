@@ -192,14 +192,12 @@ class _RewardsViewState extends State<RewardsView> {
             ],
             _Header('Recompensas'.tr),
             if (overview.rewards.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  _canManage
-                      ? 'Ainda não há recompensas. Cria a primeira e combina-a com as tarefas!'.tr
-                      : 'Ainda não há recompensas.'.tr,
-                  textAlign: TextAlign.center,
-                ),
+              StateView(
+                inList: true,
+                icon: Icons.card_giftcard_rounded,
+                color: context.kubico.area(KubicoArea.rewards).color,
+                title: 'Ainda não há recompensas'.tr,
+                message: _canManage ? 'Cria a primeira e combina-a com as tarefas!'.tr : null,
               ),
             for (final reward in overview.rewards)
               _RewardTile(

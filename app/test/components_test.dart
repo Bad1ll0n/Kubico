@@ -83,4 +83,35 @@ void main() {
     await ReadingMode.restore(store);
     expect(ReadingMode.current.value, ReadingMode.comfort);
   });
+
+  testWidgets('um estado vazio dentro de uma lista aguenta letra a 200 % num telemóvel pequeno', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildTheme(Brightness.light),
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(320, 640), textScaler: TextScaler.linear(2)),
+          child: Scaffold(
+            body: ListView(
+              children: const [
+                Text('Cabeçalho'),
+                StateView(
+                  inList: true,
+                  icon: Icons.task_alt_rounded,
+                  title: 'Sem tarefas por fazer',
+                  message: 'Cria a primeira e escolhe quem a faz e quando se repete.',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Sem tarefas por fazer'), findsOneWidget);
+  });
 }

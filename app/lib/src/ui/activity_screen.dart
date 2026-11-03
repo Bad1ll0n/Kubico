@@ -8,6 +8,7 @@ import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
 import 'dates_pt.dart';
+import 'design/components.dart';
 import 'theme.dart';
 
 /// Histórico da casa (últimos 30 dias): quem mudou o quê, com "Desfazer" nas alterações que se podem desfazer.
@@ -101,9 +102,11 @@ class _ActivityScreenState extends State<ActivityScreen> {
         ),
       ),
       if (items != null && items.isEmpty)
-        (_) => Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text('Ainda não há alterações.'.tr, textAlign: TextAlign.center),
+        (_) => StateView(
+          inList: true,
+          icon: Icons.history_rounded,
+          title: 'Ainda não há alterações'.tr,
+          message: 'O que se muda na casa fica aqui 30 dias, e pode desfazer-se.'.tr,
         ),
       if (items != null)
         for (final (i, item) in items.indexed) ...[

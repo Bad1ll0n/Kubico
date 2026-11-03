@@ -359,13 +359,12 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
               itemCount: rowCount,
               itemBuilder: (context, index) {
                 if (empty) {
-                  return Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Text(
-                      'A lista está vazia.'.tr,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyLarge,
-                    ),
+                  return StateView(
+                    inList: true,
+                    icon: Icons.shopping_basket_outlined,
+                    color: context.kubico.area(KubicoArea.shopping).color,
+                    title: 'A lista está vazia'.tr,
+                    message: 'Escreve, dita ou lê o código de barras do que falta.'.tr,
                   );
                 }
                 if (index < pendingRows.length) {

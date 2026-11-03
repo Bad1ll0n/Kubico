@@ -197,7 +197,15 @@ class PointsBadge extends StatelessWidget {
 /// Um estado sem conteúdo (vazio, erro, sem acesso): ícone grande na cor da área, título, mensagem e uma ação.
 /// Substitui as frases soltas ("Sem tarefas por fazer.") por algo que convida a agir.
 class StateView extends StatelessWidget {
-  const StateView({required this.icon, required this.title, this.message, this.action, this.color, super.key});
+  const StateView({
+    required this.icon,
+    required this.title,
+    this.message,
+    this.action,
+    this.color,
+    this.inList = false,
+    super.key,
+  });
 
   /// O erro de um pedido: "sem ligação" (nuvem) distingue-se dos outros.
   factory StateView.error({required String message, required VoidCallback onRetry, bool offline = false, Key? key}) =>
@@ -219,41 +227,45 @@ class StateView extends StatelessWidget {
   final Widget? action;
   final Color? color;
 
+  /// Dentro de uma lista que já se desloca (sem centrar na altura nem se deslocar sozinho).
+  final bool inList;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tint = color ?? theme.colorScheme.primary;
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(KubicoSpace.s32),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ExcludeSemantics(
-                child: Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(color: tint.withValues(alpha: 0.14), shape: BoxShape.circle),
-                  child: Icon(icon, size: 48, color: tint),
-                ),
+    final content = Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ExcludeSemantics(
+              child: Container(
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(color: tint.withValues(alpha: 0.14), shape: BoxShape.circle),
+                child: Icon(icon, size: 48, color: tint),
               ),
-              const SizedBox(height: KubicoSpace.s16),
-              Text(title, style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
-              if (message != null) ...[
-                const SizedBox(height: KubicoSpace.s8),
-                Text(
-                  message!,
-                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-              if (action != null) ...[const SizedBox(height: KubicoSpace.s24), action!],
+            ),
+            const SizedBox(height: KubicoSpace.s16),
+            Text(title, style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
+            if (message != null) ...[
+              const SizedBox(height: KubicoSpace.s8),
+              Text(
+                message!,
+                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
             ],
-          ),
+            if (action != null) ...[const SizedBox(height: KubicoSpace.s24), action!],
+          ],
         ),
       ),
+    );
+    if (inList) return Padding(padding: const EdgeInsets.all(KubicoSpace.s32), child: content);
+    return Center(
+      child: SingleChildScrollView(padding: const EdgeInsets.all(KubicoSpace.s32), child: content),
     );
   }
 }

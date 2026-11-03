@@ -8,6 +8,7 @@ import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
 import '../shopping/shopping_repository.dart';
+import 'design/components.dart';
 import 'theme.dart';
 
 class ShoppingListsView extends StatefulWidget {
@@ -125,17 +126,17 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
 
     Widget body;
     if (lists == null && _error != null) {
-      body = _Message(
-        icon: Icons.cloud_off,
-        text: errorText(_error!),
-        action: TextButton(onPressed: _load, child: Text('Tentar de novo'.tr)),
-      );
+      body = StateView.error(message: errorText(_error!), offline: isOffline(_error!), onRetry: _load);
     } else if (lists == null) {
       body = const Center(child: CircularProgressIndicator());
     } else if (lists.isEmpty) {
-      body = _Message(
-        icon: Icons.checklist_rtl,
-        text: canManage ? 'Ainda não há listas. Cria a primeira!'.tr : 'Ainda não há listas nesta casa.'.tr,
+      body = StateView(
+        icon: Icons.checklist_rtl_rounded,
+        color: context.kubico.area(KubicoArea.shopping).color,
+        title: 'Ainda não há listas'.tr,
+        message: canManage
+            ? 'Cria a primeira lista de compras: o que lá puseres aparece logo a toda a casa.'.tr
+            : 'Quando alguém criar uma lista, aparece aqui.'.tr,
       );
     } else {
       body = RefreshIndicator(
@@ -198,31 +199,4 @@ Future<String?> _askName(BuildContext context) {
       ],
     ),
   ).whenComplete(controller.dispose);
-}
-
-class _Message extends StatelessWidget {
-  const _Message({required this.icon, required this.text, this.action});
-
-  final IconData icon;
-  final String text;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: theme.colorScheme.outline),
-            const SizedBox(height: 12),
-            Text(text, textAlign: TextAlign.center),
-            if (action != null) ...[const SizedBox(height: 8), action!],
-          ],
-        ),
-      ),
-    );
-  }
 }

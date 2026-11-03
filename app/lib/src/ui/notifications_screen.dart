@@ -7,6 +7,7 @@ import '../l10n/strings.dart';
 import '../notifications/notification_center.dart';
 import '../notifications/open_notification.dart';
 import 'dates_pt.dart';
+import 'design/components.dart';
 import 'theme.dart';
 
 /// O sino da barra de cima, com quantos avisos estão por ler.
@@ -75,12 +76,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
           children: [
             if (center.items.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(
-                  'Sem avisos. Aparecem aqui quando te atribuem uma tarefa ou um evento.'.tr,
-                  textAlign: TextAlign.center,
-                ),
+              StateView(
+                inList: true,
+                icon: Icons.notifications_none_rounded,
+                title: 'Sem avisos'.tr,
+                message: 'Aparecem aqui quando te atribuem uma tarefa ou um evento.'.tr,
               ),
             for (final n in center.items)
               Card(

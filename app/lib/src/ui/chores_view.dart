@@ -330,12 +330,12 @@ class _ChoresViewState extends State<ChoresView> {
                         .push(MaterialPageRoute<void>(builder: (_) => ChoreHistoryScreen(household: widget.household))),
               ),
             if (chores.isEmpty)
-              (context) => Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(
-                  canManage ? 'Sem tarefas por fazer. Cria a primeira!'.tr : 'Sem tarefas por fazer.'.tr,
-                  textAlign: TextAlign.center,
-                ),
+              (context) => StateView(
+                inList: true,
+                icon: Icons.task_alt_rounded,
+                color: context.kubico.area(KubicoArea.chores).color,
+                title: 'Sem tarefas por fazer'.tr,
+                message: canManage ? 'Cria a primeira e escolhe quem a faz e quando se repete.'.tr : null,
               ),
             for (final group in ChoreGroup.values)
               if (grouped[group] case final items?) ...[
