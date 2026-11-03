@@ -116,13 +116,13 @@ class HelpScreen extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.bug_report_outlined),
+                  leading: const Icon(Icons.bug_report_rounded),
                   title: Text('Reportar um problema'.tr),
                   subtitle: Text('Alguma coisa não funciona como devia.'.tr),
                   onTap: () => _send(context, FeedbackKind.problem),
                 ),
                 ListTile(
-                  leading: const Icon(Icons.lightbulb_outline),
+                  leading: const Icon(Icons.lightbulb_outline_rounded),
                   title: Text('Sugerir uma ideia'.tr),
                   subtitle: Text('O que faria o Kubico mais útil para a tua casa.'.tr),
                   onTap: () => _send(context, FeedbackKind.idea),
@@ -134,7 +134,7 @@ class HelpScreen extends StatelessWidget {
             const SizedBox(height: 16),
             Card(
               child: ListTile(
-                leading: const Icon(Icons.inbox_outlined),
+                leading: const Icon(Icons.inbox_rounded),
                 title: Text('Mensagens recebidas'.tr),
                 subtitle: Text('Os problemas e as ideias que os utilizadores enviaram.'.tr),
                 onTap: () =>
@@ -252,7 +252,7 @@ class _FeedbackInboxScreenState extends State<FeedbackInboxScreen> {
                   return Card(
                     child: ListTile(
                       leading: Icon(
-                        item.kind == FeedbackKind.problem ? Icons.bug_report_outlined : Icons.lightbulb_outline,
+                        item.kind == FeedbackKind.problem ? Icons.bug_report_rounded : Icons.lightbulb_outline_rounded,
                       ),
                       title: Text(item.message),
                       subtitle: Text('$who · ${formatShortDate(item.createdAt)} ${formatTime(item.createdAt)}'),

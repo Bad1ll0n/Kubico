@@ -84,7 +84,7 @@ class _CalendarFeedDialogState extends State<_CalendarFeedDialog> {
             const SizedBox(height: 8),
             FilledButton.tonalIcon(
               onPressed: _openSync,
-              icon: const Icon(Icons.sync),
+              icon: const Icon(Icons.sync_rounded),
               label: Text('Ligar ao Google Calendar, ao Outlook ou ao iCloud'.tr),
             ),
             const Divider(height: 32),
@@ -127,7 +127,7 @@ class _CalendarFeedDialogState extends State<_CalendarFeedDialog> {
         TextButton(onPressed: _busy ? null : _renew, child: Text('Gerar novo endereço'.tr)),
         TextButton.icon(
           onPressed: feed == null ? null : () => _copy(feed.url),
-          icon: const Icon(Icons.copy),
+          icon: const Icon(Icons.copy_rounded),
           label: Text('Copiar'.tr),
         ),
         FilledButton(onPressed: () => Navigator.pop(context), child: Text('Feito'.tr)),

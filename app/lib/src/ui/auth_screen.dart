@@ -160,7 +160,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
-                        icon: const Icon(Icons.language),
+                        icon: const Icon(Icons.language_rounded),
                         label: Text(AppLanguage.isEnglish ? 'Português' : 'English'),
                         onPressed: () =>
                             AppLanguage.set(AppLanguage.isEnglish ? AppLanguage.portuguese : AppLanguage.english),
@@ -229,7 +229,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               : () =>
                                     Navigator.of(context)
                                         .push(MaterialPageRoute<void>(builder: (_) => const ChildSignInScreen())),
-                          icon: const Icon(Icons.child_care),
+                          icon: const Icon(Icons.child_care_rounded),
                           label: Text('Entrar com perfil de criança'.tr),
                         ),
                     ],

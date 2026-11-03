@@ -155,7 +155,11 @@ class _AllowanceSectionState extends State<AllowanceSection> {
             children: [
               Expanded(child: Text('Mesada'.tr, style: theme.textTheme.titleSmall)),
               if (_canManage && someoneWithout)
-                TextButton.icon(onPressed: _edit, icon: const Icon(Icons.add, size: 18), label: Text('Dar mesada'.tr)),
+                TextButton.icon(
+                  onPressed: _edit,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: Text('Dar mesada'.tr),
+                ),
             ],
           ),
         ),
@@ -203,7 +207,7 @@ class _AllowanceSectionState extends State<AllowanceSection> {
                   IconButton(
                     tooltip: 'Mudar a mesada de $name'.tr,
                     onPressed: () => _edit(allowance),
-                    icon: const Icon(Icons.edit_outlined),
+                    icon: const Icon(Icons.edit_rounded),
                   ),
               ],
             ),

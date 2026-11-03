@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../l10n/strings.dart';
 import 'illustrations.dart';
@@ -285,7 +286,10 @@ class StateView extends StatelessWidget {
 /// com pontos (para as crianças, a mensagem em texto não chega). Não leva texto que se leia como mensagem (essa
 /// continua no SnackBar) e, com menos movimento pedido, não aparece.
 void celebratePoints(BuildContext context, int points) {
-  if (points <= 0 || MediaQuery.disableAnimationsOf(context)) return;
+  if (points <= 0) return;
+  // Um toque no telemóvel confirma a conclusão (também com menos movimento pedido).
+  HapticFeedback.mediumImpact();
+  if (MediaQuery.disableAnimationsOf(context)) return;
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
   late final OverlayEntry entry;

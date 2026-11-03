@@ -172,7 +172,7 @@ class _ChoresViewState extends State<ChoresView> {
                   MemberAvatar(name: member.displayName, color: member.color, size: 32),
                   const SizedBox(width: 12),
                   Expanded(child: Text(member.displayName)),
-                  if (member.userId == assignee) const Icon(Icons.check, size: 18),
+                  if (member.userId == assignee) const Icon(Icons.check_rounded, size: 18),
                 ],
               ),
             ),
@@ -313,7 +313,11 @@ class _ChoresViewState extends State<ChoresView> {
 
     return Scaffold(
       floatingActionButton: canManage
-          ? FloatingActionButton.extended(onPressed: _edit, icon: const Icon(Icons.add), label: Text('Nova tarefa'.tr))
+          ? FloatingActionButton.extended(
+              onPressed: _edit,
+              icon: const Icon(Icons.add_rounded),
+              label: Text('Nova tarefa'.tr),
+            )
           : null,
       body: RefreshIndicator(
         onRefresh: _load,
@@ -434,12 +438,12 @@ class _ChoreTile extends StatelessWidget {
             : 'Atribuída a outra pessoa'.tr,
         onPressed: canComplete ? onComplete : null,
         icon: Icon(switch (chore.timeOfDay) {
-          _ when waitsUntil != null => Icons.check_circle_outline,
-          ChoreTimeOfDay.morning when chore.isRoutine => Icons.wb_sunny_outlined,
-          ChoreTimeOfDay.evening when chore.isRoutine => Icons.bedtime_outlined,
-          _ => Icons.radio_button_unchecked,
+          _ when waitsUntil != null => Icons.check_circle_outline_rounded,
+          ChoreTimeOfDay.morning when chore.isRoutine => Icons.wb_sunny_rounded,
+          ChoreTimeOfDay.evening when chore.isRoutine => Icons.bedtime_rounded,
+          _ => Icons.radio_button_unchecked_rounded,
         }),
-        selectedIcon: const Icon(Icons.check_circle),
+        selectedIcon: const Icon(Icons.check_circle_rounded),
       ),
       title: Text(chore.title),
       subtitle: details.isEmpty ? null : Text(details),
@@ -508,7 +512,7 @@ class _StatsCard extends StatelessWidget {
                 Expanded(child: Text('Últimos 30 dias'.tr, style: theme.textTheme.titleSmall)),
                 TextButton.icon(
                   onPressed: onHistory,
-                  icon: const Icon(Icons.history, size: 18),
+                  icon: const Icon(Icons.history_rounded, size: 18),
                   label: Text('Quem fez o quê'.tr),
                 ),
               ],

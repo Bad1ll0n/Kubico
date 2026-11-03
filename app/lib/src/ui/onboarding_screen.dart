@@ -89,7 +89,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         title: Text(widget.canGoBack ? 'Adicionar casa'.tr : 'Olá, ${session.user?.displayName ?? ''}'.tr),
         actions: [
           if (!widget.canGoBack)
-            IconButton(tooltip: 'Sair'.tr, icon: const Icon(Icons.logout), onPressed: session.signOut),
+            IconButton(tooltip: 'Sair'.tr, icon: const Icon(Icons.logout_rounded), onPressed: session.signOut),
         ],
       ),
       body: Center(
@@ -171,7 +171,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             suffixIcon: scannerAvailable
                                 ? IconButton(
                                     tooltip: 'Ler o QR do convite'.tr,
-                                    icon: const Icon(Icons.qr_code_scanner),
+                                    icon: const Icon(Icons.qr_code_scanner_rounded),
                                     onPressed: _busy ? null : _scan,
                                   )
                                 : null,
@@ -210,11 +210,11 @@ class _TemplateTile extends StatelessWidget {
   final VoidCallback onTap;
 
   static IconData _icon(String key) => switch (key) {
-    'FamilyWithKids' => Icons.family_restroom,
-    'Couple' => Icons.favorite_border,
-    'SharedHouse' => Icons.groups_outlined,
-    'CaringForParents' => Icons.elderly,
-    _ => Icons.add_home_outlined,
+    'FamilyWithKids' => Icons.family_restroom_rounded,
+    'Couple' => Icons.favorite_border_rounded,
+    'SharedHouse' => Icons.groups_rounded,
+    'CaringForParents' => Icons.elderly_rounded,
+    _ => Icons.add_home_rounded,
   };
 
   @override
@@ -235,7 +235,7 @@ class _TemplateTile extends StatelessWidget {
         title: Text(template.name),
         subtitle: Text(contents.isEmpty ? template.description : '${template.description}\n$contents'),
         isThreeLine: contents.isNotEmpty,
-        trailing: selected ? const Icon(Icons.check_circle) : null,
+        trailing: selected ? const Icon(Icons.check_circle_rounded) : null,
       ),
     );
   }

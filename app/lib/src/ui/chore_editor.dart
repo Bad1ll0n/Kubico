@@ -181,7 +181,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _pickDate,
-                    icon: const Icon(Icons.event),
+                    icon: const Icon(Icons.event_rounded),
                     label: Text(_dueDate == null ? 'Sem prazo'.tr : localizations.formatMediumDate(_dueDate!)),
                   ),
                 ),
@@ -189,7 +189,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                   IconButton(
                     tooltip: 'Remover prazo'.tr,
                     onPressed: () => setState(() => _dueDate = null),
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close_rounded),
                   ),
               ],
             ),
@@ -247,13 +247,13 @@ class _ChoreEditorState extends State<_ChoreEditor> {
               segments: [
                 ButtonSegment(
                   value: ChoreTimeOfDay.morning,
-                  icon: const Icon(Icons.wb_sunny_outlined),
+                  icon: const Icon(Icons.wb_sunny_rounded),
                   label: Text('Manhã'.tr),
                 ),
                 ButtonSegment(value: ChoreTimeOfDay.any, label: Text('Qualquer'.tr)),
                 ButtonSegment(
                   value: ChoreTimeOfDay.evening,
-                  icon: const Icon(Icons.bedtime_outlined),
+                  icon: const Icon(Icons.bedtime_rounded),
                   label: Text('Noite'.tr),
                 ),
               ],
@@ -282,7 +282,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                   IconButton(
                     tooltip: 'Tirar este passo'.tr,
                     onPressed: () => _removeStep(i),
-                    icon: const Icon(Icons.remove_circle_outline),
+                    icon: const Icon(Icons.remove_circle_outline_rounded),
                   ),
                 ],
               ),
@@ -290,13 +290,13 @@ class _ChoreEditorState extends State<_ChoreEditor> {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 onPressed: _steps.length >= 20 ? null : _addStep,
-                icon: const Icon(Icons.add),
+                icon: const Icon(Icons.add_rounded),
                 label: Text('Adicionar passo'.tr),
               ),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              secondary: const Icon(Icons.photo_camera_outlined),
+              secondary: const Icon(Icons.photo_camera_rounded),
               title: Text('Pedir foto de prova'.tr),
               subtitle: Text('Para a dar como feita, é preciso uma foto do trabalho.'.tr),
               value: _requiresPhoto,
@@ -325,7 +325,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                 if (!_isNew)
                   TextButton.icon(
                     onPressed: () => Navigator.pop(context, const ChoreDeleteRequested()),
-                    icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
+                    icon: Icon(Icons.delete_outline_rounded, color: theme.colorScheme.error),
                     label: Text('Apagar'.tr, style: TextStyle(color: theme.colorScheme.error)),
                   ),
                 const Spacer(),

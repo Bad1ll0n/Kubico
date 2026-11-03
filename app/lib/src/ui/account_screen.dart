@@ -109,7 +109,7 @@ class _AccountScreenState extends State<AccountScreen> {
         children: [
           Card(
             child: ListTile(
-              leading: const Icon(Icons.person_outline),
+              leading: const Icon(Icons.person_outline_rounded),
               title: Text(user?.displayName ?? ''),
               subtitle: Text(user?.email ?? 'Perfil de criança (entra com o código da família e o PIN)'.tr),
               // O nome de um perfil de criança muda-o um adulto, nos membros da casa.
@@ -158,7 +158,7 @@ class _AccountScreenState extends State<AccountScreen> {
                   const SizedBox(height: 12),
                   FilledButton.tonalIcon(
                     onPressed: _busy ? null : _export,
-                    icon: const Icon(Icons.download_outlined),
+                    icon: const Icon(Icons.download_rounded),
                     label: Text('Descarregar os meus dados'.tr),
                   ),
                 ],
@@ -182,7 +182,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     OutlinedButton.icon(
                       onPressed: _busy ? null : _delete,
                       style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
-                      icon: const Icon(Icons.delete_forever_outlined),
+                      icon: const Icon(Icons.delete_forever_rounded),
                       label: Text('Apagar a minha conta'.tr),
                     ),
                   ],

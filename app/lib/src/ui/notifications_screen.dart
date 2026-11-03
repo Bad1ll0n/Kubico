@@ -23,7 +23,7 @@ class NotificationsBell extends StatelessWidget {
       icon: Badge(
         isLabelVisible: unread > 0,
         label: Text(unread > 99 ? '99+' : '$unread'),
-        child: const Icon(Icons.notifications_outlined),
+        child: const Icon(Icons.notifications_rounded),
       ),
     );
   }
@@ -66,7 +66,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             onPressed: () =>
                 Navigator.of(context)
                     .push(MaterialPageRoute<void>(builder: (_) => const NotificationPreferencesScreen())),
-            icon: const Icon(Icons.tune),
+            icon: const Icon(Icons.tune_rounded),
           ),
         ],
       ),
@@ -102,7 +102,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       '${formatShortDate(n.createdAt)} ${formatTime(n.createdAt)}',
                     ].join(' · '),
                   ),
-                  trailing: n.isRead ? null : const Icon(Icons.circle, size: 10),
+                  trailing: n.isRead ? null : const Icon(Icons.circle_rounded, size: 10),
                 ),
               ),
           ],
@@ -112,15 +112,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   static IconData _icon(String kind) => switch (kind) {
-    'ChoreAssigned' => Icons.task_alt,
-    'ChoreCompleted' => Icons.photo_camera_outlined,
-    'ChoreRejected' => Icons.replay,
-    'AllowancePaid' => Icons.savings_outlined,
-    'ChildPinLocked' => Icons.lock_outline,
-    'EventAssigned' => Icons.event,
-    'RideAssigned' => Icons.directions_car_outlined,
-    'RewardRequested' || 'RewardDecided' => Icons.card_giftcard,
-    _ => Icons.notifications_outlined,
+    'ChoreAssigned' => Icons.task_alt_rounded,
+    'ChoreCompleted' => Icons.photo_camera_rounded,
+    'ChoreRejected' => Icons.replay_rounded,
+    'AllowancePaid' => Icons.savings_rounded,
+    'ChildPinLocked' => Icons.lock_outline_rounded,
+    'EventAssigned' => Icons.event_rounded,
+    'RideAssigned' => Icons.directions_car_rounded,
+    'RewardRequested' || 'RewardDecided' => Icons.card_giftcard_rounded,
+    _ => Icons.notifications_rounded,
   };
 }
 
@@ -220,7 +220,7 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
                 ),
                 if (_delivery == NotificationDelivery.dailyDigest)
                   ListTile(
-                    leading: const Icon(Icons.schedule),
+                    leading: const Icon(Icons.schedule_rounded),
                     title: Text('Hora do resumo'.tr),
                     trailing: Text(time(_digestAt)),
                     onTap: () => _pick(_digestAt, (t) => _digestAt = t),
@@ -234,13 +234,13 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
                 ),
                 if (_quiet) ...[
                   ListTile(
-                    leading: const Icon(Icons.bedtime_outlined),
+                    leading: const Icon(Icons.bedtime_rounded),
                     title: Text('Das'.tr),
                     trailing: Text(time(_quietFrom)),
                     onTap: () => _pick(_quietFrom, (t) => _quietFrom = t),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.wb_sunny_outlined),
+                    leading: const Icon(Icons.wb_sunny_rounded),
                     title: Text('Às'.tr),
                     trailing: Text(time(_quietUntil)),
                     onTap: () => _pick(_quietUntil, (t) => _quietUntil = t),

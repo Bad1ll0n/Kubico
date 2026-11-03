@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
@@ -177,6 +178,7 @@ class _KitchenPanelScreenState extends State<KitchenPanelScreen> {
   }
 
   void _check(ShoppingItem item) {
+    HapticFeedback.selectionClick();
     context.read<ShoppingRepository>().setChecked(_household.id, item.listId, item.id, true);
     setState(() => _data!.items.remove(item));
   }

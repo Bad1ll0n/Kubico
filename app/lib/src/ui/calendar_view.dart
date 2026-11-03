@@ -331,13 +331,26 @@ class _CalendarViewState extends State<CalendarView> {
 
     return Scaffold(
       floatingActionButton: canManage
-          ? FloatingActionButton.extended(onPressed: _edit, icon: const Icon(Icons.add), label: Text('Novo evento'.tr))
+          ? FloatingActionButton.extended(
+              onPressed: _edit,
+              icon: const Icon(Icons.add_rounded),
+              label: Text('Novo evento'.tr),
+            )
           : null,
       body: Column(
         children: [
           _toolbar(context),
           if (_details != null && MediaQuery.sizeOf(context).width >= wideBreakpoint) _memberFilter(_details!),
-          Expanded(child: calendar == null ? _placeholder() : _content(calendar)),
+          // Trocar de vista ou de intervalo é uma transição curta, não um salto (sem ela com menos movimento pedido).
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 200),
+              child: KeyedSubtree(
+                key: ValueKey((_mode, visibleRange(_mode, _selected))),
+                child: calendar == null ? _placeholder() : _content(calendar),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -366,7 +379,7 @@ class _CalendarViewState extends State<CalendarView> {
                 IconButton(
                   tooltip: 'Anterior'.tr,
                   onPressed: () => _go(shiftFocus(_mode, _selected, -1)),
-                  icon: const Icon(Icons.chevron_left),
+                  icon: const Icon(Icons.chevron_left_rounded),
                 ),
                 Expanded(
                   child: Text(
@@ -378,7 +391,7 @@ class _CalendarViewState extends State<CalendarView> {
                 IconButton(
                   tooltip: 'Seguinte'.tr,
                   onPressed: () => _go(shiftFocus(_mode, _selected, 1)),
-                  icon: const Icon(Icons.chevron_right),
+                  icon: const Icon(Icons.chevron_right_rounded),
                 ),
                 TextButton(onPressed: () => _go(clock.now()), child: Text('Hoje'.tr)),
                 // As crianças veem o calendário só na app (o endereço funcionaria fora dela, sem sessão).
@@ -386,7 +399,7 @@ class _CalendarViewState extends State<CalendarView> {
                   IconButton(
                     tooltip: 'Ver noutros calendários'.tr,
                     onPressed: () => showCalendarFeedDialog(context, householdId: _householdId),
-                    icon: const Icon(Icons.share_outlined),
+                    icon: const Icon(Icons.share_rounded),
                   ),
               ],
             ),

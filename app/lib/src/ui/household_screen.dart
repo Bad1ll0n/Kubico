@@ -413,7 +413,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
       floatingActionButton: details?.myRole.canManageMembers == true
           ? FloatingActionButton.extended(
               onPressed: _invite,
-              icon: const Icon(Icons.person_add_alt_1),
+              icon: const Icon(Icons.person_add_alt_1_rounded),
               label: Text('Convidar'.tr),
             )
           : null,
@@ -434,10 +434,10 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                     const SizedBox(height: 12),
                     Card(
                       child: ListTile(
-                        leading: const Icon(Icons.tune),
+                        leading: const Icon(Icons.tune_rounded),
                         title: Text('Permissões'.tr),
                         subtitle: Text('O que adultos, crianças e convidados podem fazer em cada área'.tr),
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: const Icon(Icons.chevron_right_rounded),
                         onTap: () => Navigator.of(context)
                             .push(MaterialPageRoute<void>(builder: (_) => PermissionsScreen(householdId: details.id))),
                       ),
@@ -449,7 +449,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                       child: TextButton.icon(
                         onPressed: () => _leave(details),
                         style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
-                        icon: const Icon(Icons.logout),
+                        icon: const Icon(Icons.logout_rounded),
                         label: Text('Sair desta casa'.tr),
                       ),
                     ),
@@ -571,7 +571,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                   ),
                   IconButton(
                     tooltip: 'Copiar o código'.tr,
-                    icon: const Icon(Icons.copy, size: 20),
+                    icon: const Icon(Icons.copy_rounded, size: 20),
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: code));
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Código copiado.'.tr)));
@@ -586,7 +586,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
               children: [
                 FilledButton.tonalIcon(
                   onPressed: _createChild,
-                  icon: const Icon(Icons.child_care),
+                  icon: const Icon(Icons.child_care_rounded),
                   label: Text('Criar perfil de criança'.tr),
                 ),
                 if (code == null)
@@ -602,10 +602,10 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
   }
 
   static IconData _roleIcon(HouseholdRole role) => switch (role) {
-    HouseholdRole.admin => Icons.admin_panel_settings_outlined,
-    HouseholdRole.adult => Icons.person_outline,
-    HouseholdRole.child => Icons.child_care,
-    HouseholdRole.guest => Icons.badge_outlined,
+    HouseholdRole.admin => Icons.admin_panel_settings_rounded,
+    HouseholdRole.adult => Icons.person_outline_rounded,
+    HouseholdRole.child => Icons.child_care_rounded,
+    HouseholdRole.guest => Icons.badge_rounded,
   };
 
   static String _roleDescription(HouseholdRole role) => switch (role) {
@@ -665,7 +665,7 @@ class _InviteDialog extends StatelessWidget {
         ),
         if (link != null)
           TextButton.icon(
-            icon: const Icon(Icons.link),
+            icon: const Icon(Icons.link_rounded),
             label: Text('Copiar link'.tr),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: link));
@@ -673,7 +673,7 @@ class _InviteDialog extends StatelessWidget {
             },
           ),
         TextButton.icon(
-          icon: const Icon(Icons.copy),
+          icon: const Icon(Icons.copy_rounded),
           label: Text('Copiar código'.tr),
           onPressed: () {
             Clipboard.setData(ClipboardData(text: invite.code));

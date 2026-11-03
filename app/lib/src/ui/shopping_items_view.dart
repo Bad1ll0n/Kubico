@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
@@ -225,6 +226,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
       _items![item.id] = item.copyWith(isChecked: !item.isChecked);
       _sorted = null;
     });
+    HapticFeedback.selectionClick();
     _shopping.setChecked(_householdId, _listId, item.id, !item.isChecked);
   }
 
@@ -333,17 +335,21 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
               textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(
                 hintText: 'Adicionar artigo (ex.: 2 leite)'.tr,
-                prefixIcon: const Icon(Icons.add),
+                prefixIcon: const Icon(Icons.add_rounded),
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (widget.scanBarcode != null || scannerAvailable)
                       IconButton(
-                        icon: const Icon(Icons.qr_code_scanner),
+                        icon: const Icon(Icons.qr_code_scanner_rounded),
                         tooltip: 'Ler código de barras'.tr,
                         onPressed: _scan,
                       ),
-                    IconButton(icon: const Icon(Icons.mic_none), tooltip: 'Ditar artigos'.tr, onPressed: _dictate),
+                    IconButton(
+                      icon: const Icon(Icons.mic_none_rounded),
+                      tooltip: 'Ditar artigos'.tr,
+                      onPressed: _dictate,
+                    ),
                     IconButton(icon: const Icon(Icons.add_rounded), tooltip: 'Adicionar'.tr, onPressed: _add),
                   ],
                 ),
@@ -361,7 +367,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
                 if (empty) {
                   return StateView(
                     inList: true,
-                    icon: Icons.shopping_basket_outlined,
+                    icon: Icons.shopping_basket_rounded,
                     illustration: KubicoIllustration.basket,
                     color: context.kubico.area(KubicoArea.shopping).color,
                     title: 'A lista está vazia'.tr,
@@ -448,7 +454,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
         color: theme.colorScheme.errorContainer,
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Icon(Icons.delete_outline, color: theme.colorScheme.onErrorContainer),
+        child: Icon(Icons.delete_outline_rounded, color: theme.colorScheme.onErrorContainer),
       ),
       onDismissed: (_) => _delete(item),
       child: CheckboxListTile(

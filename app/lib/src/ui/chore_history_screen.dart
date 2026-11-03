@@ -31,12 +31,12 @@ Future<PickedPhoto?> pickChorePhoto(BuildContext context) async {
           ),
           if (camera)
             ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
+              leading: const Icon(Icons.photo_camera_rounded),
               title: Text('Tirar foto'.tr),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
           ListTile(
-            leading: const Icon(Icons.photo_library_outlined),
+            leading: const Icon(Icons.photo_library_rounded),
             title: Text('Escolher uma foto'.tr),
             onTap: () => Navigator.pop(context, ImageSource.gallery),
           ),
@@ -105,7 +105,7 @@ class _ChorePhotoImageState extends State<ChorePhotoImage> {
                       MediaQuery.devicePixelRatioOf(context))
                   .round(),
         ),
-        AsyncSnapshot(hasError: true) => const Icon(Icons.broken_image_outlined),
+        AsyncSnapshot(hasError: true) => const Icon(Icons.broken_image_rounded),
         _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       },
     ),
@@ -204,7 +204,7 @@ class _ChoreHistoryScreenState extends State<ChoreHistoryScreen> {
             child: IconButton.filledTonal(
               tooltip: 'Fechar'.tr,
               onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.close),
+              icon: const Icon(Icons.close_rounded),
             ),
           ),
         ],

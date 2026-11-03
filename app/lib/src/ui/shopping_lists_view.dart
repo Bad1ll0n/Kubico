@@ -150,13 +150,13 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
             return Card(
               child: ListTile(
                 selected: list.id == widget.selectedListId,
-                leading: const Icon(Icons.shopping_cart_outlined),
+                leading: const Icon(Icons.shopping_cart_rounded),
                 title: Text(list.name),
                 subtitle: Text(list.pendingCount == 0 ? 'Tudo comprado'.tr : '${list.pendingCount} por comprar'.tr),
                 trailing: canManage
                     ? IconButton(
                         tooltip: 'Apagar lista'.tr,
-                        icon: const Icon(Icons.delete_outline),
+                        icon: const Icon(Icons.delete_outline_rounded),
                         onPressed: () => _deleteList(list),
                       )
                     : null,
@@ -173,7 +173,7 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
       floatingActionButton: canManage
           ? FloatingActionButton.extended(
               onPressed: _createList,
-              icon: const Icon(Icons.add),
+              icon: const Icon(Icons.add_rounded),
               label: Text('Nova lista'.tr),
             )
           : null,

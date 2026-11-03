@@ -164,8 +164,8 @@ class _DictationDialogState extends State<DictationDialog> {
                   tooltip: _listening ? 'A ouvir'.tr : 'Ouvir outra vez'.tr,
                   isSelected: _listening,
                   onPressed: _listening || _unavailable ? null : _listen,
-                  icon: const Icon(Icons.mic_none),
-                  selectedIcon: const Icon(Icons.mic),
+                  icon: const Icon(Icons.mic_none_rounded),
+                  selectedIcon: const Icon(Icons.mic_rounded),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

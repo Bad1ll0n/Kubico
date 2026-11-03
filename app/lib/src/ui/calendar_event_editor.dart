@@ -231,7 +231,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
     return DropdownButtonFormField<String?>(
       key: ValueKey(label),
       initialValue: drivers.any((m) => m.userId == value) ? value : null,
-      decoration: InputDecoration(labelText: label, prefixIcon: const Icon(Icons.directions_car_outlined)),
+      decoration: InputDecoration(labelText: label, prefixIcon: const Icon(Icons.directions_car_rounded)),
       items: [
         DropdownMenuItem<String?>(value: null, child: Text('Ninguém'.tr)),
         for (final m in drivers) DropdownMenuItem<String?>(value: m.userId, child: Text(m.displayName)),
@@ -327,7 +327,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
                   Expanded(
                     child: TextButton.icon(
                       onPressed: _pickUntil,
-                      icon: const Icon(Icons.event_repeat),
+                      icon: const Icon(Icons.event_repeat_rounded),
                       label: Text(_until == null ? 'Repete-se sem fim'.tr : 'Até ${formatShortDate(_until!)}'.tr),
                     ),
                   ),
@@ -335,7 +335,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
                     IconButton(
                       tooltip: 'Repetir sem fim'.tr,
                       onPressed: () => setState(() => _until = null),
-                      icon: const Icon(Icons.close),
+                      icon: const Icon(Icons.close_rounded),
                     ),
                 ],
               ),
@@ -376,7 +376,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
                 if (!_isNew)
                   TextButton.icon(
                     onPressed: () => Navigator.pop(context, const CalendarEventDeleteRequested()),
-                    icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
+                    icon: Icon(Icons.delete_outline_rounded, color: theme.colorScheme.error),
                     label: Text('Apagar'.tr, style: TextStyle(color: theme.colorScheme.error)),
                   ),
                 const Spacer(),

@@ -168,7 +168,7 @@ class _RewardsViewState extends State<RewardsView> {
       floatingActionButton: _canManage
           ? FloatingActionButton.extended(
               onPressed: _edit,
-              icon: const Icon(Icons.add),
+              icon: const Icon(Icons.add_rounded),
               label: Text('Nova recompensa'.tr),
             )
           : null,
@@ -405,10 +405,10 @@ class _RedemptionTile extends StatelessWidget {
               IconButton(
                 tooltip: 'Recusar'.tr,
                 onPressed: onReject,
-                icon: Icon(Icons.close, color: theme.colorScheme.error),
+                icon: Icon(Icons.close_rounded, color: theme.colorScheme.error),
               ),
             if (onApprove != null)
-              IconButton(tooltip: 'Aprovar'.tr, onPressed: onApprove, icon: const Icon(Icons.check)),
+              IconButton(tooltip: 'Aprovar'.tr, onPressed: onApprove, icon: const Icon(Icons.check_rounded)),
             if (onCancel != null) TextButton(onPressed: onCancel, child: Text('Cancelar'.tr)),
           ],
         ),

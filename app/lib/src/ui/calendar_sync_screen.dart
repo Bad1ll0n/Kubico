@@ -208,7 +208,7 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
       actions.add(
         FilledButton.icon(
           onPressed: busy ? null : () => _connect(provider),
-          icon: const Icon(Icons.link),
+          icon: const Icon(Icons.link_rounded),
           label: Text('Ligar a ${provider.account}'.tr),
         ),
       );
@@ -227,7 +227,7 @@ class _CalendarSyncScreenState extends State<CalendarSyncScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.event_available_outlined),
+                const Icon(Icons.event_available_rounded),
                 const SizedBox(width: 8),
                 Expanded(child: Text(provider.label, style: theme.textTheme.titleMedium)),
                 if (busy) const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)),

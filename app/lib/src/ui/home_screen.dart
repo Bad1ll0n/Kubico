@@ -325,7 +325,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const NotificationsBell(),
               IconButton(
                 tooltip: 'Membros e convites'.tr,
-                icon: const Icon(Icons.group_outlined),
+                icon: const Icon(Icons.group_rounded),
                 onPressed: () =>
                     Navigator.of(context)
                         .push(MaterialPageRoute<void>(builder: (_) => HouseholdScreen(householdId: household.id))),
@@ -496,10 +496,10 @@ class _HouseholdSwitcher extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.cottage_outlined),
+          const Icon(Icons.cottage_rounded),
           const SizedBox(width: 8),
           Flexible(child: Text(current.name, overflow: TextOverflow.ellipsis)),
-          const Icon(Icons.arrow_drop_down),
+          const Icon(Icons.arrow_drop_down_rounded),
         ],
       ),
     );
@@ -519,7 +519,7 @@ class _NoAreas extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.lock_outline, size: 48, color: theme.colorScheme.outline),
+            Icon(Icons.lock_outline_rounded, size: 48, color: theme.colorScheme.outline),
             const SizedBox(height: 12),
             Text(
               'Ainda não tens nada para ver nesta casa'.tr,
@@ -545,7 +545,7 @@ class _EmptyDetail extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.shopping_basket_outlined, size: 48, color: theme.colorScheme.outline),
+          Icon(Icons.shopping_basket_rounded, size: 48, color: theme.colorScheme.outline),
           const SizedBox(height: 12),
           Text('Escolhe uma lista'.tr, style: theme.textTheme.titleMedium),
         ],

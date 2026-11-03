@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kubico/src/storage/key_value_store.dart';
 import 'package:kubico/src/ui/design/components.dart';
@@ -36,13 +37,20 @@ void main() {
     expect(find.text('+5'), findsNothing);
   });
 
-  testWidgets('com menos movimento pedido não há estrela', (tester) async {
+  testWidgets('com menos movimento pedido não há estrela, mas o telemóvel vibra na mesma', (tester) async {
+    final haptics = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'HapticFeedback.vibrate') haptics.add(call.arguments as String);
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
     await tester.pumpWidget(_app(reduceMotion: true));
 
     await tester.tap(find.text('Concluir'));
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('+5'), findsNothing);
+    expect(haptics, ['HapticFeedbackType.mediumImpact']);
   });
 
   testWidgets('os pontos vão numa pílula com estrela; uma dívida diz "deve", sem estrela', (tester) async {

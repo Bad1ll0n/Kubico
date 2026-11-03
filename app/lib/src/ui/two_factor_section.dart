@@ -101,7 +101,7 @@ class _TwoFactorSectionState extends State<TwoFactorSection> {
                 Expanded(child: Text('Verificação em dois passos'.tr, style: theme.textTheme.titleMedium)),
                 if (status?.enabled ?? false)
                   Chip(
-                    avatar: const Icon(Icons.verified_user_outlined, size: 18),
+                    avatar: const Icon(Icons.verified_user_rounded, size: 18),
                     label: Text('Ligada'.tr),
                     visualDensity: VisualDensity.compact,
                   ),
@@ -123,12 +123,12 @@ class _TwoFactorSectionState extends State<TwoFactorSection> {
               status.enabled
                   ? OutlinedButton.icon(
                       onPressed: _busy ? null : _turnOff,
-                      icon: const Icon(Icons.lock_open_outlined),
+                      icon: const Icon(Icons.lock_open_rounded),
                       label: Text('Desligar'.tr),
                     )
                   : FilledButton.tonalIcon(
                       onPressed: _busy ? null : _turnOn,
-                      icon: const Icon(Icons.verified_user_outlined),
+                      icon: const Icon(Icons.verified_user_rounded),
                       label: Text('Ligar'.tr),
                     ),
           ],
@@ -210,7 +210,7 @@ class _SetupDialogState extends State<_SetupDialog> {
                   ),
                   IconButton(
                     tooltip: 'Copiar a chave'.tr,
-                    icon: const Icon(Icons.copy, size: 18),
+                    icon: const Icon(Icons.copy_rounded, size: 18),
                     onPressed: () => Clipboard.setData(ClipboardData(text: widget.secret)),
                   ),
                 ],
@@ -288,7 +288,7 @@ class _RecoveryCodesDialog extends StatelessWidget {
             Clipboard.setData(ClipboardData(text: codes.join('\n')));
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Códigos copiados.'.tr)));
           },
-          icon: const Icon(Icons.copy, size: 18),
+          icon: const Icon(Icons.copy_rounded, size: 18),
           label: Text('Copiar'.tr),
         ),
         FilledButton(onPressed: () => Navigator.pop(context), child: Text('Já guardei'.tr)),

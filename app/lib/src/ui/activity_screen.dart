@@ -175,11 +175,11 @@ class _ActivityScreenState extends State<ActivityScreen> {
   }
 
   static IconData _icon(HouseholdModule? module) => switch (module) {
-    HouseholdModule.shopping => Icons.shopping_cart_outlined,
-    HouseholdModule.chores => Icons.task_alt,
-    HouseholdModule.calendar => Icons.calendar_month_outlined,
-    HouseholdModule.rewards => Icons.card_giftcard_outlined,
-    null => Icons.group_outlined,
+    HouseholdModule.shopping => Icons.shopping_cart_rounded,
+    HouseholdModule.chores => Icons.task_alt_rounded,
+    HouseholdModule.calendar => Icons.calendar_month_rounded,
+    HouseholdModule.rewards => Icons.card_giftcard_rounded,
+    null => Icons.group_rounded,
   };
 
   static bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;

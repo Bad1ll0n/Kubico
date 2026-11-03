@@ -19,10 +19,10 @@ String deviceLabel(String? kind) => switch (kind) {
 };
 
 IconData _deviceIcon(String? kind) => switch (kind) {
-  'android' || 'ios' => Icons.smartphone,
-  'windows' || 'macos' || 'linux' => Icons.computer,
-  'web' => Icons.language,
-  _ => Icons.devices_other,
+  'android' || 'ios' => Icons.smartphone_rounded,
+  'windows' || 'macos' || 'linux' => Icons.computer_rounded,
+  'web' => Icons.language_rounded,
+  _ => Icons.devices_other_rounded,
 };
 
 /// Os dispositivos onde há sessão iniciada, para terminar a de um telemóvel perdido ou de um computador emprestado.
