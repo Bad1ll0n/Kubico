@@ -46,7 +46,7 @@ public class NotificationService(KubicoDbContext db, IHubContext<HouseholdHub> h
 
         var languages = await db.Users.Where(u => ids.Contains(u.Id))
             .Select(u => new { u.Id, u.Language })
-            .ToDictionaryAsync(u => u.Id, u => u.Language, ct);
+            .ToDictionaryAsync(u => u.Id, u => u.Language, CancellationToken.None);
         var created = ids
             .Select(userId =>
             {
@@ -65,12 +65,13 @@ public class NotificationService(KubicoDbContext db, IHubContext<HouseholdHub> h
             .ToList();
 
         db.Notifications.AddRange(created);
-        await db.SaveChangesAsync(ct);
+        // Chama-se depois de gravar a alteração: o aviso grava-se e envia-se mesmo que o pedido seja cancelado agora.
+        await db.SaveChangesAsync(CancellationToken.None);
 
         foreach (var notification in created)
         {
             await hub.Clients.Group(HouseholdHub.UserGroupName(notification.UserId))
-                .SendAsync(HouseholdEvents.NotificationCreated, ToDto(notification), ct);
+                .SendAsync(HouseholdEvents.NotificationCreated, ToDto(notification), HouseholdNotifier.AfterCommit());
         }
     }
 

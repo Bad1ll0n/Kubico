@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -521,5 +522,28 @@ public class FcmPushSenderTests
     private sealed class FakeHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> respond) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => respond(request);
+    }
+}
+
+/// <summary>Os avisos chamam-se depois de gravar: um pedido cancelado nesse momento não os perde (ENG-10).</summary>
+public class NotificationAfterCommitTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFactory>
+{
+    [Fact]
+    public async Task A_notification_is_saved_even_if_the_request_was_cancelled_after_the_change()
+    {
+        var (admin, adminAuth, household) = await Fase1.HouseholdAsync(factory);
+        var (_, ruiId) = await Fase1.MemberAsync(factory, admin, household, "Rui", HouseholdRole.Adult);
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<NotificationService>().NotifyAsync(
+                household, [ruiId], adminAuth.User.Id, NotificationKind.ChoreAssigned, "Tarefa para ti: Lixo", null, null, cancelled.Token);
+        }
+
+        await using var check = factory.Services.CreateAsyncScope();
+        var db = check.ServiceProvider.GetRequiredService<Kubico.Infrastructure.Persistence.KubicoDbContext>();
+        Assert.True(await db.Notifications.AnyAsync(n => n.UserId == ruiId && n.Title == "Tarefa para ti: Lixo"));
     }
 }
