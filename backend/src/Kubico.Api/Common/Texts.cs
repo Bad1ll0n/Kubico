@@ -221,6 +221,8 @@ public static partial class Texts
         ["A foto é grande demais (no máximo 4096 × 4096 píxeis)."] = "The photo is too large (at most 4096 × 4096 pixels).",
         ["Tens demasiadas fotos por usar. Conclui as tarefas com elas ou espera até amanhã."] = "You have too many unused photos. Complete the chores with them or wait until tomorrow.",
         ["Os perfis de criança entram com o PIN: pede a um adulto para o mudar."] = "Child profiles sign in with a PIN: ask an adult to change it.",
+        ["Escreve um nome."] = "Type a name.",
+        ["O nome de um perfil de criança muda-o um adulto da casa."] = "An adult in the home changes a child profile's name.",
         ["Só se pode não aceitar o que foi feito nos últimos 30 dias."] = "Only chores done in the last 30 days can be turned down.",
         ["Demasiados PINs errados. Tenta outra vez daqui a {0} minutos."] = "Too many wrong PINs. Try again in {0} minutes.",
         ["Demasiados PINs errados. Tenta outra vez daqui a {0} horas ou pede a um adulto para mudar o PIN."] = "Too many wrong PINs. Try again in {0} hours or ask an adult to change the PIN.",

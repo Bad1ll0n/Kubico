@@ -271,6 +271,20 @@ class ApiClient {
             as Map<String, dynamic>,
       );
 
+  /// Muda o nome de um perfil de criança (a data de nascimento vai com ele: o pedido substitui as duas).
+  Future<Member> updateChild(String householdId, String userId, {required String name, DateTime? birthDate}) async =>
+      Member.fromJson(
+        await _send(
+          'PUT',
+          '/api/households/$householdId/children/$userId',
+          body: {'displayName': name, 'birthDate': birthDate == null ? null : apiDate(birthDate)},
+        ) as Map<String, dynamic>,
+      );
+
+  /// Muda o meu nome (o que os outros membros veem).
+  Future<User> changeName(String name) async =>
+      User.fromJson(await _send('PUT', '/api/account/name', body: {'displayName': name}) as Map<String, dynamic>);
+
   Future<void> setChildPin(String householdId, String userId, String pin) =>
       _send('PUT', '/api/households/$householdId/children/$userId/pin', body: {'pin': pin});
 

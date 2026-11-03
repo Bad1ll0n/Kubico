@@ -269,6 +269,13 @@ class SessionController extends ChangeNotifier {
     if (me.user.language != AppLanguage.code) unawaited(_saveLanguage(AppLanguage.code));
   }
 
+  /// Muda o meu nome e volta a ler as casas (onde o nome aparece).
+  Future<void> changeName(String name) async {
+    user = await api.changeName(name);
+    notifyListeners();
+    await refresh();
+  }
+
   /// Muda a língua da app (fica guardada no dispositivo) e a da conta, para os avisos.
   Future<void> setLanguage(String language) async {
     await AppLanguage.set(language);

@@ -237,6 +237,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(server.requests, contains('PUT /api/households/h1/children/rita/pin'));
     expect(find.text('O PIN de Rita foi mudado e as sessões abertas terminaram.'), findsOneWidget);
+
+    // E muda o nome (sem apagar o perfil, que levava os pontos e o histórico).
+    await tester.tap(find.byTooltip('Opções de Rita'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mudar o nome'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Nome'), ' Rita Maria ');
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+    expect(server.requests, contains('PUT /api/households/h1/children/rita'));
+    expect(server.bodies.last, {'displayName': 'Rita Maria', 'birthDate': null});
   });
 
   testWidgets('o único administrador tem de passar a administração antes de sair', (tester) async {

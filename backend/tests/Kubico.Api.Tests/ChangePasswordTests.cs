@@ -48,3 +48,24 @@ public class ChangePasswordTests(KubicoApiFactory factory) : IClassFixture<Kubic
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 }
+
+/// <summary>Mudar o próprio nome (UX-15).</summary>
+public class ChangeNameTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFactory>
+{
+    [Fact]
+    public async Task An_adult_renames_themselves_and_the_household_sees_it_but_a_child_cannot()
+    {
+        var (admin, adminAuth, household) = await Fase1.HouseholdAsync(factory);
+        var (child, _, _) = await Fase1.ChildProfileAsync(factory, admin, household, "Rita");
+
+        var blank = await admin.PutAsJsonAsync("/api/account/name", new ChangeNameRequest("   "), TestJson.Options);
+        var renamed = await admin.PutAsJsonAsync("/api/account/name", new ChangeNameRequest("  Ana Silva "), TestJson.Options);
+        var members = (await admin.GetFromJsonAsync<Kubico.Api.Households.HouseholdDto>($"/api/households/{household}", TestJson.Options))!.Members;
+        var childTries = await child.PutAsJsonAsync("/api/account/name", new ChangeNameRequest("Rainha"), TestJson.Options);
+
+        Assert.Equal(HttpStatusCode.BadRequest, blank.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
+        Assert.Equal("Ana Silva", members.Single(m => m.UserId == adminAuth.User.Id).DisplayName);
+        Assert.Equal(HttpStatusCode.Forbidden, childTries.StatusCode);
+    }
+}

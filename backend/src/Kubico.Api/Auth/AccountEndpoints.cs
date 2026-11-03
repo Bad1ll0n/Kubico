@@ -17,6 +17,9 @@ namespace Kubico.Api.Auth;
 
 public record DeleteAccountRequest([property: Required] string Password);
 
+/// <summary>O nome que os outros membros veem.</summary>
+public record ChangeNameRequest([property: Required, StringLength(100, MinimumLength = 1)] string DisplayName);
+
 /// <summary>Mudar a palavra-passe sabendo a atual (a nova tem as mesmas regras do registo).</summary>
 public record ChangePasswordRequest(
     [property: Required] string CurrentPassword,
@@ -74,6 +77,7 @@ public static class AccountEndpoints
         account.MapPost("/2fa/disable", DisableTwoFactor).RequireActiveSession();
         account.MapPut("/language", SetLanguage);
         account.MapPut("/password", ChangePassword).RequireActiveSession();
+        account.MapPut("/name", ChangeName);
         return api;
     }
 
@@ -177,6 +181,49 @@ public static class AccountEndpoints
     }
 
     /// <summary>A língua da app: os avisos (na app e no telemóvel) passam a chegar nela.</summary>
+    /// <summary>
+    /// Muda o nome (o de um perfil de criança muda-o um adulto, em /children). As casas onde a pessoa está ficam a saber
+    /// logo (MemberUpserted).
+    /// </summary>
+    private static async Task<IResult> ChangeName(
+        ChangeNameRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdNotifier notifier,
+        CancellationToken ct)
+    {
+        var name = request.DisplayName.Trim();
+        if (name.Length == 0)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["DisplayName"] = ["Escreve um nome."],
+            });
+        }
+
+        var userId = principal.GetUserId();
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (user.IsChildProfile)
+        {
+            return Results.Problem(
+                title: "O nome de um perfil de criança muda-o um adulto da casa.", statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        user.DisplayName = name;
+        await db.SaveChangesAsync(ct);
+        foreach (var membership in await db.Memberships.Include(m => m.User).Where(m => m.UserId == userId).ToListAsync(ct))
+        {
+            await notifier.MemberUpserted(membership.HouseholdId, MemberEndpoints.ToDto(membership), ct);
+        }
+
+        return Results.Ok(user.ToDto());
+    }
+
     private static async Task<IResult> SetLanguage(
         LanguageRequest request, ClaimsPrincipal principal, KubicoDbContext db, CancellationToken ct)
     {

@@ -9,6 +9,7 @@ import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'change_password.dart';
 import 'design/reading_mode.dart';
+import 'rename_dialog.dart';
 import 'theme.dart';
 import 'two_factor_section.dart';
 
@@ -111,6 +112,23 @@ class _AccountScreenState extends State<AccountScreen> {
               leading: const Icon(Icons.person_outline),
               title: Text(user?.displayName ?? ''),
               subtitle: Text(user?.email ?? 'Perfil de criança (entra com o código da família e o PIN)'.tr),
+              // O nome de um perfil de criança muda-o um adulto, nos membros da casa.
+              trailing: child
+                  ? null
+                  : IconButton(
+                      tooltip: 'Mudar o nome'.tr,
+                      icon: const Icon(Icons.edit_rounded),
+                      onPressed: () async {
+                        final session = context.read<SessionController>();
+                        final name = await askName(context, title: 'Mudar o nome'.tr, current: user?.displayName ?? '');
+                        if (name == null || !context.mounted) return;
+                        try {
+                          await session.changeName(name);
+                        } catch (e) {
+                          if (context.mounted) showError(context, e);
+                        }
+                      },
+                    ),
             ),
           ),
           const SizedBox(height: 12),

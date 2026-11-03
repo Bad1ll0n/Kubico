@@ -16,6 +16,7 @@ import '../session/session_controller.dart';
 import 'dates_pt.dart';
 import 'design/components.dart';
 import 'permissions_screen.dart';
+import 'rename_dialog.dart';
 import 'theme.dart';
 
 /// Membros da casa: convites e papéis (administradores), perfis de criança com PIN e o código da família (adultos),
@@ -289,6 +290,15 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
       ? 'a ${formatDayMonthShort(start)}'.tr
       : 'de ${formatDayMonthShort(start)} a ${formatDayMonthShort(end)}'.tr;
 
+  Future<void> _renameChild(Member member) async {
+    final name = await askName(context, title: 'Mudar o nome'.tr, current: member.displayName);
+    if (name == null || name == member.displayName) return;
+    await _run(
+      () => _api.updateChild(widget.householdId, member.userId, name: name, birthDate: member.birthDate),
+      done: 'Nome mudado.'.tr,
+    );
+  }
+
   Future<void> _changePin(Member member) async {
     final pin = await showDialog<String>(
       context: context,
@@ -462,6 +472,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
       if (!isMe && canManage && !member.isChildProfile) ('role', 'Mudar papel'.tr, _changeRole),
       if (!isMe && canManage && !member.isChildProfile && member.role != HouseholdRole.admin)
         ('admin', 'Passar a administração'.tr, _transferAdmin),
+      if (member.isChildProfile && details.myRole.canManageContent) ('name', 'Mudar o nome'.tr, _renameChild),
       if (member.isChildProfile && details.myRole.canManageContent) ('pin', 'Mudar PIN'.tr, _changePin),
       if (member.isChildProfile && details.myRole.canManageContent) ('sessions', 'Terminar sessões'.tr, _signOutChild),
       if (!isMe && canManage) ('remove', member.isChildProfile ? 'Apagar perfil'.tr : 'Tirar da casa'.tr, _remove),
