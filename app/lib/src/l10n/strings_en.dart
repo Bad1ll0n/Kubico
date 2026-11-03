@@ -290,7 +290,6 @@ const englishTexts = <String, String>{
   'têm': 'have',
   'Apagar evento que se repete': 'Delete a repeating event',
   'Alterar evento que se repete': 'Change a repeating event',
-  'Atenção: {0}.': 'Heads up: {0}.',
   'Anterior': 'Previous',
   'Seguinte': 'Next',
   'Hoje': 'Today',
@@ -420,6 +419,7 @@ const englishTexts = <String, String>{
   'Membros e convites': 'Members and invites',
   'Terminar sessão': 'Sign out',
   'Mudar de criança': 'Switch child',
+  'Há um conflito': 'There is a conflict',
   'Ler o código da família': 'Scan the family code',
   'Aponta para o QR do código da família, no telemóvel de um adulto da casa.':
       'Point at the family code QR, on the phone of an adult in the household.',

@@ -434,7 +434,11 @@ void main() {
     expect(body['participantUserIds'], ['kid']);
     expect(DateUtils.dateOnly(start), DateTime(2026, 11, 10));
     expect(end.difference(start), const Duration(hours: 1));
-    expect(find.text('Atenção: Rita tem outro compromisso a essa hora.'), findsOneWidget);
+    expect(find.text('Há um conflito'), findsOneWidget, reason: 'num diálogo, não num aviso que desaparece');
+    expect(find.text('Rita tem outro compromisso a essa hora.'), findsOneWidget);
+    await tester.tap(find.text('Percebi'));
+    await tester.pumpAndSettle();
+    expect(find.text('Há um conflito'), findsNothing);
   });
 
   testWidgets('com a letra a 200 % (avós, baixa visão), a lista e o mês não cortam nada', (tester) async {

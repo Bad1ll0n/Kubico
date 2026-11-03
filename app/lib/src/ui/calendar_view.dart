@@ -306,9 +306,16 @@ class _CalendarViewState extends State<CalendarView> {
     if (!mounted) return;
     final busy = _calendar?.conflictsFor(saved.id) ?? const <String>{};
     if (busy.isEmpty) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('Atenção: ${_unavailable(busy)}.'.tr)));
+    // Um diálogo (não um SnackBar, que desaparece em 4 s): o conflito é para ler e decidir. Fica também no evento.
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Icon(Icons.warning_rounded, color: context.kubico.warning),
+        title: Text('Há um conflito'.tr),
+        content: Text('${_unavailable(busy)}.'),
+        actions: [FilledButton(onPressed: () => Navigator.pop(context), child: Text('Percebi'.tr))],
+      ),
+    );
   }
 
   @override
