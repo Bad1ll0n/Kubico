@@ -12,12 +12,14 @@ import '../realtime/household_realtime.dart';
 import '../shopping/shopping_repository.dart';
 import 'dates_pt.dart';
 import 'design/components.dart';
+import 'design/screen_awake.dart';
 import 'theme.dart';
 
 /// O painel de cozinha: um tablet fixo na parede ou na bancada como centro da casa. Letra para ler a 2–3 m, alvos
 /// grandes e só o essencial: a agenda de hoje e de amanhã, as tarefas do dia (concluem-se aqui, escolhendo quem
 /// as fez), as compras por fazer (marcam-se aqui) e os pontos de cada criança. Funciona com a sessão de um adulto.
-/// Das 22h às 7h passa ao modo noite (só o relógio e o primeiro evento de amanhã). Sai-se mantendo o botão
+/// O ecrã fica sempre ligado enquanto o painel está aberto. Das 22h às 7h passa ao modo noite (só o relógio e o
+/// primeiro evento de amanhã). Sai-se mantendo o botão
 /// carregado, para as crianças não saírem sem querer.
 class KitchenPanelScreen extends StatefulWidget {
   const KitchenPanelScreen({required this.household, super.key});
@@ -72,11 +74,13 @@ class _KitchenPanelScreenState extends State<KitchenPanelScreen> {
       final now = clock.now();
       if (now.minute != _now.minute && mounted) setState(() => _now = now);
     });
+    ScreenAwake.set(true);
     _load();
   }
 
   @override
   void dispose() {
+    ScreenAwake.set(false);
     _events?.cancel();
     _reconnected?.cancel();
     _tick?.cancel();

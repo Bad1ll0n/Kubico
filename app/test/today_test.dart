@@ -10,6 +10,7 @@ import 'package:kubico/src/api/models.dart';
 import 'package:kubico/src/realtime/household_realtime.dart';
 import 'package:kubico/src/session/session_controller.dart';
 import 'package:kubico/src/session/token_store.dart';
+import 'package:kubico/src/ui/design/screen_awake.dart';
 import 'package:kubico/src/ui/theme.dart';
 import 'package:kubico/src/shopping/shopping_repository.dart';
 import 'package:kubico/src/storage/key_value_store.dart';
@@ -280,9 +281,15 @@ void main() {
   }
 
   testWidgets('o painel de cozinha: agenda, tarefas, compras e pontos; conclui-se dizendo quem fez', (tester) async {
+    final awake = <bool>[];
+    final original = ScreenAwake.toggle;
+    ScreenAwake.toggle = (on) async => awake.add(on);
+    addTearDown(() => ScreenAwake.toggle = original);
+
     await withClock(Clock.fixed(DateTime(2026, 11, 10, 10, 5)), () async {
       final server = _Server(me: 'mae', role: 'Admin');
       await pumpPanel(tester, server);
+      expect(awake, [true], reason: 'o ecrã fica ligado enquanto o painel está aberto');
 
       expect(find.text('10:05'), findsOneWidget);
       expect(find.text('Natação'), findsOneWidget);
@@ -298,6 +305,7 @@ void main() {
 
       expect(server.requests, contains('POST /api/households/h1/chores/c1/complete {"doneByUserId":"rita"}'));
       await tester.pumpWidget(const SizedBox());
+      expect(awake, [true, false], reason: 'ao sair, o ecrã volta a poder apagar-se');
     });
   });
 
