@@ -18,6 +18,8 @@ import 'theme.dart';
 /// O painel de cozinha: um tablet fixo na parede ou na bancada como centro da casa. Letra para ler a 2–3 m, alvos
 /// grandes e só o essencial: a agenda de hoje e de amanhã, as tarefas do dia (concluem-se aqui, escolhendo quem
 /// as fez), as compras por fazer (marcam-se aqui) e os pontos de cada criança. Funciona com a sessão de um adulto.
+/// "Quem és?": tocar num avatar escolhe quem está a usar o painel durante 2 minutos, e as tarefas concluídas
+/// ficam em nome dessa pessoa sem perguntar; sem ninguém escolhido, pergunta-se quem fez.
 /// O ecrã fica sempre ligado enquanto o painel está aberto. Das 22h às 7h passa ao modo noite (só o relógio e o
 /// primeiro evento de amanhã). Sai-se mantendo o botão
 /// carregado, para as crianças não saírem sem querer.
@@ -59,6 +61,12 @@ class _KitchenPanelScreenState extends State<KitchenPanelScreen> {
   Timer? _tick;
   DateTime _now = clock.now();
 
+  /// Quem está a usar o painel (escolhido em "Quem és?") e até quando.
+  String? _activeUserId;
+  DateTime? _activeUntil;
+
+  static const activeFor = Duration(minutes: 2);
+
   HouseholdSummary get _household => widget.household;
 
   @override
@@ -72,7 +80,11 @@ class _KitchenPanelScreenState extends State<KitchenPanelScreen> {
     // O relógio muda ao minuto.
     _tick = Timer.periodic(const Duration(seconds: 20), (_) {
       final now = clock.now();
-      if (now.minute != _now.minute && mounted) setState(() => _now = now);
+      if (!mounted) return;
+      if (_activeUntil != null && !now.isBefore(_activeUntil!)) {
+        setState(() => _activeUserId = _activeUntil = null);
+      }
+      if (now.minute != _now.minute) setState(() => _now = now);
     });
     ScreenAwake.set(true);
     _load();
@@ -128,18 +140,36 @@ class _KitchenPanelScreenState extends State<KitchenPanelScreen> {
 
   bool get _night => _now.hour >= 22 || _now.hour < 7;
 
+  /// Quem está a usar o painel agora (null se ninguém escolheu ou já passaram os 2 minutos).
+  String? get _active =>
+      _activeUserId != null && _activeUntil != null && clock.now().isBefore(_activeUntil!) ? _activeUserId : null;
+
+  void _choose(Member member) => setState(() {
+    if (_active == member.userId) {
+      _activeUserId = _activeUntil = null;
+    } else {
+      _activeUserId = member.userId;
+      _activeUntil = clock.now().add(activeFor);
+    }
+  });
+
   Future<void> _complete(Chore chore) async {
     final data = _data!;
-    // No painel quem usa é a casa toda: pergunta-se quem fez (os pontos vão para essa pessoa).
-    final doneBy = await showDialog<String>(
-      context: context,
-      builder: (context) => _WhoDidIt(chore: chore, members: data.details.members),
-    );
+    // No painel quem usa é a casa toda: vai em nome de quem escolheu "Quem és?" ou pergunta-se quem fez (os pontos
+    // vão para essa pessoa).
+    final doneBy =
+        _active ??
+        await showDialog<String>(
+          context: context,
+          builder: (context) => _WhoDidIt(chore: chore, members: data.details.members),
+        );
     if (doneBy == null || !mounted) return;
     try {
       final (_, points) = await context.read<ApiClient>().completeChore(_household.id, chore.id, doneByUserId: doneBy);
       if (!mounted) return;
       celebratePoints(context, points);
+      // Quem está a usar o painel continua mais 2 minutos.
+      if (_active == doneBy) _activeUntil = clock.now().add(activeFor);
       _reload.request();
     } catch (e) {
       if (mounted) showError(context, e);
@@ -257,9 +287,16 @@ class _KitchenPanelScreenState extends State<KitchenPanelScreen> {
           Wrap(
             spacing: 12,
             runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              Text('Quem és?'.tr, style: theme.textTheme.titleMedium),
               for (final m in data.details.members)
-                MemberAvatar(name: m.displayName, color: m.color, size: 44, away: away.contains(m.userId)),
+                _WhoAmI(
+                  member: m,
+                  away: away.contains(m.userId),
+                  active: _active == m.userId,
+                  onTap: away.contains(m.userId) ? null : () => _choose(m),
+                ),
             ],
           ),
           const SizedBox(height: 16),
@@ -625,6 +662,57 @@ class _ExitButton extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Um avatar de "Quem és?": tocar escolhe (ou larga) quem está a usar o painel; a pessoa escolhida tem um anel e
+/// o nome ao lado (a cor nunca vai sozinha).
+class _WhoAmI extends StatelessWidget {
+  const _WhoAmI({required this.member, required this.away, required this.active, required this.onTap});
+
+  final Member member;
+  final bool away;
+  final bool active;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      button: onTap != null,
+      selected: active,
+      label: active ? '${member.displayName} está a usar o painel'.tr : 'Sou ${member.displayName}'.tr,
+      excludeSemantics: true,
+      child: InkWell(
+        key: ValueKey('who-${member.userId}'),
+        onTap: onTap,
+        customBorder: const StadiumBorder(),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 64, minWidth: 64),
+          padding: const EdgeInsets.all(4),
+          decoration: active
+              ? ShapeDecoration(
+                  shape: StadiumBorder(side: BorderSide(color: theme.colorScheme.primary, width: 3)),
+                  color: theme.colorScheme.primaryContainer,
+                )
+              : null,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              MemberAvatar(name: member.displayName, color: member.color, size: 52, away: away),
+              if (active) ...[
+                const SizedBox(width: 8),
+                Text(
+                  member.displayName,
+                  style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+                ),
+                const SizedBox(width: 12),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// "Quem fez?" com avatares grandes.

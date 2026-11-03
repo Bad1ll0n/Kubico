@@ -309,6 +309,30 @@ void main() {
     });
   });
 
+  testWidgets('"Quem és?" no painel: as tarefas ficam em nome de quem escolheu, durante 2 minutos', (tester) async {
+    var now = DateTime(2026, 11, 10, 10, 5);
+    await withClock(Clock(() => now), () async {
+      final server = _Server(me: 'mae', role: 'Admin');
+      await pumpPanel(tester, server);
+
+      await tester.tap(find.byKey(const ValueKey('who-rita')));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Rita está a usar o painel'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Marcar «Pôr a mesa» como feita'));
+      await tester.pumpAndSettle();
+      expect(find.text('Quem fez «Pôr a mesa»?'), findsNothing, reason: 'já se sabe quem está a usar o painel');
+      expect(server.requests, contains('POST /api/households/h1/chores/c1/complete {"doneByUserId":"rita"}'));
+
+      // Passados 2 minutos sem mexer, o painel volta a ser de todos.
+      now = now.add(const Duration(minutes: 3));
+      await tester.pump(const Duration(seconds: 21));
+      expect(find.bySemanticsLabel('Rita está a usar o painel'), findsNothing);
+      expect(find.bySemanticsLabel('Sou Rita'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
+
   testWidgets('à noite o painel mostra só o relógio e o primeiro evento de amanhã', (tester) async {
     await withClock(Clock.fixed(DateTime(2026, 11, 9, 23, 30)), () async {
       await pumpPanel(tester, _Server(me: 'mae', role: 'Admin'));
