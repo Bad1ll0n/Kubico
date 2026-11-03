@@ -341,6 +341,8 @@ public static class CalendarEndpoints
 
         var now = clock.GetUtcNow();
         var before = Involved(series);
+        // Os dias apagados a partir daqui (a série antiga perde-os ao acabar antes deste dia).
+        var excludedFromHere = series.ExcludedDates.Where(d => d >= date).ToList();
         if (following && !series.EndBefore(date, zone))
         {
             // É a primeira ocorrência: "esta e as seguintes" é a série toda.
@@ -356,11 +358,11 @@ public static class CalendarEndpoints
 
         series.UpdatedAt = now;
         List<Guid> removed = [];
+        List<CalendarEvent> relinked = [];
         CalendarEvent changed;
         var isNew = true;
         if (following)
         {
-            removed = await RemoveExceptions(db, series.Id, d => d >= date, ct);
             changed = new CalendarEvent
             {
                 HouseholdId = householdId,
@@ -369,6 +371,28 @@ public static class CalendarEndpoints
                 CreatedAt = now,
             };
             Apply(changed, request, now, zone);
+
+            // O que já tinha sido mudado a partir daqui passa para a série nova, quando esse dia continua a ser uma
+            // ocorrência dela: os dias apagados continuam apagados e os dias alterados continuam alterados (antes,
+            // os apagados voltavam e as alterações perdiam-se). Os que deixam de calhar na série nova saem.
+            changed.ExcludedDates = [.. excludedFromHere.Where(d => changed.HasOccurrenceOn(d, zone))];
+            var exceptions = await db.CalendarEvents
+                .Where(e => e.SeriesId == series.Id && e.OriginalDate >= date)
+                .ToListAsync(ct);
+            foreach (var exception in exceptions)
+            {
+                if (changed.HasOccurrenceOn(exception.OriginalDate!.Value, zone))
+                {
+                    exception.SeriesId = changed.Id;
+                    exception.UpdatedAt = now;
+                    relinked.Add(exception);
+                }
+                else
+                {
+                    db.CalendarEvents.Remove(exception);
+                    removed.Add(exception.Id);
+                }
+            }
         }
         else
         {
@@ -400,6 +424,11 @@ public static class CalendarEndpoints
         var dto = ToDto(changed);
         await notifier.CalendarEventUpserted(householdId, ToDto(series), ct);
         await notifier.CalendarEventUpserted(householdId, dto, ct);
+        foreach (var exception in relinked)
+        {
+            await notifier.CalendarEventUpserted(householdId, ToDto(exception), ct);
+        }
+
         await NotifyDeleted(notifier, householdId, removed, ct);
         await NotifyInvolved(notifications, db, changed, before, userId, ct);
         return isNew ? Results.Created($"/api/households/{householdId}/events/{changed.Id}", dto) : Results.Ok(dto);

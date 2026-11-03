@@ -270,6 +270,38 @@ public class CalendarTests(KubicoApiFactory factory) : IClassFixture<KubicoApiFa
     }
 
     [Fact]
+    public async Task This_and_following_keeps_the_days_already_deleted_or_changed_after_the_split()
+    {
+        var (client, _) = await factory.CreateUserAsync();
+        var household = await HouseholdTests.CreateHousehold(client, "Casa");
+        var url = $"/api/households/{household.Id}/events";
+        var swimming = await CreateEvent(client, household.Id, new SaveEventRequest(
+            "Natação", StartsAt: Utc(2026, 11, 3, 18), EndsAt: Utc(2026, 11, 3, 19), Recurrence: "FREQ=WEEKLY"));
+        (await client.DeleteAsync($"{url}/{swimming.Id}/occurrences/2026-11-17?scope=this")).EnsureSuccessStatusCode();
+        (await client.PutAsJsonAsync($"{url}/{swimming.Id}/occurrences/2026-11-24?scope=this", new SaveEventRequest(
+            "Natação (mais tarde)", StartsAt: Utc(2026, 11, 24, 20), EndsAt: Utc(2026, 11, 24, 21)), TestJson.Options))
+            .EnsureSuccessStatusCode();
+
+        // A partir de 10/11 a natação muda de piscina (a mesma hora e a mesma repetição).
+        var split = await client.PutAsJsonAsync($"{url}/{swimming.Id}/occurrences/2026-11-10?scope=following", new SaveEventRequest(
+            "Natação", Location: "Piscina nova", StartsAt: Utc(2026, 11, 10, 18), EndsAt: Utc(2026, 11, 10, 19),
+            Recurrence: "FREQ=WEEKLY"), TestJson.Options);
+        var calendar = await GetCalendar(client, household.Id, "2026-11-01", "2026-12-01");
+        var title = calendar.Events.ToDictionary(e => e.Id, e => e.Title);
+
+        Assert.Equal(HttpStatusCode.Created, split.StatusCode);
+        Assert.Equal(
+            new[]
+            {
+                (Utc(2026, 11, 3, 18), "Natação"),
+                (Utc(2026, 11, 10, 18), "Natação"),
+                (Utc(2026, 11, 24, 20), "Natação (mais tarde)"),
+                (Utc(2026, 12, 1, 18), "Natação"),
+            },
+            calendar.Occurrences.Select(o => (o.StartsAt!.Value, title[o.EventId])));
+    }
+
+    [Fact]
     public async Task Moving_the_whole_series_drops_its_exceptions()
     {
         var (client, _) = await factory.CreateUserAsync();
