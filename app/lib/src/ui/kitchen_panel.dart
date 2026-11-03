@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
+import '../offline/chore_queue.dart';
 import '../realtime/coalesced_reload.dart';
 import '../realtime/household_realtime.dart';
 import '../shopping/shopping_repository.dart';
@@ -160,6 +161,7 @@ class _KitchenPanelScreenState extends State<KitchenPanelScreen> {
           builder: (context) => _WhoDidIt(chore: chore, members: data.details.members),
         );
     if (doneBy == null || !mounted) return;
+    final queue = maybeChoreQueue(context, listen: false);
     try {
       final (_, points) = await context.read<ApiClient>().completeChore(_household.id, chore.id, doneByUserId: doneBy);
       if (!mounted) return;
@@ -167,6 +169,14 @@ class _KitchenPanelScreenState extends State<KitchenPanelScreen> {
       // Quem está a usar o painel continua mais 2 minutos.
       if (_active == doneBy) _activeUntil = clock.now().add(activeFor);
       _reload.request();
+    } on ApiException catch (e) {
+      // Sem rede: fica na fila e envia-se quando a rede voltar (F4-14).
+      if (e.statusCode == 0 && queue != null && !chore.requiresPhoto) {
+        await queue.enqueue(householdId: _household.id, choreId: chore.id, title: chore.title, doneByUserId: doneBy);
+        if (mounted) setState(() => _data!.chores?.remove(chore));
+        return;
+      }
+      if (mounted) showError(context, e);
     } catch (e) {
       if (mounted) showError(context, e);
     }

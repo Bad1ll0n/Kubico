@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../notifications/notification_center.dart';
@@ -396,28 +397,35 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          body: wide && navigation
-              ? Row(
-                  children: [
-                    NavigationRail(
-                      selectedIndex: index,
-                      onDestinationSelected: select,
-                      labelType: NavigationRailLabelType.all,
-                      destinations: [
-                        for (final s in sections)
-                          NavigationRailDestination(
-                            icon: Icon(s.icon),
-                            selectedIcon: Icon(s.selectedIcon, color: context.kubico.area(s.area).onContainer),
-                            indicatorColor: context.kubico.area(s.area).container,
-                            label: Text(s.module?.label ?? 'Hoje'.tr),
+          body: Column(
+            children: [
+              _CopyBanner(api: context.read<ApiClient>()),
+              Expanded(
+                child: wide && navigation
+                    ? Row(
+                        children: [
+                          NavigationRail(
+                            selectedIndex: index,
+                            onDestinationSelected: select,
+                            labelType: NavigationRailLabelType.all,
+                            destinations: [
+                              for (final s in sections)
+                                NavigationRailDestination(
+                                  icon: Icon(s.icon),
+                                  selectedIcon: Icon(s.selectedIcon, color: context.kubico.area(s.area).onContainer),
+                                  indicatorColor: context.kubico.area(s.area).container,
+                                  label: Text(s.module?.label ?? 'Hoje'.tr),
+                                ),
+                            ],
                           ),
-                      ],
-                    ),
-                    const VerticalDivider(width: 1),
-                    Expanded(child: content),
-                  ],
-                )
-              : content,
+                          const VerticalDivider(width: 1),
+                          Expanded(child: content),
+                        ],
+                      )
+                    : content,
+              ),
+            ],
+          ),
           bottomNavigationBar: wide || !navigation
               ? null
               : NavigationBar(
@@ -525,6 +533,45 @@ class _HouseholdSwitcher extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Sem ligação, os ecrãs abrem com a última cópia guardada (F4-14): esta faixa, na cor de aviso, diz que é uma cópia.
+class _CopyBanner extends StatelessWidget {
+  const _CopyBanner({required this.api});
+
+  final ApiClient api;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+    valueListenable: api.showingCopy,
+    builder: (context, copy, _) {
+      if (!copy) return const SizedBox.shrink();
+      final colors = context.kubico;
+      return Semantics(
+        liveRegion: true,
+        child: Material(
+          color: colors.warningContainer,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Icon(Icons.cloud_off_rounded, color: colors.onWarningContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Sem ligação: estás a ver a última cópia guardada. O que fizeres nas tarefas e nas compras envia-se '
+                            'quando houver rede.'
+                        .tr,
+                    style: TextStyle(color: colors.onWarningContainer),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 /// O administrador tirou o acesso a todas as áreas a este papel.

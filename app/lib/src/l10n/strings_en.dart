@@ -419,6 +419,12 @@ const englishTexts = <String, String>{
   'Membros e convites': 'Members and invites',
   'Terminar sessão': 'Sign out',
   'Mudar de criança': 'Switch child',
+  'Sem ligação: fica feita aqui e envia-se quando houver rede.':
+      'Offline: it is done here and will be sent when you are back online.',
+  '«{0}» não ficou feita: {1}': '"{0}" was not marked as done: {1}',
+  'feita, por enviar': 'done, waiting to send',
+  'Feita aqui; envia-se quando houver rede': 'Done here; will be sent when you are back online',
+  'Sem ligação: estás a ver a última cópia guardada. O que fizeres nas tarefas e nas compras envia-se quando houver rede.': 'Offline: you are seeing the last saved copy. What you do in chores and shopping will be sent when you are back online.',
   'Há um conflito': 'There is a conflict',
   'Ler o código da família': 'Scan the family code',
   'Aponta para o QR do código da família, no telemóvel de um adulto da casa.':

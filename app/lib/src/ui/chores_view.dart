@@ -8,6 +8,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../realtime/coalesced_reload.dart';
+import '../offline/chore_queue.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import 'chore_editor.dart';
@@ -73,6 +74,19 @@ class _ChoresViewState extends State<ChoresView> {
     _subscriptions
       ..add(realtime.events.listen(_onEvent))
       ..add(realtime.reconnected.listen((_) => _load()));
+    // O que ficou feito sem rede: ao chegar ao servidor, recarrega (pontos, próxima vez); se for recusado, avisa.
+    final queue = maybeChoreQueue(context, listen: false);
+    if (queue != null) {
+      _subscriptions
+        ..add(queue.sent.listen((_) => _load()))
+        ..add(
+          queue.rejections.listen((r) {
+            if (!mounted) return;
+            showError(context, '«${r.completion.title}» não ficou feita: ${r.message}'.tr);
+            _load();
+          }),
+        );
+    }
     _load();
   }
 
@@ -182,6 +196,7 @@ class _ChoresViewState extends State<ChoresView> {
   }
 
   Future<void> _complete(Chore chore) async {
+    final queue = maybeChoreQueue(context, listen: false);
     try {
       final doneBy = await _whoDidIt(chore);
       if (doneBy == null || !mounted) return;
@@ -191,12 +206,30 @@ class _ChoresViewState extends State<ChoresView> {
         if (photo == null || !mounted) return;
         photoId = await _api.uploadChorePhoto(_householdId, photo.bytes, photo.name);
       }
-      final (updated, points) = await _api.completeChore(
-        _householdId,
-        chore.id,
-        photoId: photoId,
-        doneByUserId: doneBy == _myUserId ? null : doneBy,
-      );
+      final (Chore, int) result;
+      try {
+        result = await _api.completeChore(
+          _householdId,
+          chore.id,
+          photoId: photoId,
+          doneByUserId: doneBy == _myUserId ? null : doneBy,
+        );
+      } on ApiException catch (e) {
+        // Sem rede: fica na fila e envia-se quando a rede voltar (F4-14). Com foto não (a foto tem de ir antes).
+        if (e.statusCode != 0 || queue == null || photoId != null) rethrow;
+        await queue.enqueue(
+          householdId: _householdId,
+          choreId: chore.id,
+          title: chore.title,
+          doneByUserId: doneBy == _myUserId ? null : doneBy,
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text('Sem ligação: fica feita aqui e envia-se quando houver rede.'.tr)));
+        return;
+      }
+      final (updated, points) = result;
       _upsert(updated);
       _loadStats();
       if (!mounted) return;
@@ -290,6 +323,7 @@ class _ChoresViewState extends State<ChoresView> {
   Widget build(BuildContext context) {
     final chores = _chores;
     final canManage = _access.canManage;
+    final queued = maybeChoreQueue(context)?.pendingIn(_householdId) ?? const <String>{};
 
     if (chores == null) {
       return _error == null
@@ -359,7 +393,8 @@ class _ChoresViewState extends State<ChoresView> {
                     key: ValueKey(chore.id),
                     chore: chore,
                     assignee: _details?.member(chore.assigneeUserId),
-                    canComplete: _canComplete(chore),
+                    queued: queued.contains(chore.id),
+                    canComplete: _canComplete(chore) && !queued.contains(chore.id),
                     waitsUntil: chore.isAvailableOn(today) ? null : chore.availableFrom,
                     viewOnly: !_access.canParticipate,
                     onComplete: () => _complete(chore),
@@ -392,6 +427,7 @@ class _ChoreTile extends StatelessWidget {
     required this.chore,
     required this.assignee,
     required this.canComplete,
+    this.queued = false,
     required this.onComplete,
     required this.onStep,
     this.onTap,
@@ -402,6 +438,9 @@ class _ChoreTile extends StatelessWidget {
   final Chore chore;
   final Member? assignee;
   final bool canComplete;
+
+  /// Feita aqui sem rede, à espera de ir para o servidor.
+  final bool queued;
 
   /// Já está feita por agora: só se volta a poder fazer neste dia.
   final DateTime? waitsUntil;
@@ -424,12 +463,15 @@ class _ChoreTile extends StatelessWidget {
       if (chore.isRoutine) '${chore.doneSteps.length}/${chore.steps.length} passos'.tr,
       if (chore.requiresPhoto) 'com foto'.tr,
       if (waitsUntil != null) 'disponível a ${formatDayMonthShort(waitsUntil!)}'.tr,
+      if (queued) 'feita, por enviar'.tr,
     ].join(' · ');
 
     final tile = ListTile(
       onTap: onTap,
       leading: IconButton(
-        tooltip: canComplete
+        tooltip: queued
+            ? 'Feita aqui; envia-se quando houver rede'.tr
+            : canComplete
             ? 'Marcar como feita'.tr
             : waitsUntil != null
             ? 'Já está feita. Volta a estar disponível a ${formatDayMonthShort(waitsUntil!)}.'.tr
@@ -438,6 +480,7 @@ class _ChoreTile extends StatelessWidget {
             : 'Atribuída a outra pessoa'.tr,
         onPressed: canComplete ? onComplete : null,
         icon: Icon(switch (chore.timeOfDay) {
+          _ when queued => Icons.cloud_upload_rounded,
           _ when waitsUntil != null => Icons.check_circle_outline_rounded,
           ChoreTimeOfDay.morning when chore.isRoutine => Icons.wb_sunny_rounded,
           ChoreTimeOfDay.evening when chore.isRoutine => Icons.bedtime_rounded,

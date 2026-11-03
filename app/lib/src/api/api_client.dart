@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../l10n/strings.dart';
+import '../offline/response_cache.dart';
 import 'models.dart';
 
 /// Um ficheiro a enviar num pedido multipart.
@@ -60,6 +61,13 @@ class ApiClient {
 
   /// O mesmo para os envios de ficheiros (fotos), mais lentos.
   Duration uploadTimeout = const Duration(seconds: 60);
+
+  /// A última resposta de cada leitura, para abrir sem rede (F4-14). Null nos testes que não a usam.
+  ResponseCache? cache;
+
+  /// Verdadeiro quando o que está no ecrã veio da cópia guardada (sem ligação); volta a falso no primeiro pedido que
+  /// chega ao servidor. A app mostra um aviso enquanto for verdadeiro.
+  final showingCopy = ValueNotifier<bool>(false);
 
   /// Pedidos de autenticação: um 401 aqui não se resolve renovando a sessão.
   static const _authPaths = {
@@ -659,8 +667,22 @@ class ApiClient {
   // --- HTTP ---
 
   /// Pedido com resposta em JSON (ou vazia). [upload] envia um ficheiro (multipart) em vez de [body].
-  Future<dynamic> _send(String method, String path, {Map<String, dynamic>? body, _Upload? upload}) async =>
-      _decode((await _execute(method, path, body: body, upload: upload)).bodyBytes);
+  Future<dynamic> _send(String method, String path, {Map<String, dynamic>? body, _Upload? upload}) async {
+    final cache = this.cache;
+    final cacheable = cache != null && method == 'GET' && ResponseCache.isCacheable(path);
+    try {
+      final response = await _execute(method, path, body: body, upload: upload);
+      showingCopy.value = false;
+      if (cacheable) cache.write(path, utf8.decode(response.bodyBytes));
+      return _decode(response.bodyBytes);
+    } on ApiException catch (e) {
+      // Sem ligação: a última cópia desta leitura, se houver (o ecrã abre com ela e avisa que é uma cópia).
+      final copy = e.statusCode == 0 && cacheable ? cache.read(path) : null;
+      if (copy == null) rethrow;
+      showingCopy.value = true;
+      return _decode(utf8.encode(copy));
+    }
+  }
 
   /// Faz o pedido com a sessão; num 401 renova a sessão e repete uma vez. Erros viram [ApiException].
   Future<http.Response> _execute(
