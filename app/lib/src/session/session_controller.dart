@@ -297,10 +297,14 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A casa criada há pouco, para o ecrã principal abrir os primeiros passos (F4-06). Quem a mostra põe-na a null.
+  final justCreated = ValueNotifier<String?>(null);
+
   Future<void> createHousehold(String name, {String? template}) async {
     final created = await api.createHousehold(name.trim(), template: template);
     await refresh();
     await selectHousehold(created.id);
+    justCreated.value = created.id;
   }
 
   Future<void> joinHousehold(String code) async {

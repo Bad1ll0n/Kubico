@@ -13,6 +13,7 @@ import '../shopping/shopping_order.dart';
 import '../shopping/shopping_repository.dart';
 import '../shopping/voice_input.dart';
 import 'design/components.dart';
+import 'first_steps.dart';
 import 'scanner_support.dart';
 import 'shopping_add_dialogs.dart';
 import 'theme.dart';
@@ -346,6 +347,11 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
                 ),
               ],
             ),
+          ),
+        if (widget.canEdit)
+          FirstTimeTip(
+            id: 'shopping',
+            text: 'Desliza um artigo para a direita para o marcar, e para a esquerda para o apagar.'.tr,
           ),
         _ListTools(
           learnedOrder: ShoppingOrder.learned.value,

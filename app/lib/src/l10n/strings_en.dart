@@ -429,6 +429,23 @@ const englishTexts = <String, String>{
   '1 dia antes': '1 day before',
   '{0} minutos antes': '{0} minutes before',
   'Lembrete': 'Reminder',
+  'Primeiros passos': 'First steps',
+  'A casa está criada! Três passos e fica pronta:': 'Your household is ready! Three steps and you are set:',
+  'Convida a família': 'Invite the family',
+  'Mostra o QR ou partilha o convite: entram logo nesta casa.':
+      'Show the QR or share the invite: they join this household straight away.',
+  'Cria os perfis das crianças': 'Create the children\'s profiles',
+  'Sem email: entram com o código da família e um PIN, e têm as suas rotinas.':
+      'No email needed: they sign in with the family code and a PIN, and get their own routines.',
+  'Põe a app no ecrã inicial': 'Put the app on your home screen',
+  'No menu do browser, escolhe "Instalar app" ou "Adicionar ao ecrã principal".':
+      'In the browser menu, choose "Install app" or "Add to home screen".',
+  'Mantém o ícone do Kubico à mão: os avisos chegam aqui.': 'Keep the Kubico icon handy: notifications arrive here.',
+  'Começar': 'Get started',
+  'Desliza um artigo para a direita para o marcar, e para a esquerda para o apagar.':
+      'Swipe an item right to tick it off, and left to delete it.',
+  'Desliza uma tarefa para a direita para a dar como feita: os pontos vão para quem a fez.':
+      'Swipe a chore right to mark it done: the points go to whoever did it.',
   'Usar {0}': 'Use {0}',
   'O meu avatar': 'My avatar',
   'Escolhe um emoji para aparecer no lugar da inicial.': 'Choose an emoji to show instead of your initial.',

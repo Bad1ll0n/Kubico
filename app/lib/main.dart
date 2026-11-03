@@ -22,6 +22,7 @@ import 'src/shopping/shopping_order.dart';
 import 'src/shopping/shopping_repository.dart';
 import 'src/storage/key_value_store.dart';
 import 'src/ui/app.dart';
+import 'src/ui/first_steps.dart';
 import 'src/ui/design/reading_mode.dart';
 
 Future<void> main() async {
@@ -32,6 +33,7 @@ Future<void> main() async {
   await ReadingMode.restore(preferences);
   await ChildDevice.restore(preferences);
   await ShoppingOrder.restore(preferences);
+  await Tips.restore(preferences);
   // A última cópia de cada leitura, para abrir sem rede (F4-14).
   final responses = ResponseCache(store: preferences);
   await responses.restore();

@@ -15,6 +15,7 @@ import 'chore_editor.dart';
 import 'chore_history_screen.dart';
 import 'dates_pt.dart';
 import 'design/components.dart';
+import 'first_steps.dart';
 import 'theme.dart';
 
 enum ChoreGroup {
@@ -360,6 +361,10 @@ class _ChoresViewState extends State<ChoresView> {
         child: _LazyList(
           padding: readablePadding(context),
           rows: [
+            (_) => FirstTimeTip(
+              id: 'chores',
+              text: 'Desliza uma tarefa para a direita para a dar como feita: os pontos vão para quem a fez.'.tr,
+            ),
             if (_stats.any((s) => s.points > 0 || s.completed > 0))
               (context) => _StatsCard(
                 stats: _stats,

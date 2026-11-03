@@ -23,6 +23,7 @@ import 'help_screen.dart' deferred as help;
 import 'household_screen.dart';
 import 'kitchen_panel.dart' deferred as kitchen;
 import 'expenses_view.dart';
+import 'first_steps.dart';
 import 'home_area_screen.dart' deferred as homearea;
 import 'meals_view.dart';
 import 'notifications_screen.dart';
@@ -80,6 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
   var _pushRegistered = false;
   ShoppingList? _selectedList;
   HouseholdModule? _section;
+  SessionController? _session;
   StreamSubscription<HouseholdEvent>? _membership;
 
   @override
@@ -88,7 +90,9 @@ class _HomeScreenState extends State<HomeScreen> {
     // Quem sai (ou é tirado) de uma casa deixa de a ver: abre-se outra, ou o ecrã de boas-vindas.
     _membership = context.read<HouseholdRealtime>().events.listen(_onEvent);
     OpenNotification.requested.addListener(_openNotification);
+    _session = context.read<SessionController>()..justCreated.addListener(_showFirstSteps);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showFirstSteps();
       _offerPendingInvite();
       // Um aviso do telemóvel pode ter aberto a app antes de este ecrã existir.
       _openNotification();
@@ -96,6 +100,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Tocou-se num aviso: muda para a casa dele e abre a área (ou os membros).
+  /// Acabou de se criar uma casa: os primeiros passos (F4-06).
+  Future<void> _showFirstSteps() async {
+    final session = context.read<SessionController>();
+    final householdId = session.justCreated.value;
+    if (householdId == null || !mounted) return;
+    session.justCreated.value = null;
+    await Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => FirstStepsScreen(householdId: householdId)));
+  }
+
   Future<void> _openNotification() async {
     final target = OpenNotification.requested.value;
     if (target == null || !mounted) return;
@@ -183,6 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _membership?.cancel();
     OpenNotification.requested.removeListener(_openNotification);
+    _session?.justCreated.removeListener(_showFirstSteps);
     super.dispose();
   }
 
