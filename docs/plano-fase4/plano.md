@@ -15,6 +15,23 @@ As regras do `CLAUDE.md` valem para tudo:
 - letra a 200 % e "reduzir movimento" respeitados;
 - um commit por bloco, e push só no fim, quando pedido.
 
+## Estado (atualizado no fim da sessão)
+
+- **Feito:**
+  - 4B (F4-14, F4-17 a F4-20);
+  - 4C (F4-11, F4-21, F4-26);
+  - 4D (F4-09, F4-22);
+  - 4E (F4-02, F4-04, F4-05, F4-06; F4-03 só com emoji);
+  - 4F (F4-07, F4-12, F4-13);
+  - 4G (F4-08);
+  - 4H (F4-10);
+  - 4I (F4-23).
+- **Por fazer sem decisão:**
+  - fotografia de perfil (F4-03);
+  - reordenar listas e artigos (F4-04);
+  - casa inteligente (F4-16c).
+- **À espera de decisões:** 4A (D1), 4J (D4), 4K (D2, D3, D5).
+
 ## Decisões que só tu podes tomar
 
 | Decisão | Bloqueia | Opções |
