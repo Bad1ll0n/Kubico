@@ -33,13 +33,14 @@ dart format lib test            # largura 120 (analysis_options.yaml)
 flutter analyze
 flutter test
 KUBICO_API_URL=http://localhost:5281 flutter test test/live_api_test.dart   # contra a API a correr
+flutter build web --wasm         # como o CI (WebAssembly, com JS de reserva)
 
 # Tudo (PostgreSQL + API, em modo Production)
 cp .env.example .env            # e preencher os segredos (o .env não entra no Git)
 docker compose up --build
 ```
 
-O CI (`.github/workflows/ci.yml`) corre build com `-warnaserror`, testes, `dart format --set-exit-if-changed`, `flutter analyze`, `flutter test` e `flutter build web`. Mantém tudo verde.
+O CI (`.github/workflows/ci.yml`) corre build com `-warnaserror`, testes, `dart format --set-exit-if-changed`, `flutter analyze`, `flutter test` e `flutter build web --wasm` (com um orçamento de tamanho). Mantém tudo verde.
 
 ## Convenções
 
