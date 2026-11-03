@@ -81,6 +81,11 @@ class RewardsChanged extends HouseholdEvent {
   const RewardsChanged();
 }
 
+/// Mudou uma despesa ou um acerto (F4-10): os saldos mudam, o ecrã volta a pedir o resumo.
+class ExpensesChanged extends HouseholdEvent {
+  const ExpensesChanged();
+}
+
 /// Mudou uma receita ou um dia do plano das refeições (F4-09): o ecrã volta a pedir o que mostra.
 class MealsChanged extends HouseholdEvent {
   const MealsChanged();
@@ -202,6 +207,8 @@ class HouseholdRealtime {
     for (final name in ['RewardUpserted', 'RewardDeleted', 'RedemptionUpserted', 'RedemptionDeleted']) {
       connection.on(name, (args) => _emit(args, (_) => const RewardsChanged()));
     }
+
+    connection.on('ExpensesChanged', (args) => _emit(args, (_) => const ExpensesChanged()));
 
     for (final name in ['RecipeUpserted', 'RecipeDeleted', 'MealPlanChanged']) {
       connection.on(name, (args) => _emit(args, (_) => const MealsChanged()));

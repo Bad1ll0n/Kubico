@@ -22,6 +22,7 @@ import 'devices_screen.dart' deferred as devices;
 import 'help_screen.dart' deferred as help;
 import 'household_screen.dart';
 import 'kitchen_panel.dart' deferred as kitchen;
+import 'expenses_view.dart';
 import 'meals_view.dart';
 import 'notifications_screen.dart';
 import 'onboarding_screen.dart';
@@ -278,6 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
         final canShop = household.accessTo(HouseholdModule.shopping).canView;
         final canEat = household.accessTo(HouseholdModule.meals).canView;
+        final canPay = household.accessTo(HouseholdModule.expenses).canView;
         final Widget shoppingLists = wide
             ? Row(
                 children: [
@@ -298,17 +300,28 @@ class _HomeScreenState extends State<HomeScreen> {
               )
             : lists;
         // As Refeições vivem nas Compras (o plano da semana alimenta a lista), num separador próprio (F4-09).
-        final meals = MealsView(key: ValueKey('meals-${household.id}'), household: household);
-        final Widget shopping = canShop && canEat
-            ? _ShoppingTabs(lists: shoppingLists, meals: meals)
-            : canShop
-            ? shoppingLists
-            : meals;
+        // E as Despesas (F4-10), também aqui: o supermercado é a despesa mais comum.
+        final tabs = <(IconData, String, Widget)>[
+          if (canShop) (Icons.checklist_rounded, 'Listas'.tr, shoppingLists),
+          if (canEat)
+            (
+              Icons.restaurant_menu_rounded,
+              'Refeições'.tr,
+              MealsView(key: ValueKey('meals-${household.id}'), household: household),
+            ),
+          if (canPay)
+            (
+              Icons.receipt_long_rounded,
+              'Despesas'.tr,
+              ExpensesView(key: ValueKey('expenses-${household.id}'), household: household),
+            ),
+        ];
+        final Widget shopping = tabs.length == 1 ? tabs.single.$3 : _ShoppingTabs(tabs: tabs);
         // Só aparecem as áreas a que o meu papel dá acesso nesta casa (e o Hoje, se houver alguma).
         final visible = [
           for (final s in _sections)
             if (s.module != null &&
-                (household.accessTo(s.module!).canView || s.module == HouseholdModule.shopping && canEat))
+                (household.accessTo(s.module!).canView || s.module == HouseholdModule.shopping && (canEat || canPay)))
               s,
         ];
         final sections = [if (visible.isNotEmpty) _sections.first, ...visible];
@@ -324,7 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
             household: household,
             onOpen: (module) => setState(() => _section = module),
           ),
-          HouseholdModule.shopping || HouseholdModule.meals => shopping,
+          HouseholdModule.shopping || HouseholdModule.meals || HouseholdModule.expenses => shopping,
           HouseholdModule.chores => ChoresView(key: ValueKey('chores-${household.id}'), household: household),
           HouseholdModule.calendar => CalendarView(key: ValueKey('calendar-${household.id}'), household: household),
           HouseholdModule.rewards => RewardsView(key: ValueKey('rewards-${household.id}'), household: household),
@@ -547,26 +560,25 @@ class _HouseholdSwitcher extends StatelessWidget {
   }
 }
 
-/// As Compras com dois separadores: as listas e as refeições.
+/// As Compras com separadores: as listas, as refeições e as despesas (as que o papel vê).
 class _ShoppingTabs extends StatelessWidget {
-  const _ShoppingTabs({required this.lists, required this.meals});
+  const _ShoppingTabs({required this.tabs});
 
-  final Widget lists;
-  final Widget meals;
+  final List<(IconData, String, Widget)> tabs;
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-    length: 2,
+    length: tabs.length,
     child: Column(
       children: [
         TabBar(
-          tabs: [
-            Tab(icon: const Icon(Icons.checklist_rounded), text: 'Listas'.tr),
-            Tab(icon: const Icon(Icons.restaurant_menu_rounded), text: 'Refeições'.tr),
-          ],
+          tabs: [for (final (icon, label, _) in tabs) Tab(icon: Icon(icon), text: label)],
         ),
         Expanded(
-          child: TabBarView(physics: const NeverScrollableScrollPhysics(), children: [lists, meals]),
+          child: TabBarView(
+            physics: const NeverScrollableScrollPhysics(),
+            children: [for (final (_, _, view) in tabs) view],
+          ),
         ),
       ],
     ),

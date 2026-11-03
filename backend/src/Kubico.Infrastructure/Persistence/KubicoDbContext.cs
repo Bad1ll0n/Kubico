@@ -1,6 +1,7 @@
 using Kubico.Domain;
 using Kubico.Domain.Activity;
 using Kubico.Domain.Calendar;
+using Kubico.Domain.Expenses;
 using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
 using Kubico.Domain.Meals;
@@ -28,6 +29,8 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<RecurringItem> RecurringItems => Set<RecurringItem>();
     public DbSet<Recipe> Recipes => Set<Recipe>();
     public DbSet<MealPlanEntry> MealPlan => Set<MealPlanEntry>();
+    public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<Settlement> Settlements => Set<Settlement>();
     public DbSet<ChorePhoto> ChorePhotos => Set<ChorePhoto>();
     public DbSet<ActivityEntry> ActivityEntries => Set<ActivityEntry>();
     public DbSet<Allowance> Allowances => Set<Allowance>();
@@ -211,6 +214,23 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasIndex(r => r.HouseholdId);
             e.OwnsMany(r => r.Ingredients, i => i.ToJson());
             e.HasOne<Household>().WithMany().HasForeignKey(r => r.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Expense>(e =>
+        {
+            e.Property(x => x.Description).HasMaxLength(200);
+            e.Property(x => x.Category).HasMaxLength(50);
+            e.HasIndex(x => new { x.HouseholdId, x.Date });
+            e.HasIndex(x => x.PaidByUserId);
+            e.OwnsMany(x => x.Shares, sh => sh.ToJson());
+            e.HasOne<Household>().WithMany().HasForeignKey(x => x.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Settlement>(e =>
+        {
+            e.HasIndex(x => new { x.HouseholdId, x.Date });
+            e.HasIndex(x => x.FromUserId);
+            e.HasOne<Household>().WithMany().HasForeignKey(x => x.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<MealPlanEntry>(e =>

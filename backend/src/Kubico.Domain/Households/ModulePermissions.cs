@@ -8,6 +8,7 @@ public enum HouseholdModule
     Calendar = 2,
     Rewards = 3,
     Meals = 4,
+    Expenses = 5,
 }
 
 /// <summary>
@@ -38,11 +39,16 @@ public static class ModulePermissions
     /// <summary>Os papéis cujo acesso se escolhe (o administrador tem sempre tudo).</summary>
     public static readonly HouseholdRole[] ConfigurableRoles = [HouseholdRole.Adult, HouseholdRole.Child, HouseholdRole.Guest];
 
-    /// <summary>O habitual: adultos gerem tudo; crianças e convidados usam, e no calendário só veem.</summary>
-    public static ModuleAccess Default(HouseholdRole role, HouseholdModule module) => role switch
+    /// <summary>
+    /// O habitual: adultos gerem tudo; crianças e convidados usam, e no calendário só veem. As despesas não aparecem às
+    /// crianças (é dinheiro dos adultos); os convidados, numa casa partilhada, registam as suas.
+    /// </summary>
+    public static ModuleAccess Default(HouseholdRole role, HouseholdModule module) => (role, module) switch
     {
-        HouseholdRole.Admin or HouseholdRole.Adult => ModuleAccess.Manage,
-        _ => module == HouseholdModule.Calendar ? ModuleAccess.View : ModuleAccess.Participate,
+        (HouseholdRole.Admin or HouseholdRole.Adult, _) => ModuleAccess.Manage,
+        (HouseholdRole.Child, HouseholdModule.Expenses) => ModuleAccess.None,
+        (_, HouseholdModule.Calendar) => ModuleAccess.View,
+        _ => ModuleAccess.Participate,
     };
 
     /// <summary>No calendário não há meio-termo entre ver e gerir.</summary>
@@ -68,6 +74,7 @@ public static class ModulePermissions
         HouseholdModule.Chores => "Tarefas",
         HouseholdModule.Calendar => "Calendário",
         HouseholdModule.Meals => "Refeições",
+        HouseholdModule.Expenses => "Despesas",
         _ => "Recompensas",
     };
 }

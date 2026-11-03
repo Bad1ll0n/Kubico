@@ -36,6 +36,9 @@ public static class HouseholdEvents
     public const string RecipeDeleted = "RecipeDeleted";
     public const string MealPlanChanged = "MealPlanChanged";
 
+    /// <summary>Despesas (F4-10): mudou uma despesa ou um acerto; a app volta a pedir o resumo (os saldos mudam).</summary>
+    public const string ExpensesChanged = "ExpensesChanged";
+
     /// <summary>
     /// Mudaram os pontos ganhos (uma tarefa feita, não aceite, desfeita ou apagada): os saldos, a mesada e as
     /// estatísticas voltam a ler-se. Vai para a casa toda, só com o id da casa. Assim a app não tem de os voltar a pedir
@@ -204,6 +207,9 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub, HouseholdGroups gr
 
     public Task MealPlanChanged(Guid householdId, Meals.MealPlanEntryDto entry, CancellationToken ct) =>
         Area(householdId, HouseholdModule.Meals).SendAsync(HouseholdEvents.MealPlanChanged, entry, AfterCommit());
+
+    public Task ExpensesChanged(Guid householdId, CancellationToken ct) =>
+        Area(householdId, HouseholdModule.Expenses).SendAsync(HouseholdEvents.ExpensesChanged, householdId, AfterCommit());
 
     private IClientProxy Group(Guid householdId) => hub.Clients.Group(HouseholdHub.GroupName(householdId));
 

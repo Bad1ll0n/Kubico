@@ -32,7 +32,8 @@ enum HouseholdModule {
   chores('Chores', 'Tarefas', 'conclui as suas tarefas'),
   calendar('Calendar', 'Calendário', null),
   rewards('Rewards', 'Recompensas', 'pede recompensas'),
-  meals('Meals', 'Refeições', 'planeia as refeições');
+  meals('Meals', 'Refeições', 'planeia as refeições'),
+  expenses('Expenses', 'Despesas', 'regista as suas despesas');
 
   const HouseholdModule(this.apiValue, this._label, this._participateMeans);
 
@@ -75,8 +76,11 @@ enum ModuleAccess {
   static ModuleAccess fromApi(Object? value) => values.firstWhere((a) => a.apiValue == value, orElse: () => none);
 
   /// O habitual (igual ao do servidor): adultos gerem tudo; crianças e convidados usam, e no calendário só veem.
+  /// As despesas não aparecem às crianças (é dinheiro dos adultos).
   static ModuleAccess defaultFor(HouseholdRole role, HouseholdModule module) => role.canManageContent
       ? manage
+      : role == HouseholdRole.child && module == HouseholdModule.expenses
+      ? none
       : module == HouseholdModule.calendar
       ? view
       : participate;
@@ -619,6 +623,98 @@ class MealPlanEntry {
     slot: MealSlot.fromApi(json['slot']),
     recipeId: json['recipeId'] as String?,
     text: json['text'] as String?,
+  );
+}
+
+/// Uma despesa partilhada (F4-10): quem pagou, quanto e a parte de cada um.
+class Expense {
+  const Expense({
+    required this.id,
+    required this.description,
+    required this.amountCents,
+    required this.paidByUserId,
+    required this.date,
+    required this.shares,
+    required this.createdByUserId,
+  });
+
+  final String id;
+  final String description;
+  final int amountCents;
+  final String paidByUserId;
+  final DateTime date;
+  final List<({String userId, int amountCents})> shares;
+  final String createdByUserId;
+
+  factory Expense.fromJson(Map<String, dynamic> json) => Expense(
+    id: json['id'] as String,
+    description: json['description'] as String,
+    amountCents: json['amountCents'] as int,
+    paidByUserId: json['paidByUserId'] as String,
+    date: DateTime.parse(json['date'] as String),
+    shares: [
+      for (final s in json['shares'] as List)
+        (userId: (s as Map)['userId'] as String, amountCents: s['amountCents'] as int),
+    ],
+    createdByUserId: json['createdByUserId'] as String,
+  );
+}
+
+/// Dados para registar uma despesa, dividida em partes iguais por [splitWith].
+class ExpenseDraft {
+  const ExpenseDraft({
+    required this.description,
+    required this.amountCents,
+    required this.paidByUserId,
+    required this.date,
+    required this.splitWith,
+  });
+
+  final String description;
+  final int amountCents;
+  final String paidByUserId;
+  final DateTime date;
+  final List<String> splitWith;
+
+  Map<String, dynamic> toJson() => {
+    'description': description,
+    'amountCents': amountCents,
+    'paidByUserId': paidByUserId,
+    'date': apiDate(date),
+    'splitWith': splitWith,
+  };
+}
+
+/// Quem paga a quem para ficarem acertados.
+class ExpenseTransfer {
+  const ExpenseTransfer({required this.fromUserId, required this.toUserId, required this.amountCents});
+
+  final String fromUserId;
+  final String toUserId;
+  final int amountCents;
+
+  factory ExpenseTransfer.fromJson(Map<String, dynamic> json) => ExpenseTransfer(
+    fromUserId: json['fromUserId'] as String,
+    toUserId: json['toUserId'] as String,
+    amountCents: json['amountCents'] as int,
+  );
+}
+
+/// As despesas recentes, o saldo de cada um (positivo: recebe; negativo: deve) e as transferências para acertar.
+class ExpensesOverview {
+  const ExpensesOverview({required this.expenses, required this.balances, required this.transfers});
+
+  final List<Expense> expenses;
+  final List<({String userId, int netCents})> balances;
+  final List<ExpenseTransfer> transfers;
+
+  factory ExpensesOverview.fromJson(Map<String, dynamic> json) => ExpensesOverview(
+    expenses: [for (final e in json['expenses'] as List) Expense.fromJson(e as Map<String, dynamic>)],
+    balances: [
+      for (final b in json['balances'] as List)
+        (userId: (b as Map)['userId'] as String, netCents: b['netCents'] as int),
+    ],
+    transfers: [for (final t in json['transfers'] as List) ExpenseTransfer.fromJson(t as Map<String, dynamic>)],
   );
 }
 

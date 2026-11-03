@@ -423,6 +423,87 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.ToTable("ChorePhotos");
                 });
 
+            modelBuilder.Entity("Kubico.Domain.Expenses.Expense", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AmountCents")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PaidByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaidByUserId");
+
+                    b.HasIndex("HouseholdId", "Date");
+
+                    b.ToTable("Expenses");
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Expenses.Settlement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AmountCents")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("FromUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ToUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromUserId");
+
+                    b.HasIndex("HouseholdId", "Date");
+
+                    b.ToTable("Settlements");
+                });
+
             modelBuilder.Entity("Kubico.Domain.Households.Household", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1527,6 +1608,49 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("Kubico.Domain.Chores.ChorePhoto", b =>
+                {
+                    b.HasOne("Kubico.Domain.Households.Household", null)
+                        .WithMany()
+                        .HasForeignKey("HouseholdId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Expenses.Expense", b =>
+                {
+                    b.HasOne("Kubico.Domain.Households.Household", null)
+                        .WithMany()
+                        .HasForeignKey("HouseholdId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsMany("Kubico.Domain.Expenses.ExpenseShare", "Shares", b1 =>
+                        {
+                            b1.Property<Guid>("ExpenseId");
+
+                            b1.Property<int>("__synthesizedOrdinal")
+                                .ValueGeneratedOnAdd();
+
+                            b1.Property<int>("AmountCents");
+
+                            b1.Property<Guid>("UserId");
+
+                            b1.HasKey("ExpenseId", "__synthesizedOrdinal");
+
+                            b1.ToTable("Expenses");
+
+                            b1
+                                .ToJson("Shares")
+                                .HasColumnType("jsonb");
+
+                            b1.WithOwner()
+                                .HasForeignKey("ExpenseId");
+                        });
+
+                    b.Navigation("Shares");
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Expenses.Settlement", b =>
                 {
                     b.HasOne("Kubico.Domain.Households.Household", null)
                         .WithMany()

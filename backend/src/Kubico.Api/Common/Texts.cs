@@ -384,6 +384,14 @@ public static partial class Texts
         ["A receita tem ingredientes, passos ou etiquetas a mais ou demasiado compridos."] =
             "The recipe has too many (or too long) ingredients, steps or tags.",
         ["Refeições"] = "Meals",
+        ["Despesas"] = "Expenses",
+        ["registou «{0}» ({1})"] = "recorded “{0}” ({1})",
+        ["mudou a despesa «{0}»"] = "changed the expense “{0}”",
+        ["apagou a despesa «{0}»"] = "deleted the expense “{0}”",
+        ["registou um acerto de {0}"] = "recorded a settlement of {0}",
+        ["apagou um acerto de {0}"] = "deleted a settlement of {0}",
+        ["Confirma quem pagou e entre quem se divide: têm de ser pessoas da casa e as partes têm de somar o total."] =
+            "Check who paid and who shares it: they must be household members and the shares must add up to the total.",
         ["Bacalhau à Brás"] = "Bacalhau à Brás (salt cod with eggs and potatoes)",
         ["Arroz de pato"] = "Duck rice",
         ["Caldo verde"] = "Caldo verde (kale soup)",

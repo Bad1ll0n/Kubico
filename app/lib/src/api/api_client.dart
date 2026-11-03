@@ -348,6 +348,28 @@ class ApiClient {
   Future<void> deleteList(String householdId, String listId) =>
       _send('DELETE', '/api/households/$householdId/lists/$listId');
 
+  // Despesas (F4-10).
+
+  Future<ExpensesOverview> getExpenses(String householdId) async =>
+      ExpensesOverview.fromJson(await _send('GET', '/api/households/$householdId/expenses') as Map<String, dynamic>);
+
+  Future<void> saveExpense(String householdId, ExpenseDraft draft, {String? expenseId}) => _send(
+    expenseId == null ? 'POST' : 'PUT',
+    '/api/households/$householdId/expenses${expenseId == null ? '' : '/$expenseId'}',
+    body: draft.toJson(),
+  );
+
+  Future<void> createSettlement(String householdId, ExpenseTransfer transfer, DateTime date) => _send(
+    'POST',
+    '/api/households/$householdId/settlements',
+    body: {
+      'fromUserId': transfer.fromUserId,
+      'toUserId': transfer.toUserId,
+      'amountCents': transfer.amountCents,
+      'date': apiDate(date),
+    },
+  );
+
   // Refeições (F4-09).
 
   Future<List<Recipe>> getRecipes(String householdId) async =>

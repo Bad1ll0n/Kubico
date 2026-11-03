@@ -22,18 +22,28 @@ http.Response _json(Object body, [int status = 200]) => http.Response.bytes(
   headers: {'content-type': 'application/json; charset=utf-8'},
 );
 
-Map<String, String> _access(String shopping, String chores, String calendar, String rewards, [String? meals]) => {
+Map<String, String> _access(
+  String shopping,
+  String chores,
+  String calendar,
+  String rewards, {
+  String? meals,
+  String? expenses,
+  bool child = false,
+}) => {
   'Shopping': shopping,
   'Chores': chores,
   'Calendar': calendar,
   'Rewards': rewards,
   // As Refeições (F4-09) seguem o habitual: adultos gerem, os outros usam.
   'Meals': meals ?? (rewards == 'Manage' ? 'Manage' : 'Participate'),
+  // As Despesas (F4-10): adultos gerem, convidados usam, crianças não veem.
+  'Expenses': expenses ?? (rewards == 'Manage' ? 'Manage' : (child ? 'None' : 'Participate')),
 };
 
 final _defaults = [
   {'role': 'Adult', 'access': _access('Manage', 'Manage', 'Manage', 'Manage')},
-  {'role': 'Child', 'access': _access('Participate', 'Participate', 'View', 'Participate')},
+  {'role': 'Child', 'access': _access('Participate', 'Participate', 'View', 'Participate', child: true)},
   {'role': 'Guest', 'access': _access('Participate', 'Participate', 'View', 'Participate')},
 ];
 
@@ -109,7 +119,7 @@ void main() {
 
     final sent = {for (final r in bodies.single['roles'] as List) (r as Map)['role']: r['access']};
     expect(sent['Guest'], _access('None', 'Participate', 'View', 'Participate'));
-    expect(sent['Child'], _access('Participate', 'Participate', 'Manage', 'Participate'));
+    expect(sent['Child'], _access('Participate', 'Participate', 'Manage', 'Participate', child: true));
     expect(find.text('Permissões guardadas.'), findsOneWidget);
     expect(tester.widget<FilledButton>(save).onPressed, isNull);
 
