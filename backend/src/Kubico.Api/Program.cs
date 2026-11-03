@@ -181,9 +181,18 @@ builder.Services.AddKubicoResponseCompression();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    foreach (var proxy in builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+    foreach (var proxy in (builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+        .Where(p => !string.IsNullOrWhiteSpace(p)))
     {
         options.KnownProxies.Add(System.Net.IPAddress.Parse(proxy));
+    }
+
+    // Um proxy num contentor (ou na rede do alojamento) muda de IP a cada recriação: confia-se na rede dele
+    // (CIDR, ex.: 172.30.0.0/24). Sem isto, o limite de pedidos por IP passava a ser para toda a gente junta.
+    foreach (var network in (builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [])
+        .Where(n => !string.IsNullOrWhiteSpace(n)))
+    {
+        options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
     }
 });
 builder.Services.AddHsts(options => options.MaxAge = TimeSpan.FromDays(365));
@@ -193,6 +202,19 @@ builder.Services.AddHsts(options => options.MaxAge = TimeSpan.FromDays(365));
 var app = builder.Build();
 
 await app.InitializeDatabaseAsync();
+
+// O que está ligado neste servidor, no arranque: sem isto, avisos ou calendários desligados só se notavam quando
+// alguém se queixava.
+var startup = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Kubico.Startup");
+var fcmConfigured = app.Services.GetRequiredService<IOptions<FcmOptions>>().Value.IsConfigured;
+var calendars = app.Services.GetRequiredService<IOptions<CalendarSyncOptions>>().Value;
+startup.LogInformation(
+    "Avisos no telemóvel (FCM): {Fcm}; Google Calendar: {Google}; Outlook: {Outlook}",
+    fcmConfigured ? "sim" : "não", calendars.Google.IsConfigured ? "sim" : "não", calendars.Microsoft.IsConfigured ? "sim" : "não");
+if (app.Environment.IsProduction() && !fcmConfigured)
+{
+    startup.LogWarning("Sem Push:Fcm:ServiceAccountFile (ou ServiceAccountJson): os avisos ficam só na app.");
+}
 
 app.UseForwardedHeaders();
 app.UseExceptionHandler();

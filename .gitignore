@@ -27,3 +27,6 @@ appsettings.Local.json
 
 # Cópias de segurança locais da base (docker compose, serviço backup).
 backups/
+
+# Segredos montados no contentor da API (conta de serviço do Firebase…).
+secrets/

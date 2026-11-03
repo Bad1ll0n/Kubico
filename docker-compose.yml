@@ -38,6 +38,18 @@ services:
       Cors__AllowedOrigins__0: ${APP_ORIGIN:-http://localhost:8080}
       # Sem HTTPS neste ambiente local; num servidor, o proxy trata do HTTPS e isto fica a true.
       Https__Enforce: ${HTTPS_ENFORCE:-false}
+      # Num servidor: os domínios aceites e a rede do proxy (CIDR), para o limite de pedidos ver o IP de cada pessoa.
+      AllowedHosts: ${ALLOWED_HOSTS:-*}
+      ForwardedHeaders__KnownNetworks__0: ${PROXY_NETWORK:-}
+      # Avisos no telemóvel: a conta de serviço do Firebase como ficheiro em ./secrets (fora do Git), nunca em variável.
+      Push__Fcm__ServiceAccountFile: ${FCM_SERVICE_ACCOUNT_FILE:-}
+      # Google Calendar e Outlook (OAuth); sem eles, a ligação aparece como indisponível.
+      CalendarSync__Google__ClientId: ${GOOGLE_CLIENT_ID:-}
+      CalendarSync__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
+      CalendarSync__Microsoft__ClientId: ${MICROSOFT_CLIENT_ID:-}
+      CalendarSync__Microsoft__ClientSecret: ${MICROSOFT_CLIENT_SECRET:-}
+    volumes:
+      - ./secrets:/run/secrets:ro
     ports:
       - "127.0.0.1:5281:8080"
     # A imagem não tem curl: o bash fala HTTP com o próprio processo. "Vivo" chega (a base tem o seu healthcheck).
