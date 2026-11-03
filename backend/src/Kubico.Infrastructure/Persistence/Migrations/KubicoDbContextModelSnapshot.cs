@@ -298,6 +298,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<int?>("DueDay")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("FairRotation")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("HouseholdId")
                         .HasColumnType("uuid");
 

@@ -39,6 +39,12 @@ public class Chore : IVersioned
     /// </summary>
     public List<Guid> RotationUserIds { get; set; } = [];
 
+    /// <summary>
+    /// Na rotação, a próxima vez vai para quem fez menos tarefas nos últimos 14 dias (F4-23), em vez de seguir a ordem
+    /// da lista. Nos empates segue a ordem.
+    /// </summary>
+    public bool FairRotation { get; set; }
+
     /// <summary>Em que altura do dia se faz: as rotinas da manhã e da noite aparecem nessa ordem no dia.</summary>
     public ChoreTimeOfDay TimeOfDay { get; set; }
 
@@ -139,7 +145,11 @@ public class Chore : IVersioned
     /// e, se houver rotação, passam ao membro seguinte.
     /// </summary>
     public ChoreCompletion Complete(
-        Guid userId, DateTimeOffset now, DateOnly today, Func<Guid, DateOnly, bool>? isAway = null)
+        Guid userId,
+        DateTimeOffset now,
+        DateOnly today,
+        Func<Guid, DateOnly, bool>? isAway = null,
+        IReadOnlyDictionary<Guid, int>? load = null)
     {
         var completion = new ChoreCompletion
         {
@@ -166,7 +176,9 @@ public class Chore : IVersioned
                 // (ou, se também estiver fora, segue a ordem normal).
                 var current = AssigneeUserId ?? userId;
                 var due = DueDate.Value;
-                AssigneeUserId = isAway is null
+                AssigneeUserId = FairRotation && load is not null && LeastLoaded(current, due, isAway, load) is { } fair
+                    ? fair
+                    : isAway is null
                     ? NextInRotation(current)
                     : NextAvailable(current, due, isAway) ?? (isAway(current, due) ? NextInRotation(current) : current);
             }
@@ -317,6 +329,22 @@ public class Chore : IVersioned
     /// <summary>O dia <paramref name="day"/> do mês de <paramref name="month"/> (ou o último, se esse mês for mais curto).</summary>
     private static DateOnly OnDay(DateOnly month, int day) =>
         new(month.Year, month.Month, Math.Min(day, DateTime.DaysInMonth(month.Year, month.Month)));
+
+    /// <summary>
+    /// Quem da rotação, cá nesse dia, tem menos tarefas feitas (<paramref name="load"/>); nos empates, o primeiro a
+    /// seguir a <paramref name="current"/> na ordem da rotação. Null se ninguém estiver cá.
+    /// </summary>
+    private Guid? LeastLoaded(Guid current, DateOnly day, Func<Guid, DateOnly, bool>? isAway, IReadOnlyDictionary<Guid, int> load)
+    {
+        var start = RotationUserIds.IndexOf(current);
+        var count = RotationUserIds.Count;
+        return Enumerable.Range(1, count)
+            .Select(step => RotationUserIds[((start + step) % count + count) % count])
+            .Where(id => isAway is null || !isAway(id, day))
+            .Select((id, order) => (Id: (Guid?)id, Load: load.GetValueOrDefault(id), Order: order))
+            .OrderBy(c => c.Load).ThenBy(c => c.Order)
+            .FirstOrDefault().Id;
+    }
 
     private Guid NextInRotation(Guid current)
     {

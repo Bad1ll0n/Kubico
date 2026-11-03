@@ -57,6 +57,9 @@ class _ChoreEditorState extends State<_ChoreEditor> {
   late String? _assignee;
   late List<String> _rotation;
   late bool _rotates;
+
+  /// Na rotação, para quem fez menos (F4-23).
+  late bool _fair;
   late ChoreTimeOfDay _timeOfDay;
   late bool _requiresPhoto;
 
@@ -82,6 +85,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
     _rotates = _rotation.isNotEmpty;
     _timeOfDay = chore?.timeOfDay ?? ChoreTimeOfDay.any;
     _requiresPhoto = chore?.requiresPhoto ?? false;
+    _fair = chore?.fairRotation ?? false;
     _remindAt = chore?.remindAt;
     for (final step in chore?.steps ?? const <String>[]) {
       _steps.add(TextEditingController(text: step));
@@ -151,6 +155,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
           timeOfDay: _timeOfDay,
           requiresPhoto: _requiresPhoto,
           remindAt: _remindAt,
+          fairRotation: rotation.length > 1 && _fair,
           steps: [
             for (final s in _steps)
               if (s.text.trim().isNotEmpty) s.text.trim(),
@@ -250,6 +255,16 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                   _rotates = value;
                   if (value && _rotation.isEmpty) _rotation = [for (final m in widget.members) m.userId];
                 }),
+              ),
+            if (canRotate && _rotates)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('Para quem fez menos'.tr),
+                subtitle: Text(
+                  'Em vez da ordem da lista, vai para quem fez menos tarefas nas últimas duas semanas.'.tr,
+                ),
+                value: _fair,
+                onChanged: (value) => setState(() => _fair = value),
               ),
             if (canRotate && _rotates)
               Wrap(

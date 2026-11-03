@@ -430,6 +430,9 @@ const englishTexts = <String, String>{
   '1 dia antes': '1 day before',
   '{0} minutos antes': '{0} minutes before',
   'Lembrete': 'Reminder',
+  'Para quem fez menos': 'To whoever did least',
+  'Em vez da ordem da lista, vai para quem fez menos tarefas nas últimas duas semanas.':
+      'Instead of the list order, it goes to whoever did fewest chores in the last two weeks.',
   'Refeições': 'Meals',
   'planeia as refeições': 'plans meals',
   'Almoço': 'Lunch',

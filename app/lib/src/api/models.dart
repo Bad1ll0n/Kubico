@@ -956,6 +956,7 @@ class Chore {
     this.requiresPhoto = false,
     this.availableFrom,
     this.remindAt,
+    this.fairRotation = false,
   });
 
   final String id;
@@ -989,6 +990,9 @@ class Chore {
   /// A que horas (no fuso da casa) se lembra a quem a tem, no dia em que é para fazer.
   final ({int hour, int minute})? remindAt;
 
+  /// Na rotação, a próxima vez vai para quem fez menos tarefas (F4-23).
+  final bool fairRotation;
+
   /// Se já se pode concluir hoje.
   bool isAvailableOn(DateTime today) {
     final from = availableFrom;
@@ -1016,6 +1020,7 @@ class Chore {
     requiresPhoto: requiresPhoto,
     availableFrom: availableFrom,
     remindAt: remindAt,
+    fairRotation: fairRotation,
   );
 
   factory Chore.fromJson(Map<String, dynamic> json) => Chore(
@@ -1036,6 +1041,7 @@ class Chore {
     requiresPhoto: json['requiresPhoto'] as bool? ?? false,
     availableFrom: json['availableFrom'] == null ? null : DateTime.parse(json['availableFrom'] as String),
     remindAt: json['remindAt'] == null ? null : _time(json['remindAt'] as String),
+    fairRotation: json['fairRotation'] as bool? ?? false,
   );
 }
 
@@ -1103,6 +1109,7 @@ class ChoreDraft {
     this.steps = const [],
     this.requiresPhoto = false,
     this.remindAt,
+    this.fairRotation = false,
   });
 
   final String title;
@@ -1119,6 +1126,9 @@ class ChoreDraft {
   /// A que horas se lembra a quem a tem, no dia em que é para fazer.
   final ({int hour, int minute})? remindAt;
 
+  /// Na rotação, a próxima vez vai para quem fez menos tarefas.
+  final bool fairRotation;
+
   factory ChoreDraft.from(Chore chore) => ChoreDraft(
     title: chore.title,
     notes: chore.notes,
@@ -1131,6 +1141,7 @@ class ChoreDraft {
     steps: chore.steps,
     requiresPhoto: chore.requiresPhoto,
     remindAt: chore.remindAt,
+    fairRotation: chore.fairRotation,
   );
 
   Map<String, dynamic> toJson() => {
@@ -1145,6 +1156,7 @@ class ChoreDraft {
     'steps': steps,
     'requiresPhoto': requiresPhoto,
     if (remindAt != null) 'remindAt': _timeJson(remindAt!),
+    if (fairRotation) 'fairRotation': true,
   };
 }
 

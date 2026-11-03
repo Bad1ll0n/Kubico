@@ -42,4 +42,9 @@ void main() {
     expect(NotificationTarget.of('AllowanceDue', 'h1')?.module, HouseholdModule.rewards);
     expect(NotificationTarget.of('MorningSummary', 'h1')?.module, isNull, reason: 'o resumo da manhã abre o Hoje');
   });
+
+  test('a rotação justa vai no pedido só quando está ligada (F4-23)', () {
+    expect(const ChoreDraft(title: 'Lixo', fairRotation: true).toJson()['fairRotation'], isTrue);
+    expect(const ChoreDraft(title: 'Lixo').toJson().containsKey('fairRotation'), isFalse);
+  });
 }

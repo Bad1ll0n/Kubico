@@ -28,7 +28,8 @@ public record SaveChoreRequest(
     ChoreTimeOfDay TimeOfDay = ChoreTimeOfDay.Any,
     IReadOnlyList<string>? Steps = null,
     bool RequiresPhoto = false,
-    TimeOnly? RemindAt = null);
+    TimeOnly? RemindAt = null,
+    bool FairRotation = false);
 
 /// <summary>
 /// Marcar um passo. <c>DoneByUserId</c>: quem gere as tarefas pode dizer quem o fez (por omissão, o responsável da
@@ -61,7 +62,8 @@ public record ChoreDto(
     IReadOnlyList<int>? DoneSteps = null,
     bool RequiresPhoto = false,
     DateOnly? AvailableFrom = null,
-    TimeOnly? RemindAt = null);
+    TimeOnly? RemindAt = null,
+    bool FairRotation = false);
 
 public record ChoreCompletedDto(ChoreDto Chore, int PointsEarned);
 
@@ -468,7 +470,22 @@ public static class ChoreEndpoints
         var absences = await db.MemberAbsences.AsNoTracking()
             .Where(a => a.HouseholdId == chore.HouseholdId && a.EndDate >= today)
             .ToListAsync(ct);
-        var completion = chore.Complete(doneBy, now, today, MemberAbsence.Checker(absences));
+        // Na rotação justa, quantas tarefas fez cada um nos últimos 14 dias (com esta, que ainda não está gravada).
+        Dictionary<Guid, int>? load = null;
+        if (chore.FairRotation && chore.RotationUserIds.Count > 1)
+        {
+            var since = now.AddDays(-14);
+            var people = chore.RotationUserIds;
+            load = await db.ChoreCompletions.AsNoTracking()
+                .Where(c => c.Chore.HouseholdId == chore.HouseholdId && people.Contains(c.UserId)
+                    && c.CompletedAt >= since && c.RejectedAt == null)
+                .GroupBy(c => c.UserId)
+                .Select(g => new { g.Key, Count = g.Count() })
+                .ToDictionaryAsync(g => g.Key, g => g.Count, ct);
+            load[doneBy] = load.GetValueOrDefault(doneBy) + 1;
+        }
+
+        var completion = chore.Complete(doneBy, now, today, MemberAbsence.Checker(absences), load);
         completion.PhotoId = photoId;
 
         // O Id já vem preenchido; sem Add explícito o EF trataria o registo como existente (UPDATE).
@@ -638,6 +655,7 @@ public static class ChoreEndpoints
         chore.TimeOfDay = request.TimeOfDay;
         chore.RequiresPhoto = request.RequiresPhoto;
         chore.RemindAt = request.RemindAt is { } at ? new TimeOnly(at.Hour, at.Minute) : null;
+        chore.FairRotation = request.FairRotation && chore.RotationUserIds.Count > 1;
         chore.SetSteps(CleanSteps(request.Steps));
 
         // Com rotação e sem responsável indicado, começa pelo primeiro da lista.
@@ -655,5 +673,5 @@ public static class ChoreEndpoints
     internal static ChoreDto ToDto(Chore c) => new(
         c.Id, c.HouseholdId, c.Title, c.Notes, c.Points, c.DueDate, c.Recurrence,
         c.AssigneeUserId, c.RotationUserIds, c.IsDone, c.CompletedAt, c.UpdatedAt, c.TimeOfDay, c.Steps, c.DoneSteps,
-        c.RequiresPhoto, c.AvailableFrom, c.RemindAt);
+        c.RequiresPhoto, c.AvailableFrom, c.RemindAt, c.FairRotation);
 }
