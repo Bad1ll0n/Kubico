@@ -23,6 +23,7 @@ import 'help_screen.dart' deferred as help;
 import 'household_screen.dart';
 import 'kitchen_panel.dart' deferred as kitchen;
 import 'expenses_view.dart';
+import 'home_area_screen.dart' deferred as homearea;
 import 'meals_view.dart';
 import 'notifications_screen.dart';
 import 'onboarding_screen.dart';
@@ -103,6 +104,13 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!session.households.any((h) => h.id == target.householdId)) return;
     await session.selectHousehold(target.householdId);
     if (!mounted) return;
+    // Os avisos da Casa abrem o ecrã "A casa" por cima do Hoje.
+    if (target.module == HouseholdModule.home) {
+      final household = session.households.firstWhere((h) => h.id == target.householdId);
+      setState(() => _section = null);
+      await pushDeferred<void>(context, homearea.loadLibrary, () => homearea.HomeAreaScreen(household: household));
+      return;
+    }
     setState(() {
       _section = target.module;
       _selectedList = null;
@@ -337,7 +345,10 @@ class _HomeScreenState extends State<HomeScreen> {
             household: household,
             onOpen: (module) => setState(() => _section = module),
           ),
-          HouseholdModule.shopping || HouseholdModule.meals || HouseholdModule.expenses => shopping,
+          HouseholdModule.shopping ||
+          HouseholdModule.meals ||
+          HouseholdModule.expenses ||
+          HouseholdModule.home => shopping,
           HouseholdModule.chores => ChoresView(key: ValueKey('chores-${household.id}'), household: household),
           HouseholdModule.calendar => CalendarView(key: ValueKey('calendar-${household.id}'), household: household),
           HouseholdModule.rewards => RewardsView(key: ValueKey('rewards-${household.id}'), household: household),
@@ -367,6 +378,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 onSelected: (value) => switch (value) {
                   'devices' => pushDeferred<void>(context, devices.loadLibrary, () => devices.DevicesScreen()),
                   'account' => _openAccount(),
+                  'home' => pushDeferred<void>(
+                    context,
+                    homearea.loadLibrary,
+                    () => homearea.HomeAreaScreen(household: household),
+                  ),
                   'panel' => pushDeferred<void>(
                     context,
                     kitchen.loadLibrary,
@@ -406,6 +422,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (narrow) item('members', Icons.group_rounded, 'Membros e convites'.tr),
                     if (household.role.canManageContent)
                       item('panel', Icons.countertops_rounded, 'Modo painel de cozinha'.tr),
+                    if (household.accessTo(HouseholdModule.home).canView)
+                      item('home', Icons.cottage_rounded, 'A casa'.tr),
                     if (!child) item('activity', Icons.history_rounded, 'Histórico de alterações'.tr),
                     item('account', Icons.person_rounded, 'A minha conta'.tr),
                     if (!child) item('devices', Icons.devices_rounded, 'Dispositivos com sessão iniciada'.tr),

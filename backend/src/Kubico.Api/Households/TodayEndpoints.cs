@@ -4,6 +4,7 @@ using Kubico.Api.Chores;
 using Kubico.Api.Common;
 using Kubico.Api.Rewards;
 using Kubico.Api.Shopping;
+using Kubico.Domain.Households;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,7 +20,8 @@ public sealed record TodayDto(
     object? Chores,
     object? Calendar,
     object? Lists,
-    object? Rewards);
+    object? Rewards,
+    object? Notes = null);
 
 public static class TodayEndpoints
 {
@@ -56,8 +58,20 @@ public static class TodayEndpoints
         var lists = await ShoppingEndpoints.GetLists(householdId, principal, db, access, ct);
         var rewards = await RewardEndpoints.GetRewards(householdId, principal, db, access, ct);
 
+        // Os recados da casa (F4-12), para quem vê a área Casa.
+        var (_, _, homeError) = await access.RequireAsync(principal.GetUserId(), householdId, HouseholdModule.Home, ModuleAccess.View, ct);
+        var notes = homeError is not null
+            ? null
+            : (await db.HouseNotes.AsNoTracking()
+                    .Where(n => n.HouseholdId == householdId && (n.Until == null || n.Until >= today))
+                    .OrderByDescending(n => n.CreatedAt)
+                    .Take(10)
+                    .ToListAsync(ct))
+                .Select(n => new Home.NoteDto(n.Id, n.Text, n.Until, n.CreatedByUserId, n.CreatedAt))
+                .ToList();
+
         return Results.Ok(new TodayDto(
-            details, Value(absences) ?? Array.Empty<object>(), Value(chores), Value(calendar), Value(lists), Value(rewards)));
+            details, Value(absences) ?? Array.Empty<object>(), Value(chores), Value(calendar), Value(lists), Value(rewards), notes));
     }
 
     /// <summary>O conteúdo de uma resposta 200; null para as outras (sem acesso à área).</summary>

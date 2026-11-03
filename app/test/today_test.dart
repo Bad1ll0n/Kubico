@@ -73,6 +73,15 @@ class _Server {
         'calendar': _read('/api/households/h1/events'),
         'lists': _read('/api/households/h1/lists'),
         'rewards': _read('/api/households/h1/rewards'),
+        'notes': [
+          {
+            'id': 'n1',
+            'text': 'Hoje há jantar fora',
+            'until': null,
+            'createdByUserId': 'mae',
+            'createdAt': '2026-11-10T09:00:00Z',
+          },
+        ],
       }),
       '/api/me' => _json({
         'user': {
@@ -236,6 +245,7 @@ void main() {
       final opened = await _pump(tester, server);
 
       expect(find.text('Bom dia, Mãe'), findsOneWidget);
+      expect(find.text('• Hoje há jantar fora'), findsOneWidget, reason: 'os recados da casa aparecem no Hoje (F4-12)');
       expect(server.requests.where((r) => r.startsWith('GET /api/households/h1')), [
         'GET /api/households/h1/today',
       ], reason: 'um só pedido para o ecrã todo (F4-19)');

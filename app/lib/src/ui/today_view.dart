@@ -35,6 +35,7 @@ class _TodayData {
     required this.calendar,
     required this.lists,
     required this.rewards,
+    this.notes,
   });
 
   final HouseholdDetails details;
@@ -43,6 +44,9 @@ class _TodayData {
   final CalendarRange? calendar;
   final List<ShoppingList>? lists;
   final RewardsOverview? rewards;
+
+  /// Os recados do quadro da casa (F4-12).
+  final List<HouseNote>? notes;
 }
 
 class _TodayViewState extends State<TodayView> {
@@ -88,6 +92,7 @@ class _TodayViewState extends State<TodayView> {
           calendar: bundle.calendar,
           lists: bundle.lists,
           rewards: bundle.rewards,
+          notes: bundle.notes,
         );
         _error = null;
       });
@@ -115,6 +120,7 @@ class _TodayViewState extends State<TodayView> {
     final blocks = <Widget>[
       _Greeting(name: data.details.member(me?.id)?.displayName ?? me?.displayName ?? '', today: today),
       _WhoIsHome(details: data.details, absences: data.absences, today: today),
+      if (data.notes case final notes? when notes.isNotEmpty) _notes(notes),
       if (data.rewards != null) ?_myPoints(data, me?.id),
       if (data.calendar != null) _agenda(data, today),
       if (data.chores != null) _chores(data, me?.id, today),
@@ -313,6 +319,36 @@ class _TodayViewState extends State<TodayView> {
             onTap: () => widget.onOpen(HouseholdModule.shopping),
           ),
       ],
+    );
+  }
+
+  /// Os recados da casa (F4-12), no topo do dia.
+  Widget _notes(List<HouseNote> notes) {
+    final theme = Theme.of(context);
+    return Card(
+      key: const ValueKey('notes'),
+      color: context.kubico.infoContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(KubicoSpace.s16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.sticky_note_2_rounded, color: context.kubico.onInfoContainer),
+                const SizedBox(width: 8),
+                Text('Recados'.tr, style: theme.textTheme.titleMedium?.copyWith(color: context.kubico.onInfoContainer)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (final n in notes)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('• ${n.text}', style: TextStyle(color: context.kubico.onInfoContainer)),
+              ),
+          ],
+        ),
+      ),
     );
   }
 

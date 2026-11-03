@@ -181,6 +181,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
     HouseholdModule.rewards => Icons.card_giftcard_rounded,
     HouseholdModule.meals => Icons.restaurant_menu_rounded,
     HouseholdModule.expenses => Icons.receipt_long_rounded,
+    HouseholdModule.home => Icons.cottage_rounded,
     null => Icons.group_rounded,
   };
 

@@ -238,7 +238,9 @@ class ApiClient {
     final calendar = json['calendar'];
     final lists = json['lists'];
     final rewards = json['rewards'];
+    final notes = json['notes'];
     return TodayBundle(
+      notes: notes == null ? null : _readable(notes, HouseNote.fromJson),
       details: HouseholdDetails.fromJson(json['household']),
       absences: [for (final a in json['absences'] as List) MemberAbsence.fromJson(a as Map<String, dynamic>)],
       chores: chores == null ? null : _readable(chores, Chore.fromJson),
@@ -347,6 +349,52 @@ class ApiClient {
 
   Future<void> deleteList(String householdId, String listId) =>
       _send('DELETE', '/api/households/$householdId/lists/$listId');
+
+  // Casa (F4-07, F4-08, F4-12, F4-13).
+
+  String _home(String householdId) => '/api/households/$householdId/home';
+
+  Future<HomeOverview> getHome(String householdId) async =>
+      HomeOverview.fromJson(await _send('GET', _home(householdId)) as Map<String, dynamic>);
+
+  Future<void> saveHomeSettings(String householdId, {required bool irsReminders}) =>
+      _send('PUT', '${_home(householdId)}/settings', body: {'irsReminders': irsReminders});
+
+  Future<void> addHouseNote(String householdId, String text) =>
+      _send('POST', '${_home(householdId)}/notes', body: {'text': text});
+
+  Future<void> deleteHouseNote(String householdId, String noteId) =>
+      _send('DELETE', '${_home(householdId)}/notes/$noteId');
+
+  /// Cria ([id] null) ou muda um equipamento.
+  Future<void> saveAppliance(String householdId, Map<String, dynamic> body, {String? id}) =>
+      _send(id == null ? 'POST' : 'PUT', '${_home(householdId)}/appliances${id == null ? '' : '/$id'}', body: body);
+
+  Future<void> deleteAppliance(String householdId, String id) =>
+      _send('DELETE', '${_home(householdId)}/appliances/$id');
+
+  Future<void> maintenanceDone(String householdId, String applianceId, String taskId) =>
+      _send('POST', '${_home(householdId)}/appliances/$applianceId/maintenance/$taskId/done');
+
+  Future<void> saveDocument(String householdId, Map<String, dynamic> body, {String? id}) =>
+      _send(id == null ? 'POST' : 'PUT', '${_home(householdId)}/documents${id == null ? '' : '/$id'}', body: body);
+
+  Future<void> deleteDocument(String householdId, String id) => _send('DELETE', '${_home(householdId)}/documents/$id');
+
+  Future<void> saveContact(String householdId, Map<String, dynamic> body, {String? id}) =>
+      _send(id == null ? 'POST' : 'PUT', '${_home(householdId)}/contacts${id == null ? '' : '/$id'}', body: body);
+
+  Future<void> deleteContact(String householdId, String id) => _send('DELETE', '${_home(householdId)}/contacts/$id');
+
+  /// Junta um PDF ou uma imagem a um equipamento ou documento.
+  Future<void> uploadHomeFile(String householdId, String ownerId, Uint8List bytes, String name) => _send(
+    'POST',
+    '${_home(householdId)}/files?ownerId=$ownerId',
+    upload: (field: 'file', bytes: bytes, filename: name),
+  );
+
+  Future<Uint8List> getHomeFile(String householdId, String fileId) async =>
+      (await _execute('GET', '${_home(householdId)}/files/$fileId')).bodyBytes;
 
   // Despesas (F4-10).
 

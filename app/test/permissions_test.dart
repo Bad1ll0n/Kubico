@@ -39,6 +39,8 @@ Map<String, String> _access(
   'Meals': meals ?? (rewards == 'Manage' ? 'Manage' : 'Participate'),
   // As Despesas (F4-10): adultos gerem, convidados usam, crianças não veem.
   'Expenses': expenses ?? (rewards == 'Manage' ? 'Manage' : (child ? 'None' : 'Participate')),
+  // A Casa (F4-07): adultos gerem, os outros usam (recados, os seus documentos).
+  'Home': rewards == 'Manage' ? 'Manage' : 'Participate',
 };
 
 final _defaults = [

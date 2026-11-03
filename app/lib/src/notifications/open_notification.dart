@@ -30,6 +30,7 @@ class NotificationTarget {
       'AllowancePaid' ||
       'AllowanceDue' => NotificationTarget(householdId: householdId, module: HouseholdModule.rewards),
       'ChildPinLocked' => NotificationTarget(householdId: householdId, members: true),
+      'HomeReminder' => NotificationTarget(householdId: householdId, module: HouseholdModule.home),
       _ => NotificationTarget(householdId: householdId),
     };
   }

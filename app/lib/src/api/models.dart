@@ -33,7 +33,8 @@ enum HouseholdModule {
   calendar('Calendar', 'Calendário', null),
   rewards('Rewards', 'Recompensas', 'pede recompensas'),
   meals('Meals', 'Refeições', 'planeia as refeições'),
-  expenses('Expenses', 'Despesas', 'regista as suas despesas');
+  expenses('Expenses', 'Despesas', 'regista as suas despesas'),
+  home('Home', 'Casa', 'deixa recados e guarda os seus documentos');
 
   const HouseholdModule(this.apiValue, this._label, this._participateMeans);
 
@@ -718,6 +719,207 @@ class ExpensesOverview {
   );
 }
 
+DateTime? _optionalDay(Object? value) => value == null ? null : DateTime.parse(value as String);
+
+/// Um recado do quadro da casa (F4-12).
+class HouseNote {
+  const HouseNote({required this.id, required this.text, required this.until, required this.createdByUserId});
+
+  final String id;
+  final String text;
+  final DateTime? until;
+  final String createdByUserId;
+
+  factory HouseNote.fromJson(Map<String, dynamic> json) => HouseNote(
+    id: json['id'] as String,
+    text: json['text'] as String,
+    until: _optionalDay(json['until']),
+    createdByUserId: json['createdByUserId'] as String,
+  );
+}
+
+/// Um ficheiro de um equipamento ou documento.
+class HomeFile {
+  const HomeFile({required this.id, required this.fileName, required this.contentType, required this.size});
+
+  final String id;
+  final String fileName;
+  final String contentType;
+  final int size;
+
+  bool get isImage => contentType.startsWith('image/');
+
+  factory HomeFile.fromJson(Map<String, dynamic> json) => HomeFile(
+    id: json['id'] as String,
+    fileName: json['fileName'] as String,
+    contentType: json['contentType'] as String,
+    size: json['size'] as int,
+  );
+}
+
+/// Uma manutenção periódica de um equipamento.
+class MaintenanceTask {
+  const MaintenanceTask({required this.id, required this.title, required this.intervalDays, required this.nextDue});
+
+  final String id;
+  final String title;
+  final int intervalDays;
+  final DateTime nextDue;
+
+  factory MaintenanceTask.fromJson(Map<String, dynamic> json) => MaintenanceTask(
+    id: json['id'] as String,
+    title: json['title'] as String,
+    intervalDays: json['intervalDays'] as int,
+    nextDue: DateTime.parse(json['nextDue'] as String),
+  );
+}
+
+/// Um equipamento da casa (F4-07); num carro, o próximo IUC e a próxima inspeção (F4-08).
+class Appliance {
+  const Appliance({
+    required this.id,
+    required this.name,
+    required this.isCar,
+    required this.room,
+    required this.brand,
+    required this.warrantyUntil,
+    required this.plate,
+    required this.firstRegistration,
+    required this.nextIuc,
+    required this.nextInspection,
+    required this.maintenance,
+    required this.files,
+  });
+
+  final String id;
+  final String name;
+  final bool isCar;
+  final String? room;
+  final String? brand;
+  final DateTime? warrantyUntil;
+  final String? plate;
+  final DateTime? firstRegistration;
+  final DateTime? nextIuc;
+  final DateTime? nextInspection;
+  final List<MaintenanceTask> maintenance;
+  final List<HomeFile> files;
+
+  factory Appliance.fromJson(Map<String, dynamic> json) => Appliance(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    isCar: json['kind'] == 'Car',
+    room: json['room'] as String?,
+    brand: json['brand'] as String?,
+    warrantyUntil: _optionalDay(json['warrantyUntil']),
+    plate: json['plate'] as String?,
+    firstRegistration: _optionalDay(json['firstRegistration']),
+    nextIuc: _optionalDay(json['nextIuc']),
+    nextInspection: _optionalDay(json['nextInspection']),
+    maintenance: [for (final m in json['maintenance'] as List) MaintenanceTask.fromJson(m as Map<String, dynamic>)],
+    files: [for (final f in json['files'] as List) HomeFile.fromJson(f as Map<String, dynamic>)],
+  );
+}
+
+/// Os tipos de documento do cofre.
+enum DocumentKind {
+  citizenCard('CitizenCard', 'Cartão de cidadão'),
+  passport('Passport', 'Passaporte'),
+  drivingLicence('DrivingLicence', 'Carta de condução'),
+  vaccination('Vaccination', 'Boletim de vacinas'),
+  insurance('Insurance', 'Seguro'),
+  other('Other', 'Outro');
+
+  const DocumentKind(this.apiValue, this._label);
+
+  final String apiValue;
+  final String _label;
+
+  String get label => _label.tr;
+
+  static DocumentKind fromApi(Object? value) => values.firstWhere((k) => k.apiValue == value, orElse: () => other);
+}
+
+/// Um documento do cofre (F4-13). [number] só chega ao dono e a quem gere a área.
+class HomeDocument {
+  const HomeDocument({
+    required this.id,
+    required this.kind,
+    required this.name,
+    required this.ownerUserId,
+    required this.number,
+    required this.expiresOn,
+    required this.files,
+  });
+
+  final String id;
+  final DocumentKind kind;
+  final String name;
+  final String? ownerUserId;
+  final String? number;
+  final DateTime? expiresOn;
+  final List<HomeFile> files;
+
+  factory HomeDocument.fromJson(Map<String, dynamic> json) => HomeDocument(
+    id: json['id'] as String,
+    kind: DocumentKind.fromApi(json['kind']),
+    name: json['name'] as String,
+    ownerUserId: json['ownerUserId'] as String?,
+    number: json['number'] as String?,
+    expiresOn: _optionalDay(json['expiresOn']),
+    files: [for (final f in json['files'] as List) HomeFile.fromJson(f as Map<String, dynamic>)],
+  );
+}
+
+/// Um contacto útil.
+class HouseContact {
+  const HouseContact({required this.id, required this.name, this.role, this.phone, this.birthday});
+
+  final String id;
+  final String name;
+  final String? role;
+  final String? phone;
+  final DateTime? birthday;
+
+  factory HouseContact.fromJson(Map<String, dynamic> json) => HouseContact(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    role: json['role'] as String?,
+    phone: json['phone'] as String?,
+    birthday: _optionalDay(json['birthday']),
+  );
+}
+
+/// Tudo o que a área Casa mostra.
+class HomeOverview {
+  const HomeOverview({
+    required this.appliances,
+    required this.documents,
+    required this.notes,
+    required this.contacts,
+    required this.birthdays,
+    required this.irsReminders,
+  });
+
+  final List<Appliance> appliances;
+  final List<HomeDocument> documents;
+  final List<HouseNote> notes;
+  final List<HouseContact> contacts;
+  final List<({String name, DateTime date})> birthdays;
+  final bool irsReminders;
+
+  factory HomeOverview.fromJson(Map<String, dynamic> json) => HomeOverview(
+    appliances: [for (final a in json['appliances'] as List) Appliance.fromJson(a as Map<String, dynamic>)],
+    documents: [for (final d in json['documents'] as List) HomeDocument.fromJson(d as Map<String, dynamic>)],
+    notes: [for (final n in json['notes'] as List) HouseNote.fromJson(n as Map<String, dynamic>)],
+    contacts: [for (final c in json['contacts'] as List) HouseContact.fromJson(c as Map<String, dynamic>)],
+    birthdays: [
+      for (final b in json['birthdays'] as List)
+        (name: (b as Map)['name'] as String, date: DateTime.parse(b['date'] as String)),
+    ],
+    irsReminders: json['irsReminders'] as bool? ?? true,
+  );
+}
+
 class TodayBundle {
   const TodayBundle({
     required this.details,
@@ -726,6 +928,7 @@ class TodayBundle {
     required this.calendar,
     required this.lists,
     required this.rewards,
+    this.notes,
   });
 
   final HouseholdDetails details;
@@ -734,6 +937,9 @@ class TodayBundle {
   final CalendarRange? calendar;
   final List<ShoppingList>? lists;
   final RewardsOverview? rewards;
+
+  /// Os recados da casa (null: sem acesso à área Casa).
+  final List<HouseNote>? notes;
 }
 
 class HouseholdDetails {
