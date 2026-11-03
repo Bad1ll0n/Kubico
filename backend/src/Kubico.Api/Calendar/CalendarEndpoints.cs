@@ -30,7 +30,8 @@ public record SaveEventRequest(
     [property: StringLength(200)] string? Recurrence = null,
     IReadOnlyList<Guid>? ParticipantUserIds = null,
     Guid? DropOffUserId = null,
-    Guid? PickUpUserId = null);
+    Guid? PickUpUserId = null,
+    IReadOnlyList<int>? ReminderMinutes = null);
 
 public record CalendarEventDto(
     Guid Id,
@@ -49,7 +50,8 @@ public record CalendarEventDto(
     Guid? PickUpUserId,
     Guid? SeriesId,
     DateOnly? OriginalDate,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<int>? ReminderMinutes = null);
 
 /// <summary>
 /// Uma ocorrência no intervalo pedido. <c>OccurrenceDate</c> identifica-a dentro da série (para alterar ou apagar
@@ -636,6 +638,13 @@ public static class CalendarEndpoints
             errors["Title"] = ["O texto tem caracteres que não se podem usar."];
         }
 
+        // Até 3 lembretes, de 0 minutos a 4 semanas antes.
+        if (request.ReminderMinutes is { } reminders
+            && (reminders.Count > MaxReminders || reminders.Any(m => m < 0 || m > MaxReminderMinutes)))
+        {
+            errors["ReminderMinutes"] = ["Escolhe até 3 lembretes, de 0 minutos a 4 semanas antes."];
+        }
+
         var referenced = (request.ParticipantUserIds ?? [])
             .Select(id => (Guid?)id)
             .Append(request.DropOffUserId)
@@ -661,6 +670,9 @@ public static class CalendarEndpoints
 
         return errors.Count == 0 ? null : Results.ValidationProblem(errors);
     }
+
+    public const int MaxReminders = 3;
+    public const int MaxReminderMinutes = 4 * 7 * 24 * 60;
 
     private static bool HasControl(string? text, char[]? allowed = null) =>
         text is not null && text.Any(c => char.IsControl(c) && (allowed is null || !allowed.Contains(c)));
@@ -688,13 +700,15 @@ public static class CalendarEndpoints
         calendarEvent.ParticipantUserIds = [.. (request.ParticipantUserIds ?? []).Distinct()];
         calendarEvent.DropOffUserId = request.DropOffUserId;
         calendarEvent.PickUpUserId = request.PickUpUserId;
+        calendarEvent.ReminderMinutes = [.. (request.ReminderMinutes ?? []).Distinct().Order()];
         calendarEvent.AlignStartToRule(zone);
         calendarEvent.UpdatedAt = now;
     }
 
     internal static CalendarEventDto ToDto(CalendarEvent e) => new(
         e.Id, e.HouseholdId, e.Title, e.Notes, e.Location, e.IsAllDay, e.StartsAt, e.EndsAt, e.StartDate, e.EndDate,
-        e.Recurrence, e.ParticipantUserIds, e.DropOffUserId, e.PickUpUserId, e.SeriesId, e.OriginalDate, e.UpdatedAt);
+        e.Recurrence, e.ParticipantUserIds, e.DropOffUserId, e.PickUpUserId, e.SeriesId, e.OriginalDate, e.UpdatedAt,
+        e.ReminderMinutes);
 
     private static CalendarOccurrenceDto ToDto(EventOccurrence o, IReadOnlySet<Guid> conflicts) => new(
         o.Event.Id,

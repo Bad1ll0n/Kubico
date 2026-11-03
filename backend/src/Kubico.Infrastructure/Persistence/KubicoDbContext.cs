@@ -36,6 +36,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<RewardRedemption> RewardRedemptions => Set<RewardRedemption>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
+    public DbSet<SentReminder> SentReminders => Set<SentReminder>();
     public DbSet<PushDevice> PushDevices => Set<PushDevice>();
     public DbSet<MemberAbsence> MemberAbsences => Set<MemberAbsence>();
     public DbSet<HouseholdPermission> HouseholdPermissions => Set<HouseholdPermission>();
@@ -310,6 +311,14 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasIndex(n => n.CreatedAt);
             e.HasOne<User>().WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Household>().WithMany().HasForeignKey(n => n.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SentReminder>(e =>
+        {
+            e.Property(r => r.Kind).HasConversion<string>().HasMaxLength(30);
+            e.HasIndex(r => new { r.UserId, r.Kind, r.EntityId, r.DueAt }).IsUnique();
+            e.HasIndex(r => r.SentAt);
+            e.HasOne<User>().WithMany().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<NotificationPreferences>(e =>

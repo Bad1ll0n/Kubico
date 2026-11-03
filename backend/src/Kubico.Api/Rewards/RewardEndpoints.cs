@@ -48,7 +48,11 @@ public record MemberPointsDto(
 public record RewardsDto(
     IReadOnlyList<RewardDto> Rewards,
     IReadOnlyList<RedemptionDto> Redemptions,
-    IReadOnlyList<MemberPointsDto> Points);
+    IReadOnlyList<MemberPointsDto> Points,
+    int? AutoApproveUpTo = null);
+
+/// <summary>Pedidos até <c>AutoApproveUpTo</c> pontos aprovam-se sozinhos; null = todos esperam por um adulto.</summary>
+public record RewardSettingsRequest([property: Range(1, 100000)] int? AutoApproveUpTo);
 
 public static class RewardEndpoints
 {
@@ -69,6 +73,7 @@ public static class RewardEndpoints
         household.MapPost("/redemptions/{redemptionId:guid}/approve", Approve);
         household.MapPost("/redemptions/{redemptionId:guid}/reject", Reject);
         household.MapDelete("/redemptions/{redemptionId:guid}", Cancel);
+        household.MapPut("/rewards/settings", SaveSettings);
 
         return api;
     }
@@ -99,10 +104,40 @@ public static class RewardEndpoints
             .Take(RecentRedemptions)
             .ToListAsync(ct);
 
+        var autoApprove = await db.Households.Where(h => h.Id == householdId).Select(h => h.AutoApproveRewardsUpTo).SingleAsync(ct);
         return Results.Ok(new RewardsDto(
             [.. rewards.OrderBy(r => r.Cost).ThenBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase).Select(ToDto)],
             [.. redemptions.Select(ToDto)],
-            await Balances(db, householdId, ct)));
+            await Balances(db, householdId, ct),
+            autoApprove));
+    }
+
+    /// <summary>Aprovar sozinho os pedidos até N pontos (F4-26). Só quem gere as recompensas.</summary>
+    private static async Task<IResult> SaveSettings(
+        Guid householdId,
+        RewardSettingsRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        ActivityLog activity,
+        HouseholdAccess access,
+        HouseholdNotifier notifier,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, _, error) = await access.RequireAsync(userId, householdId, HouseholdModule.Rewards, ModuleAccess.Manage, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var household = await db.Households.SingleAsync(h => h.Id == householdId, ct);
+        household.AutoApproveRewardsUpTo = request.AutoApproveUpTo;
+        activity.Capture(householdId, userId, HouseholdModule.Rewards,
+            request.AutoApproveUpTo is { } max ? $"passou a aprovar sozinho os pedidos até {max} pontos" : "deixou de aprovar pedidos sozinho",
+            undoable: false);
+        await db.SaveChangesAsync(ct);
+        await notifier.PointsChanged(householdId, ct);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> CreateReward(
@@ -261,13 +296,18 @@ public static class RewardEndpoints
             RequestedAt = now,
             UpdatedAt = now,
         };
-        if (level >= ModuleAccess.Manage)
+        // Quem gere aprova o seu; os pedidos até ao limite da casa aprovam-se sozinhos (com os pontos já trancados).
+        var autoApproveUpTo = await db.Households.Where(h => h.Id == householdId)
+            .Select(h => h.AutoApproveRewardsUpTo).SingleAsync(ct);
+        var automatic = level < ModuleAccess.Manage && autoApproveUpTo is { } limit && reward.Cost <= limit;
+        if (level >= ModuleAccess.Manage || automatic)
         {
             redemption.Decide(approve: true, userId, now);
         }
 
         db.RewardRedemptions.Add(redemption);
-        activity.Capture(householdId, userId, HouseholdModule.Rewards, $"pediu «{reward.Title}»", undoable: false,
+        activity.Capture(householdId, userId, HouseholdModule.Rewards,
+            automatic ? $"pediu «{reward.Title}» (aprovado automaticamente)" : $"pediu «{reward.Title}»", undoable: false,
             access: ModuleAccess.Participate);
         await db.SaveChangesAsync(ct);
 

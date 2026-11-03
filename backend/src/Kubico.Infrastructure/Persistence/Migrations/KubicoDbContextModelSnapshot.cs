@@ -196,6 +196,10 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("RecurrenceEndDate")
                         .HasColumnType("date");
 
+                    b.PrimitiveCollection<List<int>>("ReminderMinutes")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
                     b.Property<Guid?>("SeriesId")
                         .HasColumnType("uuid");
 
@@ -309,6 +313,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<TimeOnly?>("RemindAt")
+                        .HasColumnType("time without time zone");
+
                     b.Property<bool>("RequiresPhoto")
                         .HasColumnType("boolean");
 
@@ -418,6 +425,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("AutoApproveRewardsUpTo")
+                        .HasColumnType("integer");
 
                     b.Property<string>("ChildSignInCode")
                         .HasMaxLength(16)
@@ -671,6 +681,12 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("LastDigestAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<TimeOnly>("MorningAt")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<bool>("MorningSummary")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTimeOffset?>("NextPushAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -684,6 +700,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("WeeklySummary")
+                        .HasColumnType("boolean");
 
                     b.HasKey("UserId");
 
@@ -728,6 +747,39 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("PushDevices");
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Notifications.SentReminder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("DueAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTimeOffset>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SentAt");
+
+                    b.HasIndex("UserId", "Kind", "EntityId", "DueAt")
+                        .IsUnique();
+
+                    b.ToTable("SentReminders");
                 });
 
             modelBuilder.Entity("Kubico.Domain.Rewards.Allowance", b =>
@@ -1385,6 +1437,15 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("Kubico.Domain.Notifications.PushDevice", b =>
+                {
+                    b.HasOne("Kubico.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Notifications.SentReminder", b =>
                 {
                     b.HasOne("Kubico.Domain.Users.User", null)
                         .WithMany()

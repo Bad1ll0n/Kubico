@@ -65,6 +65,7 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
 
         // E as limpezas diárias (MaintenanceService, chamado à mão nos testes que as verificam).
         builder.UseSetting("Maintenance:Enabled", "false");
+        builder.UseSetting("Reminders:Enabled", "false");
 
         // O limite de pedidos por IP desliga-se aqui (todos os testes vêm do mesmo "IP"); RateLimitTests liga-o.
         builder.UseSetting("RateLimiting:Enabled", "false");

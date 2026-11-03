@@ -18,7 +18,10 @@ public record NotificationPreferencesDto(
     TimeOnly DigestAt,
     TimeOnly? QuietFrom,
     TimeOnly? QuietUntil,
-    string TimeZoneId);
+    string TimeZoneId,
+    bool MorningSummary = true,
+    TimeOnly? MorningAt = null,
+    bool WeeklySummary = true);
 
 public record RegisterDeviceRequest(
     [property: Required, StringLength(512, MinimumLength = 1)] string Token,
@@ -119,6 +122,13 @@ public static class NotificationEndpoints
         preferences.QuietFrom = request.QuietFrom;
         preferences.QuietUntil = request.QuietUntil;
         preferences.TimeZoneId = request.TimeZoneId;
+        preferences.MorningSummary = request.MorningSummary;
+        if (request.MorningAt is { } morning)
+        {
+            preferences.MorningAt = new TimeOnly(morning.Hour, morning.Minute);
+        }
+
+        preferences.WeeklySummary = request.WeeklySummary;
         preferences.NextPushAt = null; // As horas mudaram: o envio volta a olhar para os avisos desta pessoa já.
         await db.SaveChangesAsync(ct);
         return Results.Ok(ToDto(preferences));
@@ -175,5 +185,5 @@ public static class NotificationEndpoints
     }
 
     private static NotificationPreferencesDto ToDto(NotificationPreferences p) =>
-        new(p.Delivery, p.DigestAt, p.QuietFrom, p.QuietUntil, p.TimeZoneId);
+        new(p.Delivery, p.DigestAt, p.QuietFrom, p.QuietUntil, p.TimeZoneId, p.MorningSummary, p.MorningAt, p.WeeklySummary);
 }

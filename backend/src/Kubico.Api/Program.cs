@@ -47,6 +47,13 @@ builder.Services.AddKubicoRateLimits(builder.Configuration);
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<NotificationDispatcher>();
 builder.Services.AddScoped<MaintenanceService>();
+builder.Services.AddScoped<ReminderService>();
+if (builder.Configuration.GetValue("Reminders:Enabled", true))
+{
+    // Lembretes, resumos e mesada por pagar, de minuto a minuto: ver ReminderService.
+    builder.Services.AddHostedService<ReminderWorker>();
+}
+
 if (builder.Configuration.GetValue("Maintenance:Enabled", true))
 {
     // Limpezas diárias (histórico, avisos, sessões expiradas, fotos): ver MaintenanceService.

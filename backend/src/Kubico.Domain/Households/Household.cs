@@ -27,6 +27,12 @@ public class Household : IVersioned
     /// </summary>
     public string? ChildSignInCode { get; set; }
 
+    /// <summary>
+    /// Pedidos de recompensa até este custo (em pontos) aprovam-se sozinhos, sem esperar por um adulto. Null = todos
+    /// esperam pela aprovação.
+    /// </summary>
+    public int? AutoApproveRewardsUpTo { get; set; }
+
     public const string DefaultTimeZoneId = "Europe/Lisbon";
 
     /// <summary>Fuso da casa; se o sistema não o conhecer, usa UTC.</summary>

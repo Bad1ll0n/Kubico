@@ -28,6 +28,40 @@ public enum NotificationKind
 
     /// <summary>Um perfil de criança ficou bloqueado por PINs errados (para quem gere a casa).</summary>
     ChildPinLocked = 8,
+
+    /// <summary>Lembrete de um evento (minutos antes do início).</summary>
+    EventReminder = 9,
+
+    /// <summary>Lembrete de uma tarefa à hora escolhida.</summary>
+    ChoreReminder = 10,
+
+    /// <summary>O resumo da manhã: o que há hoje.</summary>
+    MorningSummary = 11,
+
+    /// <summary>O resumo da semana para quem gere as tarefas.</summary>
+    WeeklySummary = 12,
+
+    /// <summary>Há mesadas por pagar (para quem gere as recompensas).</summary>
+    AllowanceDue = 13,
+}
+
+/// <summary>
+/// Um lembrete ou resumo já enviado a uma pessoa: o índice único (pessoa, tipo, coisa, instante) impede que saia
+/// duas vezes, mesmo com o serviço a correr em mais do que um sítio ou duas vezes no mesmo minuto.
+/// </summary>
+public class SentReminder
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public NotificationKind Kind { get; set; }
+
+    /// <summary>O evento, a tarefa ou a casa (nos resumos).</summary>
+    public Guid EntityId { get; set; }
+
+    /// <summary>O instante a que o lembrete era devido (identifica a ocorrência).</summary>
+    public DateTimeOffset DueAt { get; set; }
+
+    public DateTimeOffset SentAt { get; set; }
 }
 
 /// <summary>
@@ -80,6 +114,14 @@ public class NotificationPreferences
 
     /// <summary>Fuso em que se leem estas horas.</summary>
     public string TimeZoneId { get; set; } = "Europe/Lisbon";
+
+    /// <summary>O resumo da manhã (o que há hoje na casa), à hora <see cref="MorningAt"/> no fuso da casa.</summary>
+    public bool MorningSummary { get; set; } = true;
+
+    public TimeOnly MorningAt { get; set; } = new(7, 30);
+
+    /// <summary>O resumo da semana (domingo às 19h), para quem gere as tarefas.</summary>
+    public bool WeeklySummary { get; set; } = true;
 
     public DateTimeOffset? LastDigestAt { get; set; }
 

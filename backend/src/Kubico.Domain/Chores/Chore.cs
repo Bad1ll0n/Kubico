@@ -42,6 +42,9 @@ public class Chore : IVersioned
     /// <summary>Em que altura do dia se faz: as rotinas da manhã e da noite aparecem nessa ordem no dia.</summary>
     public ChoreTimeOfDay TimeOfDay { get; set; }
 
+    /// <summary>A que horas (no fuso da casa) se lembra a tarefa a quem a tem, no dia em que é para fazer.</summary>
+    public TimeOnly? RemindAt { get; set; }
+
     /// <summary>Os passos de uma rotina ("Lavar os dentes", "Fazer a cama"). Vazia = tarefa simples.</summary>
     public List<string> Steps { get; set; } = [];
 
@@ -212,7 +215,8 @@ public class Chore : IVersioned
             return false;
         }
 
-        var day = DueDate ?? today;
+        // Uma tarefa em atraso é para hoje: se o responsável está fora hoje, passa também.
+        var day = DueDate is { } due && due > today ? due : today;
         if (!isAway(assignee, day) || NextAvailable(assignee, day, isAway) is not { } next)
         {
             return false;

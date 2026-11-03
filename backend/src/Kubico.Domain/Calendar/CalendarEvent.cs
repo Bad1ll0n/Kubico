@@ -42,6 +42,9 @@ public class CalendarEvent
     public List<Guid> ParticipantUserIds { get; set; } = [];
 
     /// <summary>Boleias: quem leva (no início do evento) e quem vai buscar (no fim).</summary>
+    /// <summary>Lembretes, em minutos antes do início (nos de dia inteiro, antes das 9h do primeiro dia).</summary>
+    public List<int> ReminderMinutes { get; set; } = [];
+
     public Guid? DropOffUserId { get; set; }
     public Guid? PickUpUserId { get; set; }
 

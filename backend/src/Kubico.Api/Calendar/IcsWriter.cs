@@ -125,6 +125,17 @@ public sealed class IcsWriter
             yield return $"DESCRIPTION:{Text(description)}";
         }
 
+        // Os lembretes (F4-11): um VALARM por cada, com o mesmo tempo antes (nos de dia inteiro, antes das 9h).
+        foreach (var minutes in e.ReminderMinutes)
+        {
+            var before = e.IsAllDay ? minutes - 9 * 60 : minutes;
+            yield return "BEGIN:VALARM";
+            yield return "ACTION:DISPLAY";
+            yield return $"DESCRIPTION:{Text(e.Title)}";
+            yield return before >= 0 ? $"TRIGGER:-PT{before}M" : $"TRIGGER:PT{-before}M";
+            yield return "END:VALARM";
+        }
+
         yield return "END:VEVENT";
     }
 

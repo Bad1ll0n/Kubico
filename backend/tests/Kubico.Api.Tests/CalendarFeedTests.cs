@@ -22,7 +22,8 @@ public class CalendarFeedTests(KubicoApiFactory factory) : IClassFixture<KubicoA
             EndsAt: DateTimeOffset.Parse("2026-10-20T19:00:00+01:00"),
             Recurrence: "FREQ=WEEKLY;UNTIL=20261222",
             ParticipantUserIds: [auth.User.Id],
-            DropOffUserId: auth.User.Id));
+            DropOffUserId: auth.User.Id,
+            ReminderMinutes: [30]));
         (await client.DeleteAsync($"{url}/{swimming.Id}/occurrences/2026-11-03")).EnsureSuccessStatusCode();
         (await client.PutAsJsonAsync($"{url}/{swimming.Id}/occurrences/2026-11-10", new SaveEventRequest(
             "Natação (quarta)", StartsAt: Utc(2026, 11, 11, 18), EndsAt: Utc(2026, 11, 11, 19)), TestJson.Options))
@@ -56,6 +57,8 @@ public class CalendarFeedTests(KubicoApiFactory factory) : IClassFixture<KubicoA
         Assert.Contains($"DTSTART;VALUE=DATE:{holidays:yyyyMMdd}", lines);
         Assert.Contains($"DTEND;VALUE=DATE:{holidays.AddDays(3):yyyyMMdd}", lines);
         Assert.Equal(3, lines.Count(l => l == "BEGIN:VEVENT"));
+        Assert.Contains("TRIGGER:-PT30M", lines);
+        Assert.Equal(1, lines.Count(l => l == "BEGIN:VALARM"));
     }
 
     [Fact]

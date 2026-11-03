@@ -27,7 +27,8 @@ public record SaveChoreRequest(
     IReadOnlyList<Guid>? RotationUserIds = null,
     ChoreTimeOfDay TimeOfDay = ChoreTimeOfDay.Any,
     IReadOnlyList<string>? Steps = null,
-    bool RequiresPhoto = false);
+    bool RequiresPhoto = false,
+    TimeOnly? RemindAt = null);
 
 /// <summary>
 /// Marcar um passo. <c>DoneByUserId</c>: quem gere as tarefas pode dizer quem o fez (por omissão, o responsável da
@@ -59,7 +60,8 @@ public record ChoreDto(
     IReadOnlyList<string>? Steps = null,
     IReadOnlyList<int>? DoneSteps = null,
     bool RequiresPhoto = false,
-    DateOnly? AvailableFrom = null);
+    DateOnly? AvailableFrom = null,
+    TimeOnly? RemindAt = null);
 
 public record ChoreCompletedDto(ChoreDto Chore, int PointsEarned);
 
@@ -635,6 +637,7 @@ public static class ChoreEndpoints
         chore.RotationUserIds = [.. request.RotationUserIds ?? []];
         chore.TimeOfDay = request.TimeOfDay;
         chore.RequiresPhoto = request.RequiresPhoto;
+        chore.RemindAt = request.RemindAt is { } at ? new TimeOnly(at.Hour, at.Minute) : null;
         chore.SetSteps(CleanSteps(request.Steps));
 
         // Com rotação e sem responsável indicado, começa pelo primeiro da lista.
@@ -652,5 +655,5 @@ public static class ChoreEndpoints
     internal static ChoreDto ToDto(Chore c) => new(
         c.Id, c.HouseholdId, c.Title, c.Notes, c.Points, c.DueDate, c.Recurrence,
         c.AssigneeUserId, c.RotationUserIds, c.IsDone, c.CompletedAt, c.UpdatedAt, c.TimeOfDay, c.Steps, c.DoneSteps,
-        c.RequiresPhoto, c.AvailableFrom);
+        c.RequiresPhoto, c.AvailableFrom, c.RemindAt);
 }
