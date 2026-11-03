@@ -10,6 +10,7 @@ import '../l10n/strings.dart';
 import '../realtime/coalesced_reload.dart';
 import '../realtime/household_realtime.dart';
 import 'calendar_event_editor.dart';
+import 'calendar_week_grid.dart';
 import 'calendar_feed_dialog.dart';
 import 'dates_pt.dart';
 import 'design/components.dart';
@@ -381,6 +382,21 @@ class _CalendarViewState extends State<CalendarView> {
 
   Widget _content(CalendarRange calendar) {
     final (first, last) = visibleRange(_mode, _selected);
+    if (_mode == CalendarMode.week) {
+      final canManage = widget.household.accessTo(HouseholdModule.calendar).canManage;
+      return RefreshIndicator(
+        onRefresh: _load,
+        child: WeekTimeGrid(
+          days: daysIn(first, last),
+          calendar: calendar,
+          colorFor: _colorFor,
+          focusedDay: _selected,
+          unavailable: _unavailable,
+          onOpenDay: (day) => _go(day, CalendarMode.day),
+          onTapEvent: canManage ? (event, occurrence) => _edit(event, occurrence) : null,
+        ),
+      );
+    }
     final days = _mode == CalendarMode.month ? [_selected] : daysIn(first, last);
     // Na semana de uma casa cheia são centenas de ocorrências: só se constroem as que aparecem no ecrã (P10).
     final rows = <WidgetBuilder>[

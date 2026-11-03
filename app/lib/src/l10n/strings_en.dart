@@ -294,6 +294,7 @@ const englishTexts = <String, String>{
   'Anterior': 'Previous',
   'Seguinte': 'Next',
   'Hoje': 'Today',
+  'hoje': 'today',
   'Sem eventos.': 'No events.',
   'Leva: {0}': 'Drops off: {0}',
   'Vai buscar: {0}': 'Picks up: {0}',

@@ -8,6 +8,7 @@ import 'package:kubico/src/api/api_client.dart';
 import 'package:kubico/src/api/models.dart';
 import 'package:kubico/src/realtime/household_realtime.dart';
 import 'package:kubico/src/ui/calendar_view.dart';
+import 'package:kubico/src/ui/calendar_week_grid.dart';
 import 'package:provider/provider.dart';
 
 http.Response _json(Object body, [int status = 200]) => http.Response.bytes(
@@ -175,8 +176,14 @@ class _FakeApi {
   });
 }
 
-Future<void> _pump(WidgetTester tester, _FakeApi api, HouseholdRole role, {double textScale = 1}) async {
-  tester.view.physicalSize = const Size(1000, 2000);
+Future<void> _pump(
+  WidgetTester tester,
+  _FakeApi api,
+  HouseholdRole role, {
+  double textScale = 1,
+  Size size = const Size(1000, 2000),
+}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 
@@ -439,5 +446,60 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('10'), findsWidgets);
+  });
+
+  group('semana em grelha de horas', () {
+    CalendarOccurrence at(String id, int h1, int m1, int h2, int m2) => CalendarOccurrence(
+      eventId: id,
+      occurrenceDate: DateTime(2026, 11, 10),
+      startsAt: DateTime(2026, 11, 10, h1, m1),
+      endsAt: DateTime(2026, 11, 10, h2, m2),
+      startDate: null,
+      endDate: null,
+      conflictUserIds: const [],
+    );
+
+    test('os eventos que se sobrepõem ficam lado a lado; os seguintes voltam à largura toda', () {
+      final blocks = layoutDay([
+        at('c', 11, 0, 12, 0),
+        at('a', 9, 0, 10, 0),
+        at('b', 9, 30, 11, 0),
+      ], DateTime(2026, 11, 10));
+
+      final byId = {for (final b in blocks) b.occurrence.eventId: (b.column, b.columns)};
+      expect(byId, {'a': (0, 2), 'b': (1, 2), 'c': (0, 1)});
+    });
+
+    test('as horas vão das 7 às 22, alargadas para o que houver fora disso', () {
+      final day = DateTime(2026, 11, 10);
+      CalendarRange range(List<CalendarOccurrence> o) =>
+          CalendarRange(events: {'a': CalendarEvent.fromJson(_football)}, occurrences: o, holidays: const []);
+
+      expect(WeekTimeGrid.hoursFor([day], range([at('a', 9, 0, 10, 0)])), (7, 22));
+      expect(WeekTimeGrid.hoursFor([day], range([at('a', 6, 30, 23, 15)])), (6, 24));
+    });
+  });
+
+  testWidgets('a semana em grelha num telemóvel com letra a 200 %: sem cortes, e tocar num dia abre-o', (tester) async {
+    final api = _FakeApi();
+    await _pump(tester, api, HouseholdRole.child, textScale: 2, size: const Size(360, 780));
+
+    await tester.tap(find.text('Semana'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Futebol'), findsOneWidget);
+
+    // Uma criança só vê: tocar no evento abre o dia.
+    await tester.ensureVisible(find.text('Futebol'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Futebol'));
+    await tester.pumpAndSettle();
+    expect(find.text('Terça-feira, 10 de novembro'), findsWidgets, reason: 'a vista de dia (título e cabeçalho)');
+
+    await tester.tap(find.text('Semana'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('week-day-20261111')));
+    await tester.pumpAndSettle();
+    expect(find.text('Quarta-feira, 11 de novembro'), findsWidgets);
   });
 }
