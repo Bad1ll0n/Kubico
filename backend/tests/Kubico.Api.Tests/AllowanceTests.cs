@@ -139,3 +139,33 @@ public sealed class AllowanceOwedTests : IDisposable
 
     public void Dispose() => _factory.Dispose();
 }
+
+/// <summary>Mudar a mesada com períodos por pagar (ENG-11). Servidor próprio: o teste avança o relógio.</summary>
+public sealed class AllowanceChangeTests : IDisposable
+{
+    private readonly KubicoApiFactory _factory = new();
+
+    [Fact]
+    public async Task The_period_or_amount_only_change_once_the_finished_periods_are_paid()
+    {
+        var (admin, _, household) = await Fase1.HouseholdAsync(_factory);
+        var (_, rita, _) = await Fase1.ChildProfileAsync(_factory, admin, household, "Rita");
+        var url = $"/api/households/{household}/allowances";
+        (await admin.PutAsJsonAsync($"{url}/{rita}", new SaveAllowanceRequest(500), TestJson.Options)).EnsureSuccessStatusCode();
+        var firstWeek = Allowance.PeriodStart(_factory.Today, AllowancePeriod.Weekly);
+
+        _factory.Clock.Advance(TimeSpan.FromDays(8));
+        var toMonthly = await admin.PutAsJsonAsync($"{url}/{rita}", new SaveAllowanceRequest(500, Period: AllowancePeriod.Monthly), TestJson.Options);
+        var lower = await admin.PutAsJsonAsync($"{url}/{rita}", new SaveAllowanceRequest(100), TestJson.Options);
+        var same = await admin.PutAsJsonAsync($"{url}/{rita}", new SaveAllowanceRequest(500), TestJson.Options);
+        (await admin.PostAsJsonAsync($"{url}/{rita}/payments", new PayAllowanceRequest(firstWeek), TestJson.Options)).EnsureSuccessStatusCode();
+        var afterPaying = await admin.PutAsJsonAsync($"{url}/{rita}", new SaveAllowanceRequest(500, Period: AllowancePeriod.Monthly), TestJson.Options);
+
+        Assert.Equal(HttpStatusCode.Conflict, toMonthly.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, lower.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, same.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, afterPaying.StatusCode);
+    }
+
+    public void Dispose() => _factory.Dispose();
+}

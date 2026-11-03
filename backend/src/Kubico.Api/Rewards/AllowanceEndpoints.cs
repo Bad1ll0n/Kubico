@@ -128,10 +128,24 @@ public static class AllowanceEndpoints
             allowance = new Allowance { HouseholdId = householdId, UserId = userId, StartDate = Allowance.PeriodStart(today, request.Period) };
             db.Allowances.Add(allowance);
         }
-        else if (allowance.Period != request.Period)
+        else
         {
-            // Passar de semanal para mensal (ou o contrário) começa a contar do período atual.
-            allowance.StartDate = Allowance.PeriodStart(today, request.Period);
+            // Os períodos por pagar calculam-se com o valor e o período atuais: mudá-los com dívidas em atraso fazia
+            // desaparecer o que se devia (de semanal para mensal) ou mudava-o para trás (baixar o valor).
+            var changes = allowance.Period != request.Period || allowance.AmountCents != request.AmountCents
+                || allowance.BonusPerChoreCents != request.BonusPerChoreCents;
+            if (changes && (await DescribeAsync(db, household, allowance, now, ct)).OwedCents > 0)
+            {
+                return Results.Problem(
+                    title: "Há períodos da mesada por pagar: paga-os (ou anula a mesada) antes de mudar o valor ou o período.",
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            if (allowance.Period != request.Period)
+            {
+                // Passar de semanal para mensal (ou o contrário) começa a contar do período atual.
+                allowance.StartDate = Allowance.PeriodStart(today, request.Period);
+            }
         }
 
         allowance.AmountCents = request.AmountCents;
