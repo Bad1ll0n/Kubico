@@ -419,6 +419,12 @@ const englishTexts = <String, String>{
   'Terminar sessões': 'Sign out everywhere',
   'Membros e convites': 'Members and invites',
   'Terminar sessão': 'Sign out',
+  'Mudar de criança': 'Switch child',
+  'Ler o código da família': 'Scan the family code',
+  'Aponta para o QR do código da família, no telemóvel de um adulto da casa.':
+      'Point at the family code QR, on the phone of an adult in the household.',
+  'Ler o QR do código da família': 'Scan the family code QR',
+  'QR do código da família': 'Family code QR',
   'Terminar sessão em todos os dispositivos': 'Sign out of all devices',
   'Mudar de casa': 'Switch household',
   'Adicionar casa…': 'Add household…',

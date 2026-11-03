@@ -9,6 +9,7 @@ import '../notifications/notification_center.dart';
 import '../notifications/open_notification.dart';
 import '../notifications/push_registration.dart';
 import '../realtime/household_realtime.dart';
+import '../session/child_device.dart';
 import '../session/session_controller.dart';
 import '../shopping/shopping_repository.dart';
 import 'account_screen.dart';
@@ -214,6 +215,12 @@ class _HomeScreenState extends State<HomeScreen> {
     notifications.clear();
   }
 
+  /// "Mudar de criança" (tablet partilhado): termina esta sessão e abre logo o "Quem és tu?".
+  Future<void> _switchChild(SessionController session) {
+    ChildDevice.openPickerOnSignIn = true;
+    return _signOut(session, everywhere: false);
+  }
+
   /// A minha conta. Se for apagada, arruma o que a app guardou desta sessão (como ao terminar sessão).
   Future<void> _openAccount() {
     final realtime = context.read<HouseholdRealtime>();
@@ -341,20 +348,40 @@ class _HomeScreenState extends State<HomeScreen> {
                   'help' => Navigator.of(
                     context,
                   ).push(MaterialPageRoute<void>(builder: (_) => HelpScreen(householdId: household.id))),
+                  'switch-child' => _switchChild(session),
                   _ => _signOut(session, everywhere: value == 'logout-all'),
                 },
-                itemBuilder: (_) => [
-                  PopupMenuItem(enabled: false, child: Text(session.user?.email ?? session.user?.displayName ?? '')),
-                  // O painel de cozinha funciona com a sessão de um adulto (conclui tarefas por quem as fez).
-                  if (household.role.canManageContent)
-                    PopupMenuItem(value: 'panel', child: Text('Modo painel de cozinha'.tr)),
-                  PopupMenuItem(value: 'activity', child: Text('Histórico de alterações'.tr)),
-                  PopupMenuItem(value: 'account', child: Text('A minha conta'.tr)),
-                  PopupMenuItem(value: 'devices', child: Text('Dispositivos com sessão iniciada'.tr)),
-                  PopupMenuItem(value: 'help', child: Text('Ajuda e sugestões'.tr)),
-                  PopupMenuItem(value: 'logout', child: Text('Terminar sessão'.tr)),
-                  PopupMenuItem(value: 'logout-all', child: Text('Terminar sessão em todos os dispositivos'.tr)),
-                ],
+                // Com ícones e separadores: o dia a dia em cima, sair em baixo. Uma criança só vê o que é dela.
+                itemBuilder: (_) {
+                  final child = session.user?.isChildProfile == true;
+                  PopupMenuItem<String> item(String value, IconData icon, String label) => PopupMenuItem(
+                    value: value,
+                    child: Row(
+                      children: [
+                        Icon(icon),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(label)),
+                      ],
+                    ),
+                  );
+                  return [
+                    PopupMenuItem(enabled: false, child: Text(session.user?.email ?? session.user?.displayName ?? '')),
+                    // O painel de cozinha funciona com a sessão de um adulto (conclui tarefas por quem as fez).
+                    if (household.role.canManageContent)
+                      item('panel', Icons.countertops_rounded, 'Modo painel de cozinha'.tr),
+                    if (!child) item('activity', Icons.history_rounded, 'Histórico de alterações'.tr),
+                    item('account', Icons.person_rounded, 'A minha conta'.tr),
+                    if (!child) item('devices', Icons.devices_rounded, 'Dispositivos com sessão iniciada'.tr),
+                    item('help', Icons.help_rounded, 'Ajuda e sugestões'.tr),
+                    const PopupMenuDivider(),
+                    if (child)
+                      item('switch-child', Icons.switch_account_rounded, 'Mudar de criança'.tr)
+                    else ...[
+                      item('logout', Icons.logout_rounded, 'Terminar sessão'.tr),
+                      item('logout-all', Icons.phonelink_erase_rounded, 'Terminar sessão em todos os dispositivos'.tr),
+                    ],
+                  ];
+                },
               ),
             ],
           ),

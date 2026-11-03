@@ -12,6 +12,7 @@ import 'src/notifications/firebase_push.dart';
 import 'src/notifications/notification_center.dart';
 import 'src/notifications/push_registration.dart';
 import 'src/realtime/household_realtime.dart';
+import 'src/session/child_device.dart';
 import 'src/session/device_kind.dart';
 import 'src/session/session_controller.dart';
 import 'src/session/token_store.dart';
@@ -26,6 +27,7 @@ Future<void> main() async {
   final preferences = PreferencesStore();
   await AppLanguage.restore(preferences);
   await ReadingMode.restore(preferences);
+  await ChildDevice.restore(preferences);
   final api = ApiClient(baseUrl: AppConfig.apiUrl, deviceKind: currentDeviceKind());
   final session = SessionController(api: api, store: const SecureTokenStore());
   final restoringSession = session.restore();

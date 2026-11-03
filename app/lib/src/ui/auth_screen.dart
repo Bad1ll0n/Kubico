@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../l10n/strings.dart';
+import '../session/child_device.dart';
 import '../session/session_controller.dart';
 import 'child_sign_in_screen.dart';
 import 'design/brand.dart';
@@ -27,6 +28,20 @@ class _AuthScreenState extends State<AuthScreen> {
   String? _challenge;
   final _code = TextEditingController();
   var _recovery = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // "Mudar de criança": vai direto ao "Quem és tu?".
+    if (ChildDevice.openPickerOnSignIn) {
+      ChildDevice.openPickerOnSignIn = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ChildSignInScreen()));
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {

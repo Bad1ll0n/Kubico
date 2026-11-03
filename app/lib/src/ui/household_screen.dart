@@ -552,8 +552,17 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
-            if (code != null)
-              Row(
+            if (code != null) ...[
+              // Com o QR, a criança lê o código com a câmara do tablet em vez de o escrever.
+              Center(
+                child: Semantics(
+                  label: 'QR do código da família'.tr,
+                  child: QrImageView(data: code, size: 160, backgroundColor: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text('Código da família: '.tr, style: theme.textTheme.bodyMedium),
                   SelectableText(
@@ -570,6 +579,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                   ),
                 ],
               ),
+            ],
             Wrap(
               spacing: 8,
               runSpacing: 8,

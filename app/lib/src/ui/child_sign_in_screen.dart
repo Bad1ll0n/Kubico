@@ -4,12 +4,15 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
+import '../session/child_device.dart';
 import '../session/session_controller.dart';
 import 'design/components.dart';
 import 'design/pin_pad.dart';
+import 'scanner_screen.dart';
 import 'theme.dart';
 
 /// Entrada de uma criança sem email: o código da família (que um adulto vê no ecrã dos membros), o seu nome e o PIN.
+/// Depois da primeira entrada o aparelho lembra o código e abre logo em "Quem és tu?" (tablet partilhado, UX-11).
 class ChildSignInScreen extends StatefulWidget {
   const ChildSignInScreen({super.key});
 
@@ -23,6 +26,18 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
   List<ChildProfileOption>? _profiles;
   ChildProfileOption? _chosen;
   var _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final saved = ChildDevice.familyCode.value;
+    if (saved != null) {
+      _code.text = saved;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _findProfiles();
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -52,10 +67,27 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
     setState(() => _profiles = profiles);
   });
 
+  /// Lê o QR do código da família (no ecrã dos membros, no telemóvel de um adulto).
+  Future<void> _scan() async {
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => ScannerScreen<String>(
+          title: 'Ler o código da família'.tr,
+          hint: 'Aponta para o QR do código da família, no telemóvel de um adulto da casa.'.tr,
+          accept: familyCodeFrom,
+        ),
+      ),
+    );
+    if (code == null || !mounted) return;
+    _code.text = code;
+    await _findProfiles();
+  }
+
   Future<void> _signIn() => _run(() async {
     final navigator = Navigator.of(context);
     try {
       await context.read<SessionController>().signInChild(_code.text, _chosen!.userId, _pin.text);
+      await ChildDevice.remember(_code.text.trim());
     } catch (_) {
       _pin.clear();
       rethrow;
@@ -95,7 +127,16 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
                   TextField(
                     controller: _code,
                     autofocus: true,
-                    decoration: InputDecoration(labelText: 'Código da família'.tr),
+                    decoration: InputDecoration(
+                      labelText: 'Código da família'.tr,
+                      suffixIcon: scannerAvailable
+                          ? IconButton(
+                              tooltip: 'Ler o QR do código da família'.tr,
+                              icon: const Icon(Icons.qr_code_scanner_rounded),
+                              onPressed: _busy ? null : _scan,
+                            )
+                          : null,
+                    ),
                     textCapitalization: TextCapitalization.characters,
                     onSubmitted: (_) => _findProfiles(),
                   ),
@@ -137,7 +178,14 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  TextButton(onPressed: () => setState(() => _profiles = null), child: Text('Mudar o código'.tr)),
+                  TextButton(
+                    onPressed: () {
+                      ChildDevice.forget();
+                      _code.clear();
+                      setState(() => _profiles = null);
+                    },
+                    child: Text('Mudar o código'.tr),
+                  ),
                 ] else ...[
                   MemberAvatar(name: chosen.displayName, color: chosen.color, size: 88),
                   const SizedBox(height: 12),
@@ -170,4 +218,10 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
       ),
     );
   }
+}
+
+/// O código da família num QR lido (só letras e algarismos), ou null se não parecer um.
+String? familyCodeFrom(String raw) {
+  final code = raw.trim().toUpperCase();
+  return RegExp(r'^[A-Z0-9]{4,16}$').hasMatch(code) ? code : null;
 }
