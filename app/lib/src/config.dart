@@ -16,6 +16,11 @@ class AppConfig {
   static String get apiUrl {
     if (_fromEnvironment.isNotEmpty) return _fromEnvironment;
 
+    // Uma app nativa de release sem o endereço da API ficava a apontar para o PC de desenvolvimento, sem erro claro.
+    if (kReleaseMode && !kIsWeb) {
+      throw StateError('Falta --dart-define=API_URL=https://… nesta build de release.');
+    }
+
     // O emulador Android chega ao PC através de 10.0.2.2, não de localhost.
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       return 'http://10.0.2.2:5281';

@@ -2,8 +2,12 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Ditar artigos para a lista de compras. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Sem cópias automáticas para a conta Google: as preferências têm dados da casa (a cópia das listas, a fila) e o
+         ficheiro cifrado do flutter_secure_storage não se lê noutro aparelho (a chave fica no Keystore deste). -->
     <application
         android:label="Kubico"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

@@ -87,6 +87,7 @@ KUBICO_API_URL=http://localhost:5281 flutter test test/live_api_test.dart
 - Aplicar migrações no deploy (`Database__MigrateOnStartup=true` ou `dotnet ef database update`).
 - Cópias de segurança: o `docker compose` tem um serviço `backup` que faz um `pg_dump` por dia em `./backups` (guarda 14 dias; para repor, ver o comentário no `docker-compose.yml`). Guarda a `DataProtection:MasterKey` noutro sítio: não vai na cópia e sem ela os segredos da 2FA e das contas de calendário ligadas não se leem.
 - Saúde: `/health/live` (o processo responde) e `/health/ready` (a base de dados também).
+- App Android para a Play Store: `app/android/key.properties` (fora do Git) com `storeFile`, `storePassword`, `keyAlias` e `keyPassword`, e a build com `--dart-define=API_URL=https://…` (sem ele, uma app nativa de release recusa-se a arrancar).
 - `PublicBaseUrl` (opcional): endereço público da API (ex.: `https://api.kubico.pt`), para os endereços de subscrição do calendário quando a API está atrás de um proxy.
 - `Push__Fcm__ServiceAccountFile` (ou `Push__Fcm__ServiceAccountJson`, com o conteúdo): a chave da conta de serviço do projeto Firebase `kubico-casa`, para os avisos chegarem aos telemóveis. Sem ela, os avisos ficam só na app. Em desenvolvimento: `dotnet user-secrets set "Push:Fcm:ServiceAccountFile" "C:\Users\Badillon\segredos\kubico-firebase.json" --project backend/src/Kubico.Api`.
 - `Jwt__AccessTokenLifetimeMinutes` (15) e `Jwt__RefreshTokenLifetimeDays` (60), se quiseres outras durações de sessão.
