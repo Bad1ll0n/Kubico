@@ -172,8 +172,10 @@ class ApiClient {
   Future<HouseholdDetails> getHousehold(String householdId) async =>
       HouseholdDetails.fromJson(await _send('GET', '/api/households/$householdId'));
 
-  Future<Invite> createInvite(String householdId, HouseholdRole role) async =>
-      Invite.fromJson(await _send('POST', '/api/households/$householdId/invites', body: {'role': role.apiValue}));
+  /// Um convite com este papel. [maxUses]: quantas pessoas podem entrar com ele (por omissão, uma).
+  Future<Invite> createInvite(String householdId, HouseholdRole role, {int? maxUses}) async => Invite.fromJson(
+    await _send('POST', '/api/households/$householdId/invites', body: {'role': role.apiValue, 'maxUses': ?maxUses}),
+  );
 
   /// Os convites que ainda servem (só para quem gere os membros).
   Future<List<Invite>> getInvites(String householdId) async => [

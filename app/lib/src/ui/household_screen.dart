@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
@@ -149,15 +150,41 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
   Future<void> _invite() async {
     final role = await _pickRole('Convidar como…'.tr, roles: HouseholdRole.invitable);
     if (role == null || !mounted) return;
+    // Por omissão um convite serve uma pessoa (um link reencaminhado não deixa entrar mais ninguém).
+    final many = await showDialog<bool>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text('Para quantas pessoas?'.tr),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, false),
+            child: ListTile(
+              leading: const Icon(Icons.person_rounded),
+              title: Text('Uma pessoa'.tr),
+              subtitle: Text('O mais seguro: depois de alguém entrar, deixa de servir.'.tr),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, true),
+            child: ListTile(
+              leading: const Icon(Icons.groups_rounded),
+              title: Text('Várias pessoas (até 10)'.tr),
+              subtitle: Text('Por exemplo, para os colegas de casa.'.tr),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (many == null || !mounted) return;
 
     try {
-      final invite = await _api.createInvite(widget.householdId, role);
+      final invite = await _api.createInvite(widget.householdId, role, maxUses: many ? 10 : 1);
       if (!mounted) return;
       await _load();
       if (!mounted) return;
       await showDialog<void>(
         context: context,
-        builder: (_) => _InviteDialog(invite: invite),
+        builder: (_) => _InviteDialog(invite: invite, householdName: _details?.name ?? ''),
       );
     } catch (e) {
       if (mounted) showError(context, e);
@@ -569,9 +596,14 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
 }
 
 class _InviteDialog extends StatelessWidget {
-  const _InviteDialog({required this.invite});
+  const _InviteDialog({required this.invite, required this.householdName});
 
   final Invite invite;
+  final String householdName;
+
+  /// A mensagem pronta a enviar (WhatsApp, SMS, email…): o convite, o código e, se houver, o link.
+  String _message(String? link) =>
+      ['Convidei-te para a casa «$householdName» no Kubico.'.tr, 'Código: ${invite.code}'.tr, ?link].join('\n');
 
   @override
   Widget build(BuildContext context) {
@@ -604,6 +636,12 @@ class _InviteDialog extends StatelessWidget {
         ),
       ),
       actions: [
+        // A folha de partilha do sistema (no browser, a do navegador, se existir).
+        TextButton.icon(
+          icon: const Icon(Icons.share_rounded),
+          label: Text('Partilhar'.tr),
+          onPressed: () => SharePlus.instance.share(ShareParams(text: _message(link), subject: 'Kubico')),
+        ),
         if (link != null)
           TextButton.icon(
             icon: const Icon(Icons.link),

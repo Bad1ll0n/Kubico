@@ -89,10 +89,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Adulto'));
     await tester.pumpAndSettle();
+    expect(find.text('Para quantas pessoas?'), findsOneWidget);
+    await tester.tap(find.text('Uma pessoa'));
+    await tester.pumpAndSettle();
 
     expect(find.text('K7M2QX9P'), findsOneWidget);
     expect(find.byType(QrImageView), findsOneWidget);
     expect(find.text('Copiar código'), findsOneWidget);
+    expect(find.text('Partilhar'), findsOneWidget);
   });
 
   testWidgets('quem chega por um link de convite já encontra o código preenchido', (tester) async {
