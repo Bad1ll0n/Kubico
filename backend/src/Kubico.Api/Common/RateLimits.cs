@@ -7,7 +7,7 @@ namespace Kubico.Api.Common;
 
 /// <summary>
 /// Limite de pedidos por endereço IP nos pedidos sem sessão (entrar, registar, renovar a sessão, entrada das
-/// crianças): acima do limite, 429 com <c>Retry-After</c>. Os valores (pedidos por minuto) vêm de
+/// crianças) e nos códigos de convite: acima do limite, 429 com <c>Retry-After</c>. Os valores (pedidos por minuto) vêm de
 /// <c>RateLimiting:*PerMinute</c>; <c>RateLimiting:Enabled=false</c> desliga-o (testes). Fica em memória: com várias
 /// instâncias da API, cada uma conta os seus (limitação conhecida, ver CLAUDE.md). Atrás de um proxy, o IP vem do
 /// cabeçalho X-Forwarded-For só se o proxy estiver em <c>ForwardedHeaders:KnownProxies</c>.
@@ -19,6 +19,7 @@ public static class RateLimits
     public const string Refresh = "refresh";
     public const string ChildLogin = "child-login";
     public const string ChildProfiles = "child-profiles";
+    public const string Invites = "invites";
 
     /// <summary>Os valores por omissão (produção), em pedidos por minuto e por IP.</summary>
     private static readonly Dictionary<string, (string Setting, int PerMinute)> Policies = new()
@@ -28,6 +29,9 @@ public static class RateLimits
         [Refresh] = ("RefreshPerMinute", 30),
         [ChildLogin] = ("ChildLoginPerMinute", 10),
         [ChildProfiles] = ("ChildProfilesPerMinute", 30),
+
+        // Ver e aceitar convites (com sessão): quem tenta adivinhar códigos é travado.
+        [Invites] = ("InvitesPerMinute", 20),
     };
 
     public static IServiceCollection AddKubicoRateLimits(this IServiceCollection services, IConfiguration configuration)

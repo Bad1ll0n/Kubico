@@ -107,7 +107,8 @@ public static class AuthEndpoints
             CancellationToken ct) =>
         {
             var email = NormalizeEmail(request.Email);
-            if (!throttle.TryBegin(email, out var wait))
+            var key = ThrottleKey(email, http.HttpContext);
+            if (!throttle.TryBegin(key, out var wait))
             {
                 return TooManyPasswords(http.HttpContext, wait);
             }
@@ -116,12 +117,12 @@ public static class AuthEndpoints
             var (hashUser, hash) = user is null ? Dummy.Value : (user, user.PasswordHash);
             if (hasher.VerifyHashedPassword(hashUser, hash, request.Password) == PasswordVerificationResult.Failed || user is null)
             {
-                return throttle.Failed(email) is { } locked
+                return throttle.Failed(key) is { } locked
                     ? TooManyPasswords(http.HttpContext, locked)
                     : Results.Problem(title: "Email ou palavra-passe incorretos.", statusCode: StatusCodes.Status401Unauthorized);
             }
 
-            throttle.Succeeded(email);
+            throttle.Succeeded(key);
             if (user.TwoFactorEnabled)
             {
                 return Results.Ok(new TwoFactorChallengeDto(true, twoFactor.IssueChallenge(user.Id, Device(http))));
@@ -239,10 +240,18 @@ public static class AuthEndpoints
     /// <summary>
     /// Confere a palavra-passe numa ação sensível (com o mesmo limite de tentativas da entrada). Null se estiver certa.
     /// </summary>
+    /// <summary>
+    /// O que o <see cref="LoginThrottle"/> conta: a conta e o IP de onde vêm as tentativas. Só pelo email, qualquer
+    /// pessoa que o soubesse deixava o dono de fora (5 palavras-passe erradas de outro sítio bloqueavam até a certa).
+    /// Adivinhar a partir de muitos IPs continua travado pelo limite de pedidos por IP (RateLimits.Login).
+    /// </summary>
+    public static string ThrottleKey(string identity, HttpContext http) =>
+        $"{identity}|{http.Connection.RemoteIpAddress}";
+
     internal static IResult? CheckPassword(
         LoginThrottle throttle, IPasswordHasher<User> hasher, HttpContext http, User user, string? password)
     {
-        var key = user.Email ?? user.Id.ToString();
+        var key = ThrottleKey(user.Email ?? user.Id.ToString(), http);
         if (!throttle.TryBegin(key, out var wait))
         {
             return TooManyPasswords(http, wait);

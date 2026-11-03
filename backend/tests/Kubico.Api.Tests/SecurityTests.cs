@@ -11,6 +11,7 @@ using Kubico.Domain.Households;
 using Kubico.Domain.Users;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -323,6 +324,41 @@ public sealed class RateLimitTests : IDisposable
         Assert.Equal(HttpStatusCode.TooManyRequests, statuses[10]);
         Assert.Equal(HttpStatusCode.TooManyRequests, last.StatusCode);
         Assert.True(last.Headers.RetryAfter is not null);
+    }
+
+    [Fact]
+    public async Task Guessing_invite_codes_is_limited_by_address()
+    {
+        var (client, _) = await _factory.CreateUserAsync("Curioso");
+        var limited = _app.CreateClient();
+        limited.DefaultRequestHeaders.Authorization = client.DefaultRequestHeaders.Authorization;
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < 21; i++)
+        {
+            statuses.Add((await limited.GetAsync($"/api/invites/ABCD{i:0000}")).StatusCode);
+        }
+
+        Assert.All(statuses.Take(20), s => Assert.Equal(HttpStatusCode.NotFound, s));
+        Assert.Equal(HttpStatusCode.TooManyRequests, statuses[20]);
+    }
+
+    [Fact]
+    public void Wrong_passwords_from_another_address_do_not_lock_the_owner_out()
+    {
+        var throttle = new LoginThrottle(TimeProvider.System);
+        static HttpContext From(string ip) =>
+            new DefaultHttpContext { Connection = { RemoteIpAddress = IPAddress.Parse(ip) } };
+        var attacker = AuthEndpoints.ThrottleKey("ana@kubico.test", From("203.0.113.9"));
+        var owner = AuthEndpoints.ThrottleKey("ana@kubico.test", From("198.51.100.4"));
+
+        for (var i = 0; i < LoginThrottle.MaxFailures; i++)
+        {
+            Assert.True(throttle.TryBegin(attacker, out _));
+            throttle.Failed(attacker);
+        }
+
+        Assert.False(throttle.TryBegin(attacker, out _));
+        Assert.True(throttle.TryBegin(owner, out _));
     }
 
     [Fact]

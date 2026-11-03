@@ -21,7 +21,8 @@ public record CreateHouseholdRequest(
 
 /// <summary>
 /// Um convite com o papel de quem entra (não há convites para administrador: passa-se a administração depois).
-/// <c>MaxUses</c>: quantas pessoas podem entrar com ele (por omissão uma, nos de adulto; sem limite nos outros).
+/// <c>MaxUses</c>: quantas pessoas podem entrar com ele (por omissão uma, em todos os papéis: um link de convidado
+/// reencaminhado num grupo deixava entrar quem o tivesse; para várias pessoas, diz-se quantas, até 50).
 /// </summary>
 public record CreateInviteRequest(HouseholdRole Role = HouseholdRole.Adult, int ValidForDays = 7, int? MaxUses = null);
 
@@ -77,8 +78,10 @@ public static class HouseholdEndpoints
         households.MapGet("/{householdId:guid}/invites", GetInvites);
         households.MapDelete("/{householdId:guid}/invites/{code}", RevokeInvite).RequireActiveSession();
 
-        api.MapGet("/invites/{code}", PreviewInvite).WithTags("Households").RequireAuthorization();
-        api.MapPost("/invites/{code}/accept", AcceptInvite).WithTags("Households").RequireAuthorization();
+        api.MapGet("/invites/{code}", PreviewInvite).WithTags("Households").RequireAuthorization()
+            .RequireRateLimiting(RateLimits.Invites);
+        api.MapPost("/invites/{code}/accept", AcceptInvite).WithTags("Households").RequireAuthorization()
+            .RequireRateLimiting(RateLimits.Invites);
 
         return api;
     }
@@ -243,7 +246,7 @@ public static class HouseholdEndpoints
             CreatedByUserId = userId,
             CreatedAt = now,
             ExpiresAt = now.AddDays(request.ValidForDays),
-            MaxUses = request.MaxUses ?? (request.Role == HouseholdRole.Adult ? 1 : null),
+            MaxUses = request.MaxUses ?? 1,
         };
 
         db.Invites.Add(invite);

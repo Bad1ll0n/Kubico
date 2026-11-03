@@ -76,7 +76,7 @@ public class MemberFixesTests(KubicoApiFactory factory) : IClassFixture<KubicoAp
         var thirdRefused = await third.PostAsync($"/api/invites/{guestInvite.Code}/accept", null);
         var activeAfter = await admin.GetFromJsonAsync<List<InviteDto>>(url, TestJson.Options);
 
-        Assert.Equal((1, (int?)null), (adultInvite.MaxUses, guestInvite.MaxUses));
+        Assert.Equal((1, (int?)1), (adultInvite.MaxUses, guestInvite.MaxUses));
         Assert.Equal(HttpStatusCode.BadRequest, asAdmin.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, tooMany.StatusCode);
         Assert.Equal(HttpStatusCode.OK, firstJoins.StatusCode);

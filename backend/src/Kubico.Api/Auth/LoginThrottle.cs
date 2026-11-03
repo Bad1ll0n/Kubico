@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 namespace Kubico.Api.Auth;
 
 /// <summary>
-/// Limite de palavras-passe erradas por email: ao fim de 5 seguidas, a entrada fica bloqueada 1 minuto; se
+/// Limite de palavras-passe erradas por conta e IP (<see cref="AuthEndpoints.ThrottleKey"/>): ao fim de 5 seguidas, a entrada fica bloqueada 1 minuto; se
 /// continuarem a falhar, 5 minutos e depois 15. Cada tentativa é reservada antes de se verificar a palavra-passe, por
 /// isso pedidos em simultâneo não passam do limite. Conta também os emails sem conta (a resposta é igual nos dois
 /// casos: não se fica a saber quem tem conta). Fica em memória: com várias instâncias da API, cada uma conta as suas
