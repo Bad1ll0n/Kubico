@@ -52,6 +52,7 @@ public static class MemberEndpoints
             return error;
         }
 
+        await LockHouseholdAsync(db, householdId, ct);
         var membership = await FindMember(db, householdId, userId, ct);
         if (membership is null)
         {
@@ -108,6 +109,7 @@ public static class MemberEndpoints
             return Problem("Para saíres da casa, usa a opção Sair desta casa.", StatusCodes.Status400BadRequest);
         }
 
+        await LockHouseholdAsync(db, householdId, ct);
         var membership = await FindMember(db, householdId, userId, ct);
         if (membership is null)
         {
@@ -139,6 +141,7 @@ public static class MemberEndpoints
             return error;
         }
 
+        await LockHouseholdAsync(db, householdId, ct);
         var membership = (await FindMember(db, householdId, me, ct))!;
         if (membership.User.IsChildProfile)
         {
@@ -184,6 +187,7 @@ public static class MemberEndpoints
             return error;
         }
 
+        await LockHouseholdAsync(db, householdId, ct);
         var target = await FindMember(db, householdId, request.UserId, ct);
         if (target is null || request.UserId == me)
         {
@@ -216,6 +220,13 @@ public static class MemberEndpoints
 
     private static Task<Membership?> FindMember(KubicoDbContext db, Guid householdId, Guid userId, CancellationToken ct) =>
         db.Memberships.Include(m => m.User).SingleOrDefaultAsync(m => m.HouseholdId == householdId && m.UserId == userId, ct);
+
+    /// <summary>
+    /// Tranca a casa até ao próximo SaveChanges (chama-se antes de ler quem lá está): dois pedidos que mudam membros ou
+    /// papéis ao mesmo tempo não passam os dois; o segundo recebe 409 "Alguém mudou isto ao mesmo tempo…".
+    /// </summary>
+    internal static async Task LockHouseholdAsync(KubicoDbContext db, Guid householdId, CancellationToken ct) =>
+        db.Touch(await db.Households.SingleAsync(h => h.Id == householdId, ct));
 
     private static Task<int> AdminCount(KubicoDbContext db, Guid householdId, CancellationToken ct) =>
         db.Memberships.CountAsync(m => m.HouseholdId == householdId && m.Role == HouseholdRole.Admin, ct);

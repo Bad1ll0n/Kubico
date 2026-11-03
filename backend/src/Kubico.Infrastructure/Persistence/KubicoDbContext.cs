@@ -141,6 +141,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.Property(h => h.Name).HasMaxLength(100);
             e.Property(h => h.TimeZoneId).HasMaxLength(64).HasDefaultValue(Household.DefaultTimeZoneId);
             e.Property(h => h.ChildSignInCode).HasMaxLength(16);
+            e.Property(h => h.Version).IsConcurrencyToken();
             e.HasIndex(h => h.ChildSignInCode).IsUnique();
         });
 

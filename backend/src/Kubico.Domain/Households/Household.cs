@@ -4,9 +4,16 @@ namespace Kubico.Domain.Households;
 /// Um agregado (casa/família). Tudo o que é partilhado pertence a um agregado:
 /// é a fronteira de multi-tenancy e de permissões.
 /// </summary>
-public class Household
+public class Household : IVersioned
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+
+    /// <summary>
+    /// Cadeado das mudanças aos membros e papéis (<c>MemberEndpoints.LockHouseholdAsync</c>): "há sempre um
+    /// administrador" e "o último a sair apaga a casa" dependem de várias linhas, e dois pedidos em simultâneo
+    /// (dois administradores despromovem-se um ao outro) passavam os dois a verificação.
+    /// </summary>
+    public Guid Version { get; set; }
     public required string Name { get; set; }
 
     /// <summary>Fuso horário IANA da casa. Define o que é "hoje" para prazos e tarefas.</summary>

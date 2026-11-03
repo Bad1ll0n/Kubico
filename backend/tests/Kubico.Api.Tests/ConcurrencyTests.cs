@@ -9,6 +9,8 @@ using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
 using Kubico.Domain.Rewards;
 using Kubico.Domain.Users;
+using Kubico.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Kubico.Api.Tests;
@@ -234,5 +236,43 @@ public class ConcurrencyTests(KubicoApiFactory factory) : IClassFixture<KubicoAp
         Assert.Equal(1, results.Count(s => s == HttpStatusCode.OK));
         Assert.Equal(2, members.Count);
         Assert.Equal(1, invite.MaxUses);
+    }
+
+    [Fact]
+    public async Task Two_admins_demoting_each_other_at_the_same_time_never_leave_the_house_without_an_admin()
+    {
+        var (ana, anaAuth, household) = await Fase1.HouseholdAsync(factory);
+        var (rui, ruiId) = await Fase1.MemberAsync(factory, ana, household, "Rui", HouseholdRole.Adult);
+        (await ana.PutAsJsonAsync($"/api/households/{household}/members/{ruiId}/role",
+            new UpdateMemberRoleRequest(HouseholdRole.Admin), TestJson.Options)).EnsureSuccessStatusCode();
+
+        var results = await Fase1.ParallelAsync(2, i => i == 0
+            ? ana.PutAsJsonAsync($"/api/households/{household}/members/{ruiId}/role", new UpdateMemberRoleRequest(HouseholdRole.Adult), TestJson.Options)
+            : rui.PutAsJsonAsync($"/api/households/{household}/members/{anaAuth.User.Id}/role", new UpdateMemberRoleRequest(HouseholdRole.Adult), TestJson.Options));
+        var members = (await ana.GetFromJsonAsync<HouseholdDto>($"/api/households/{household}", TestJson.Options))!.Members;
+
+        Assert.DoesNotContain(HttpStatusCode.InternalServerError, results);
+        Assert.Contains(members, m => m.Role == HouseholdRole.Admin);
+    }
+
+    [Fact]
+    public async Task The_last_two_adults_leaving_at_the_same_time_never_leave_an_empty_house_behind()
+    {
+        var (ana, _, household) = await Fase1.HouseholdAsync(factory);
+        var (rui, ruiId) = await Fase1.MemberAsync(factory, ana, household, "Rui", HouseholdRole.Adult);
+        (await ana.PutAsJsonAsync($"/api/households/{household}/members/{ruiId}/role",
+            new UpdateMemberRoleRequest(HouseholdRole.Admin), TestJson.Options)).EnsureSuccessStatusCode();
+        await Fase1.ChildProfileAsync(factory, ana, household, "Rita");
+
+        var results = await Fase1.ParallelAsync(2, i => (i == 0 ? ana : rui).PostAsync($"/api/households/{household}/leave", null));
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<KubicoDbContext>();
+        var exists = await db.Households.AnyAsync(h => h.Id == household);
+        var accounts = await db.Memberships.CountAsync(m => m.HouseholdId == household && m.User.ManagedByHouseholdId == null);
+
+        Assert.DoesNotContain(HttpStatusCode.InternalServerError, results);
+        // Ou a casa foi apagada (com os perfis de criança), ou ficou lá alguém com conta; nunca só as crianças.
+        Assert.True(!exists || accounts > 0, $"exists={exists} accounts={accounts}");
     }
 }

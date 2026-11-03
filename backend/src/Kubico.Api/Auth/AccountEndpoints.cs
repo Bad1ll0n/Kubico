@@ -451,6 +451,13 @@ public static class AccountEndpoints
         }
 
         // Primeiro confirma-se tudo (nada muda se alguma casa ficasse sem administrador adulto).
+        // Tranca as casas antes de as ler: quem sair ou mudar de papel ao mesmo tempo não deixa uma casa sem
+        // administrador (um dos pedidos recebe 409).
+        foreach (var householdId in await db.Memberships.Where(m => m.UserId == userId).Select(m => m.HouseholdId).ToListAsync(ct))
+        {
+            await MemberEndpoints.LockHouseholdAsync(db, householdId, ct);
+        }
+
         var plan = await PlanDeletionAsync(db, userId, ct);
         if (plan.FirstOrDefault(p => p.Outcome == "Blocked") is { Membership: { } blocked })
         {
