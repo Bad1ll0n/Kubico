@@ -318,18 +318,24 @@ class _HomeScreenState extends State<HomeScreen> {
         // As barras de navegação precisam de pelo menos duas áreas.
         final navigation = sections.length >= 2;
 
+        // Num telemóvel, "Membros e convites" vai para o menu: o nome da casa precisa do espaço (DES-23).
+        final narrow = MediaQuery.sizeOf(context).width < 600;
+        void openMembers() =>
+            Navigator.of(context)
+                .push(MaterialPageRoute<void>(builder: (_) => HouseholdScreen(householdId: household.id)));
+
         return Scaffold(
           appBar: AppBar(
-            title: _HouseholdSwitcher(session: session, current: household),
+            titleSpacing: narrow ? 8 : null,
+            title: _HouseholdSwitcher(session: session, current: household, compact: narrow),
             actions: [
               const NotificationsBell(),
-              IconButton(
-                tooltip: 'Membros e convites'.tr,
-                icon: const Icon(Icons.group_rounded),
-                onPressed: () =>
-                    Navigator.of(context)
-                        .push(MaterialPageRoute<void>(builder: (_) => HouseholdScreen(householdId: household.id))),
-              ),
+              if (!narrow)
+                IconButton(
+                  tooltip: 'Membros e convites'.tr,
+                  icon: const Icon(Icons.group_rounded),
+                  onPressed: openMembers,
+                ),
               PopupMenuButton<String>(
                 onSelected: (value) => switch (value) {
                   'devices' => Navigator.of(
@@ -349,6 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     context,
                   ).push(MaterialPageRoute<void>(builder: (_) => HelpScreen(householdId: household.id))),
                   'switch-child' => _switchChild(session),
+                  'members' => openMembers(),
                   _ => _signOut(session, everywhere: value == 'logout-all'),
                 },
                 // Com ícones e separadores: o dia a dia em cima, sair em baixo. Uma criança só vê o que é dela.
@@ -367,6 +374,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   return [
                     PopupMenuItem(enabled: false, child: Text(session.user?.email ?? session.user?.displayName ?? '')),
                     // O painel de cozinha funciona com a sessão de um adulto (conclui tarefas por quem as fez).
+                    if (narrow) item('members', Icons.group_rounded, 'Membros e convites'.tr),
                     if (household.role.canManageContent)
                       item('panel', Icons.countertops_rounded, 'Modo painel de cozinha'.tr),
                     if (!child) item('activity', Icons.history_rounded, 'Histórico de alterações'.tr),
@@ -468,10 +476,13 @@ class _SignOutEverywhereDialogState extends State<_SignOutEverywhereDialog> {
 }
 
 class _HouseholdSwitcher extends StatelessWidget {
-  const _HouseholdSwitcher({required this.session, required this.current});
+  const _HouseholdSwitcher({required this.session, required this.current, this.compact = false});
 
   final SessionController session;
   final HouseholdSummary current;
+
+  /// No telemóvel, sem o ícone da casa (mais espaço para o nome).
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -493,14 +504,21 @@ class _HouseholdSwitcher extends StatelessWidget {
           PopupMenuItem(value: '_add', child: Text('Adicionar casa…'.tr)),
         ],
       ],
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.cottage_rounded),
-          const SizedBox(width: 8),
-          Flexible(child: Text(current.name, overflow: TextOverflow.ellipsis)),
-          const Icon(Icons.arrow_drop_down_rounded),
-        ],
+      // Uma pílula, para se ver que se pode tocar para mudar de casa.
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!compact) ...[const Icon(Icons.cottage_rounded), const SizedBox(width: 8)],
+            Flexible(child: Text(current.name, overflow: TextOverflow.ellipsis)),
+            const Icon(Icons.arrow_drop_down_rounded),
+          ],
+        ),
       ),
     );
   }
