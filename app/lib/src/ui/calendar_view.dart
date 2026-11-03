@@ -134,6 +134,9 @@ class CalendarView extends StatefulWidget {
   State<CalendarView> createState() => _CalendarViewState();
 }
 
+/// A partir desta largura (tablet, PC): mês e dia lado a lado, barra numa só linha e filtro de membros.
+const wideBreakpoint = 840.0;
+
 class _CalendarViewState extends State<CalendarView> {
   final _subscriptions = <StreamSubscription<Object?>>[];
   var _mode = CalendarMode.month;
@@ -142,6 +145,9 @@ class _CalendarViewState extends State<CalendarView> {
   (DateTime, DateTime)? _loadedRange;
   HouseholdDetails? _details;
   Object? _error;
+
+  /// Os membros escondidos pelo filtro (ecrã largo): os eventos só deles deixam de aparecer.
+  final _hidden = <String>{};
 
   /// Só conta a resposta do pedido mais recente (ao navegar depressa, as anteriores chegam tarde).
   var _request = 0;
@@ -330,6 +336,7 @@ class _CalendarViewState extends State<CalendarView> {
       body: Column(
         children: [
           _toolbar(context),
+          if (_details != null && MediaQuery.sizeOf(context).width >= wideBreakpoint) _memberFilter(_details!),
           Expanded(child: calendar == null ? _placeholder() : _content(calendar)),
         ],
       ),
@@ -337,44 +344,52 @@ class _CalendarViewState extends State<CalendarView> {
   }
 
   Widget _toolbar(BuildContext context) {
+    final modes = SegmentedButton<CalendarMode>(
+      segments: [for (final m in CalendarMode.values) ButtonSegment(value: m, label: Text(m.label))],
+      selected: {_mode},
+      showSelectedIcon: false,
+      onSelectionChanged: (selection) => _go(_selected, selection.single),
+    );
+    final wide = MediaQuery.sizeOf(context).width >= wideBreakpoint;
+    // Num ecrã largo, as vistas e a navegação numa só linha (no telemóvel, duas).
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-      child: Column(
+      child: Flex(
+        direction: wide ? Axis.horizontal : Axis.vertical,
         children: [
-          SegmentedButton<CalendarMode>(
-            segments: [for (final m in CalendarMode.values) ButtonSegment(value: m, label: Text(m.label))],
-            selected: {_mode},
-            showSelectedIcon: false,
-            onSelectionChanged: (selection) => _go(_selected, selection.single),
-          ),
-          Row(
-            children: [
-              IconButton(
-                tooltip: 'Anterior'.tr,
-                onPressed: () => _go(shiftFocus(_mode, _selected, -1)),
-                icon: const Icon(Icons.chevron_left),
-              ),
-              Expanded(
-                child: Text(
-                  rangeTitle(_mode, _selected),
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Seguinte'.tr,
-                onPressed: () => _go(shiftFocus(_mode, _selected, 1)),
-                icon: const Icon(Icons.chevron_right),
-              ),
-              TextButton(onPressed: () => _go(clock.now()), child: Text('Hoje'.tr)),
-              // As crianças veem o calendário só na app (o endereço funcionaria fora dela, sem sessão).
-              if (widget.household.role != HouseholdRole.child)
+          if (wide) Flexible(child: modes) else modes,
+          if (wide) const SizedBox(width: 16),
+          _ExpandedIf(
+            wide,
+            child: Row(
+              children: [
                 IconButton(
-                  tooltip: 'Ver noutros calendários'.tr,
-                  onPressed: () => showCalendarFeedDialog(context, householdId: _householdId),
-                  icon: const Icon(Icons.share_outlined),
+                  tooltip: 'Anterior'.tr,
+                  onPressed: () => _go(shiftFocus(_mode, _selected, -1)),
+                  icon: const Icon(Icons.chevron_left),
                 ),
-            ],
+                Expanded(
+                  child: Text(
+                    rangeTitle(_mode, _selected),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Seguinte'.tr,
+                  onPressed: () => _go(shiftFocus(_mode, _selected, 1)),
+                  icon: const Icon(Icons.chevron_right),
+                ),
+                TextButton(onPressed: () => _go(clock.now()), child: Text('Hoje'.tr)),
+                // As crianças veem o calendário só na app (o endereço funcionaria fora dela, sem sessão).
+                if (widget.household.role != HouseholdRole.child)
+                  IconButton(
+                    tooltip: 'Ver noutros calendários'.tr,
+                    onPressed: () => showCalendarFeedDialog(context, householdId: _householdId),
+                    icon: const Icon(Icons.share_outlined),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
@@ -387,7 +402,46 @@ class _CalendarViewState extends State<CalendarView> {
         : StateView.error(message: errorText(_error!), offline: isOffline(_error!), onRetry: _load);
   }
 
-  Widget _content(CalendarRange calendar) {
+  /// O intervalo sem os eventos em que todos os participantes estão escondidos pelo filtro.
+  CalendarRange _filtered(CalendarRange calendar) {
+    if (_hidden.isEmpty) return calendar;
+    bool visible(CalendarOccurrence o) {
+      final people = calendar.events[o.eventId]?.participantUserIds ?? const [];
+      return people.isEmpty || people.any((id) => !_hidden.contains(id));
+    }
+
+    return CalendarRange(
+      events: calendar.events,
+      occurrences: calendar.occurrences.where(visible).toList(),
+      holidays: calendar.holidays,
+    );
+  }
+
+  /// O filtro de membros (ecrã largo): um chip com o avatar de cada um, que liga e desliga os eventos dele.
+  Widget _memberFilter(HouseholdDetails details) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      child: Row(
+        children: [
+          for (final m in details.members)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilterChip(
+                avatar: MemberAvatar(name: m.displayName, color: m.color, size: 24),
+                label: Text(m.displayName),
+                selected: !_hidden.contains(m.userId),
+                showCheckmark: false,
+                onSelected: (on) => setState(() => on ? _hidden.remove(m.userId) : _hidden.add(m.userId)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _content(CalendarRange all) {
+    final calendar = _filtered(all);
     final (first, last) = visibleRange(_mode, _selected);
     if (_mode == CalendarMode.week) {
       final canManage = widget.household.accessTo(HouseholdModule.calendar).canManage;
@@ -401,6 +455,45 @@ class _CalendarViewState extends State<CalendarView> {
           unavailable: _unavailable,
           onOpenDay: (day) => _go(day, CalendarMode.day),
           onTapEvent: canManage ? (event, occurrence) => _edit(event, occurrence) : null,
+        ),
+      );
+    }
+    final wide = MediaQuery.sizeOf(context).width >= wideBreakpoint;
+    if (_mode == CalendarMode.month && wide) {
+      // Num tablet ou PC, o mês à esquerda e a agenda do dia escolhido ao lado (em vez de por baixo).
+      final dayRows = _daySection(calendar, _selected);
+      return RefreshIndicator(
+        onRefresh: _load,
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: (constraints.maxWidth * 0.5).clamp(420.0, 640.0),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+                  children: [
+                    _MonthGrid(
+                      start: first,
+                      month: _selected.month,
+                      selected: _selected,
+                      calendar: calendar,
+                      colorFor: _colorFor,
+                      onSelect: _go,
+                    ),
+                  ],
+                ),
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 96),
+                  itemCount: dayRows.length,
+                  itemBuilder: (context, index) => dayRows[index](context),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -514,6 +607,7 @@ class _MonthGrid extends StatelessWidget {
       isSelected: day == selected,
       isHoliday: calendar.holidayOn(day) != null,
       dots: [for (final o in occurrences.take(3)) colorFor(calendar.events[o.eventId]!)],
+      more: occurrences.length - 3,
       onTap: () => onSelect(day),
     );
   }
@@ -528,6 +622,7 @@ class _DayCell extends StatelessWidget {
     required this.isSelected,
     required this.isHoliday,
     required this.dots,
+    required this.more,
     required this.onTap,
   });
 
@@ -539,6 +634,9 @@ class _DayCell extends StatelessWidget {
 
   /// Cores dos primeiros eventos do dia.
   final List<Color> dots;
+
+  /// Quantos eventos há além dos pontos (mostra-se "+N").
+  final int more;
   final VoidCallback onTap;
 
   @override
@@ -581,7 +679,15 @@ class _DayCell extends StatelessWidget {
                   const SizedBox(height: 2),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: [for (final color in dots) _Dot(color: color)],
+                    children: [
+                      for (final color in dots) _Dot(color: color),
+                      if (more > 0)
+                        Text(
+                          '+$more',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: scheme.onSurfaceVariant, fontSize: 10, height: 1),
+                        ),
+                    ],
                   ),
                 ],
               ),
@@ -738,4 +844,15 @@ class _OccurrenceTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// [child] num Expanded quando [expand] (numa linha), ou sozinho (numa coluna sem altura limitada).
+class _ExpandedIf extends StatelessWidget {
+  const _ExpandedIf(this.expand, {required this.child});
+
+  final bool expand;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => expand ? Expanded(child: child) : child;
 }

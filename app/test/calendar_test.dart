@@ -422,7 +422,7 @@ void main() {
     await tester.tap(find.text('Novo evento'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'O que é?'), 'Dentista');
-    await tester.tap(find.widgetWithText(FilterChip, 'Rita'));
+    await tester.tap(find.widgetWithText(FilterChip, 'Rita').last, warnIfMissed: false);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Guardar'));
     await tester.pumpAndSettle();
@@ -505,5 +505,25 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('week-day-20261111')));
     await tester.pumpAndSettle();
     expect(find.text('Quarta-feira, 11 de novembro'), findsWidgets);
+  });
+
+  testWidgets('num ecrã largo: o mês e o dia lado a lado, e o filtro de membros esconde os eventos de quem se tira', (
+    tester,
+  ) async {
+    await _pump(tester, _FakeApi(), HouseholdRole.adult, size: const Size(1280, 900));
+
+    // O dia escolhido vê-se ao lado do mês, sem descer.
+    final month = tester.getRect(find.byKey(ValueKey(DateTime(2026, 11, 10))));
+    final day = tester.getRect(find.text('Terça-feira, 10 de novembro'));
+    expect(day.left, greaterThan(month.right), reason: 'a agenda do dia fica à direita do mês');
+    expect(find.text('Futebol'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Rita'));
+    await tester.pumpAndSettle();
+    expect(find.text('Futebol'), findsNothing, reason: 'o Futebol é só da Rita');
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Rita'));
+    await tester.pumpAndSettle();
+    expect(find.text('Futebol'), findsOneWidget);
   });
 }
