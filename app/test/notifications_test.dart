@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:kubico/src/api/api_client.dart';
 import 'package:kubico/src/api/models.dart';
 import 'package:kubico/src/notifications/notification_center.dart';
+import 'package:kubico/src/notifications/open_notification.dart';
 import 'package:kubico/src/realtime/household_realtime.dart';
 import 'package:kubico/src/ui/notifications_screen.dart';
 import 'package:provider/provider.dart';
@@ -94,9 +95,13 @@ void main() {
     expect(find.text('3'), findsOneWidget);
   });
 
-  testWidgets('abrir um aviso marca-o como lido; "Marcar como lidos" marca todos', (tester) async {
+  testWidgets('abrir um aviso marca-o como lido e leva à área dele; "Marcar como lidos" marca todos', (tester) async {
     final server = _Server();
     final (center, _) = await _pump(tester, server);
+    NotificationTarget? opened;
+    void listener() => opened ??= OpenNotification.requested.value;
+    OpenNotification.requested.addListener(listener);
+    addTearDown(() => OpenNotification.requested.removeListener(listener));
 
     await tester.tap(find.byType(NotificationsBell));
     await tester.pumpAndSettle();
@@ -106,6 +111,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(center.unreadCount, 1);
     expect(server.requests.last, 'POST /api/notifications/read {"ids":["n1"]}');
+    expect(opened?.module, HouseholdModule.chores, reason: 'o aviso de uma tarefa leva às Tarefas');
+    expect(find.text('Tarefa para ti: Lixo'), findsNothing, reason: 'a lista dos avisos fecha');
+
+    await tester.tap(find.byType(NotificationsBell));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Marcar como lidos'));
     await tester.pumpAndSettle();

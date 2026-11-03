@@ -5,6 +5,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../notifications/notification_center.dart';
+import '../notifications/open_notification.dart';
 import 'dates_pt.dart';
 import 'theme.dart';
 
@@ -84,7 +85,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             for (final n in center.items)
               Card(
                 child: ListTile(
-                  onTap: () => _run(() => center.markRead(n)),
+                  // Marca como lido e leva à casa e à área do aviso.
+                  onTap: () => _run(() async {
+                    await center.markRead(n);
+                    final target = NotificationTarget.of(n.kind, n.householdId);
+                    if (target != null && context.mounted) {
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                      OpenNotification.open(target);
+                    }
+                  }),
                   leading: CircleAvatar(child: Icon(_icon(n.kind))),
                   title: Text(n.title, style: TextStyle(fontWeight: n.isRead ? null : FontWeight.bold)),
                   subtitle: Text(

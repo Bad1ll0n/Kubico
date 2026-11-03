@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
+import 'open_notification.dart';
 
 /// De onde vem o identificador push deste dispositivo (no Firebase Cloud Messaging, o FID).
 abstract class PushTokenSource {
@@ -17,6 +18,10 @@ abstract class PushTokenSource {
 
   /// Ao terminar a sessão: o token antigo deixa de servir.
   Future<void> deleteToken();
+
+  /// Os avisos do telemóvel em que se tocou (o `data` que o servidor envia: kind, householdId…), incluindo o que
+  /// abriu a app.
+  Stream<Map<String, dynamic>> get opened;
 }
 
 /// Sem Firebase configurado (ou num dispositivo sem push): os avisos ficam só no sino da app.
@@ -34,6 +39,9 @@ class NoPushTokenSource implements PushTokenSource {
 
   @override
   Future<void> deleteToken() async {}
+
+  @override
+  Stream<Map<String, dynamic>> get opened => const Stream.empty();
 }
 
 /// Liga o telemóvel à conta para receber avisos fora da app: regista o token ao entrar (e sempre que o Firebase o
@@ -58,6 +66,7 @@ class PushRegistration {
 
   String? _token;
   StreamSubscription<String>? _refreshes;
+  StreamSubscription<Map<String, dynamic>>? _opened;
 
   /// Depois de entrar. Falhas (sem rede, autorização recusada) não impedem de usar a app.
   Future<void> register() async {
@@ -69,6 +78,10 @@ class PushRegistration {
       if (token == null) return;
       await api.registerPushDevice(token, platform);
       _token = token;
+      // Tocar num aviso do telemóvel leva à casa e à área dele.
+      _opened ??= source.opened.listen(
+        (data) => OpenNotification.open(NotificationTarget.of('${data['kind'] ?? ''}', data['householdId'] as String?)),
+      );
       _refreshes ??= source.onTokenRefresh.listen((fresh) async {
         _token = fresh;
         try {

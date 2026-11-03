@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../notifications/notification_center.dart';
+import '../notifications/open_notification.dart';
 import '../notifications/push_registration.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
@@ -80,7 +81,31 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     // Quem sai (ou é tirado) de uma casa deixa de a ver: abre-se outra, ou o ecrã de boas-vindas.
     _membership = context.read<HouseholdRealtime>().events.listen(_onEvent);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _offerPendingInvite());
+    OpenNotification.requested.addListener(_openNotification);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _offerPendingInvite();
+      // Um aviso do telemóvel pode ter aberto a app antes de este ecrã existir.
+      _openNotification();
+    });
+  }
+
+  /// Tocou-se num aviso: muda para a casa dele e abre a área (ou os membros).
+  Future<void> _openNotification() async {
+    final target = OpenNotification.requested.value;
+    if (target == null || !mounted) return;
+    OpenNotification.requested.value = null;
+    final session = context.read<SessionController>();
+    if (!session.households.any((h) => h.id == target.householdId)) return;
+    await session.selectHousehold(target.householdId);
+    if (!mounted) return;
+    setState(() {
+      _section = target.module;
+      _selectedList = null;
+    });
+    if (target.members) {
+      await Navigator.of(context)
+          .push(MaterialPageRoute<void>(builder: (_) => HouseholdScreen(householdId: target.householdId)));
+    }
   }
 
   /// Chegou-se por um link de convite já com casas: pergunta se quer entrar na casa do convite.
@@ -144,6 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _membership?.cancel();
+    OpenNotification.requested.removeListener(_openNotification);
     super.dispose();
   }
 

@@ -47,4 +47,12 @@ class FirebasePushTokenSource implements PushTokenSource {
 
   @override
   Future<void> deleteToken() => _messaging.unregister();
+
+  /// O aviso que abriu a app (se foi por um) e os que se tocam com ela em segundo plano.
+  @override
+  Stream<Map<String, dynamic>> get opened async* {
+    final initial = await _messaging.getInitialMessage();
+    if (initial != null) yield initial.data;
+    yield* FirebaseMessaging.onMessageOpenedApp.map((message) => message.data);
+  }
 }
