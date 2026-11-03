@@ -386,6 +386,7 @@ public static partial class Texts
         ["Refeições"] = "Meals",
         ["Despesas"] = "Expenses",
         ["Casa"] = "Home",
+        ["Escolhe um só emoji."] = "Choose a single emoji.",
         ["A garantia de «{0}» acaba daqui a 30 dias"] = "The warranty for “{0}” ends in 30 days",
         ["Manutenção: {0} ({1})"] = "Maintenance: {0} ({1})",
         ["IUC de «{0}» para pagar este mês"] = "Road tax (IUC) for “{0}” is due this month",

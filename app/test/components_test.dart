@@ -152,4 +152,25 @@ void main() {
     expect(find.bySemanticsLabel(RegExp('Vazio basket')), findsOneWidget);
     semantics.dispose();
   });
+
+  testWidgets('com um emoji escolhido, o avatar mostra-o no lugar da inicial (F4-03)', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildTheme(Brightness.light),
+        home: const Scaffold(
+          body: Row(
+            children: [
+              MemberAvatar(name: 'Rita', color: '#A9500B', emoji: '🦊'),
+              MemberAvatar(name: 'Pai', color: '#2E7550'),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('🦊'), findsOneWidget);
+    expect(find.text('R'), findsNothing);
+    expect(find.text('P'), findsOneWidget);
+    expect(find.bySemanticsLabel('Rita'), findsOneWidget, reason: 'o nome continua no leitor de ecrã');
+  });
 }

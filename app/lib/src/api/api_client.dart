@@ -310,6 +310,9 @@ class ApiClient {
       );
 
   /// Muda o meu nome (o que os outros membros veem).
+  /// O emoji do avatar (F4-03); null volta à inicial.
+  Future<void> setAvatar(String? emoji) => _send('PUT', '/api/account/avatar', body: {'emoji': emoji});
+
   Future<User> changeName(String name) async =>
       User.fromJson(await _send('PUT', '/api/account/name', body: {'displayName': name}) as Map<String, dynamic>);
 

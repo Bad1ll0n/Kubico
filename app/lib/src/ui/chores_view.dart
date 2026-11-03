@@ -183,7 +183,7 @@ class _ChoresViewState extends State<ChoresView> {
               onPressed: () => Navigator.pop(context, member.userId),
               child: Row(
                 children: [
-                  MemberAvatar(name: member.displayName, color: member.color, size: 32),
+                  MemberAvatar(name: member.displayName, color: member.color, emoji: member.avatar, size: 32),
                   const SizedBox(width: 12),
                   Expanded(child: Text(member.displayName)),
                   if (member.userId == assignee) const Icon(Icons.check_rounded, size: 18),

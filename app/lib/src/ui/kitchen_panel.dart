@@ -488,7 +488,7 @@ class _Chores extends StatelessWidget {
                 if (chore.points > 0) PointsBadge(chore.points),
                 if (details.member(chore.assigneeUserId) case final m?) ...[
                   const SizedBox(width: 8),
-                  MemberAvatar(name: m.displayName, color: m.color, size: 36),
+                  MemberAvatar(name: m.displayName, color: m.color, emoji: m.avatar, size: 36),
                 ],
               ],
             ),
@@ -566,7 +566,7 @@ class _PointsFooter extends StatelessWidget {
               width: 320,
               child: Row(
                 children: [
-                  MemberAvatar(name: member.displayName, color: member.color, size: 44),
+                  MemberAvatar(name: member.displayName, color: member.color, emoji: member.avatar, size: 44),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -705,7 +705,7 @@ class _WhoAmI extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              MemberAvatar(name: member.displayName, color: member.color, size: 52, away: away),
+              MemberAvatar(name: member.displayName, color: member.color, emoji: member.avatar, size: 52, away: away),
               if (active) ...[
                 const SizedBox(width: 8),
                 Text(
@@ -745,7 +745,7 @@ class _WhoDidIt extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  MemberAvatar(name: m.displayName, color: m.color, size: 72),
+                  MemberAvatar(name: m.displayName, color: m.color, emoji: m.avatar, size: 72),
                   const SizedBox(height: 4),
                   Text(m.displayName, style: Theme.of(context).textTheme.titleMedium),
                 ],

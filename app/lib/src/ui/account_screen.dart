@@ -132,6 +132,8 @@ class _AccountScreenState extends State<AccountScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          const AvatarCard(),
+          const SizedBox(height: 12),
           const LanguageCard(),
           const SizedBox(height: 12),
           const ReadingModeCard(),
@@ -340,5 +342,83 @@ class LanguageCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// O avatar com um emoji (F4-03): as crianças adoram escolher o seu; o círculo continua com a cor da pessoa.
+class AvatarCard extends StatelessWidget {
+  const AvatarCard({super.key});
+
+  static const choices = [
+    '🦊',
+    '🐶',
+    '🐱',
+    '🐼',
+    '🐨',
+    '🦁',
+    '🐯',
+    '🐸',
+    '🐵',
+    '🦄',
+    '🐙',
+    '🐢',
+    '🌻',
+    '🌈',
+    '⭐',
+    '🚀',
+    '⚽',
+    '🎸',
+    '🎨',
+    '📚',
+    '🍕',
+    '🍓',
+    '👑',
+    '🦖',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('O meu avatar'.tr, style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text('Escolhe um emoji para aparecer no lugar da inicial.'.tr, style: theme.textTheme.bodySmall),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final emoji in choices)
+                  IconButton(
+                    tooltip: 'Usar $emoji'.tr,
+                    onPressed: () => _set(context, emoji),
+                    icon: Text(emoji, style: const TextStyle(fontSize: 28)),
+                  ),
+                TextButton(onPressed: () => _set(context, null), child: Text('Usar a inicial'.tr)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _set(BuildContext context, String? emoji) async {
+    final api = context.read<ApiClient>();
+    final session = context.read<SessionController>();
+    try {
+      await api.setAvatar(emoji);
+      await session.refresh();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Avatar guardado.'.tr)));
+      }
+    } catch (e) {
+      if (context.mounted) showError(context, e);
+    }
   }
 }

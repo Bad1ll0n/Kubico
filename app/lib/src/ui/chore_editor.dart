@@ -273,7 +273,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                 children: [
                   for (final m in widget.members)
                     FilterChip(
-                      avatar: MemberAvatar(name: m.displayName, color: m.color, size: 24),
+                      avatar: MemberAvatar(name: m.displayName, color: m.color, emoji: m.avatar, size: 24),
                       label: Text(m.displayName),
                       selected: _rotation.contains(m.userId),
                       onSelected: (selected) => setState(() {

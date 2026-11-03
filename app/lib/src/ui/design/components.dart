@@ -17,7 +17,14 @@ String initialOf(String name) {
 /// sozinha). O círculo é um ícone, não texto corrido: a letra não cresce com o tamanho de texto do sistema (o
 /// círculo não cresceria com ela). [away] mostra um selo de avião (a pessoa está fora).
 class MemberAvatar extends StatelessWidget {
-  const MemberAvatar({required this.name, required this.color, this.size = 32, this.away = false, super.key});
+  const MemberAvatar({
+    required this.name,
+    required this.color,
+    this.size = 32,
+    this.away = false,
+    this.emoji,
+    super.key,
+  });
 
   final String name;
 
@@ -25,6 +32,9 @@ class MemberAvatar extends StatelessWidget {
   final String color;
   final double size;
   final bool away;
+
+  /// O emoji escolhido (F4-03), no lugar da inicial; a cor da pessoa fica no círculo.
+  final String? emoji;
 
   @override
   Widget build(BuildContext context) {
@@ -35,15 +45,17 @@ class MemberAvatar extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(color: tones.fill, shape: BoxShape.circle),
       child: Text(
-        initialOf(name),
+        emoji ?? initialOf(name),
         textScaler: TextScaler.noScaling,
-        style: TextStyle(
-          fontFamily: 'Nunito',
-          fontWeight: FontWeight.w800,
-          fontSize: size * 0.42,
-          height: 1,
-          color: tones.onFill,
-        ),
+        style: emoji != null
+            ? TextStyle(fontSize: size * 0.5, height: 1)
+            : TextStyle(
+                fontFamily: 'Nunito',
+                fontWeight: FontWeight.w800,
+                fontSize: size * 0.42,
+                height: 1,
+                color: tones.onFill,
+              ),
       ),
     );
     return Semantics(

@@ -158,7 +158,7 @@ class _ChildSignInScreenState extends State<ChildSignInScreen> {
                               width: 104,
                               child: Column(
                                 children: [
-                                  MemberAvatar(name: p.displayName, color: p.color, size: 88),
+                                  MemberAvatar(name: p.displayName, color: p.color, emoji: p.avatar, size: 88),
                                   const SizedBox(height: 8),
                                   Text(
                                     p.displayName,

@@ -238,5 +238,5 @@ public static class MemberEndpoints
     private static IResult Problem(string title, int statusCode) => Results.Problem(title: title, statusCode: statusCode);
 
     public static MemberDto ToDto(Membership m) =>
-        new(m.UserId, m.User.DisplayName, m.Role, m.Color, m.User.IsChildProfile, m.User.BirthDate);
+        new(m.UserId, m.User.DisplayName, m.Role, m.Color, m.User.IsChildProfile, m.User.BirthDate, m.User.AvatarEmoji);
 }

@@ -21,6 +21,9 @@ public record DeleteAccountRequest([property: Required] string Password);
 /// <summary>O nome que os outros membros veem.</summary>
 public record ChangeNameRequest([property: Required, StringLength(100, MinimumLength = 1)] string DisplayName);
 
+/// <summary>O emoji do avatar (um só, como "🦊"); null tira-o e volta a inicial.</summary>
+public record AvatarRequest([property: StringLength(16)] string? Emoji);
+
 /// <summary>Mudar a palavra-passe sabendo a atual (a nova tem as mesmas regras do registo).</summary>
 public record ChangePasswordRequest(
     [property: Required] string CurrentPassword,
@@ -79,6 +82,7 @@ public static class AccountEndpoints
         account.MapPut("/language", SetLanguage);
         account.MapPut("/password", ChangePassword).RequireActiveSession();
         account.MapPut("/name", ChangeName);
+        account.MapPut("/avatar", SetAvatar);
         return api;
     }
 
@@ -119,7 +123,7 @@ public static class AccountEndpoints
             Conta = new
             {
                 user.Id, Nome = user.DisplayName, user.Email, CriadaEm = user.CreatedAt, DataDeNascimento = user.BirthDate,
-                VerificacaoEmDoisPassos = user.TwoFactorEnabled, Lingua = user.Language,
+                VerificacaoEmDoisPassos = user.TwoFactorEnabled, Lingua = user.Language, Avatar = user.AvatarEmoji,
             },
             Casas = households.Select(h => new { Casa = h.Name, Papel = h.Role.ToString(), Cor = h.Color, EntrouEm = h.JoinedAt }),
             Sessoes = await db.RefreshTokens.AsNoTracking()
@@ -252,6 +256,42 @@ public static class AccountEndpoints
 
         return Results.Ok(user.ToDto());
     }
+
+    /// <summary>
+    /// O avatar com um emoji (F4-03). As crianças também o escolhem (é delas e não diz nada de pessoal). Só um emoji:
+    /// um carácter visível, sem letras nem algarismos.
+    /// </summary>
+    private static async Task<IResult> SetAvatar(
+        AvatarRequest request, ClaimsPrincipal principal, KubicoDbContext db, HouseholdNotifier notifier, CancellationToken ct)
+    {
+        var emoji = string.IsNullOrWhiteSpace(request.Emoji) ? null : request.Emoji.Trim();
+        if (emoji is not null && !IsSingleEmoji(emoji))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]> { ["Emoji"] = ["Escolhe um só emoji."] });
+        }
+
+        var userId = principal.GetUserId();
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        user.AvatarEmoji = emoji;
+        await db.SaveChangesAsync(ct);
+        foreach (var membership in await db.Memberships.Include(m => m.User).Where(m => m.UserId == userId).ToListAsync(ct))
+        {
+            await notifier.MemberUpserted(membership.HouseholdId, MemberEndpoints.ToDto(membership), ct);
+        }
+
+        return Results.NoContent();
+    }
+
+    /// <summary>Um só "carácter" visível (um emoji pode ter vários códigos: 👩‍👧), sem letras, algarismos nem espaços.</summary>
+    public static bool IsSingleEmoji(string text) =>
+        new System.Globalization.StringInfo(text).LengthInTextElements == 1
+        && !text.Any(c => char.IsLetterOrDigit(c) || char.IsWhiteSpace(c) || char.IsControl(c))
+        && text.Any(c => char.IsSurrogate(c) || c > '\u2000');
 
     private static async Task<IResult> SetLanguage(
         LanguageRequest request, ClaimsPrincipal principal, KubicoDbContext db, CancellationToken ct)

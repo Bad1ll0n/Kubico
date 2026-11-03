@@ -32,7 +32,13 @@ public record HouseholdSummaryDto(
 
 /// <summary>Um membro da casa. <c>IsChildProfile</c>: perfil de criança, sem conta própria (entra com PIN).</summary>
 public record MemberDto(
-    Guid UserId, string DisplayName, HouseholdRole Role, string Color, bool IsChildProfile = false, DateOnly? BirthDate = null);
+    Guid UserId,
+    string DisplayName,
+    HouseholdRole Role,
+    string Color,
+    bool IsChildProfile = false,
+    DateOnly? BirthDate = null,
+    string? Avatar = null);
 
 /// <summary>
 /// <c>UtcOffsetMinutes</c>: o desvio atual do fuso da casa em relação a UTC (60 no verão em Lisboa). A app usa-o para
@@ -188,7 +194,8 @@ public static class HouseholdEndpoints
                 Members = h.Members
                     .OrderBy(m => m.User.DisplayName)
                     .Select(m => new MemberDto(
-                        m.UserId, m.User.DisplayName, m.Role, m.Color, m.User.ManagedByHouseholdId != null, m.User.BirthDate))
+                        m.UserId, m.User.DisplayName, m.Role, m.Color, m.User.ManagedByHouseholdId != null, m.User.BirthDate,
+                        m.User.AvatarEmoji))
                     .ToList(),
             })
             .SingleAsync(ct);

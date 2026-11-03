@@ -1645,6 +1645,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AvatarEmoji")
+                        .HasColumnType("text");
+
                     b.Property<DateOnly?>("BirthDate")
                         .HasColumnType("date");
 

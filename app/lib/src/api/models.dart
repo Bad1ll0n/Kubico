@@ -389,12 +389,16 @@ class Member {
     required this.color,
     this.isChildProfile = false,
     this.birthDate,
+    this.avatar,
   });
 
   final String userId;
   final String displayName;
   final HouseholdRole role;
   final String color;
+
+  /// O emoji do avatar (F4-03); null mostra a inicial.
+  final String? avatar;
 
   /// Perfil de criança: sem conta própria, entra com o código da família e um PIN.
   final bool isChildProfile;
@@ -407,6 +411,7 @@ class Member {
     color: json['color'] as String,
     isChildProfile: json['isChildProfile'] as bool? ?? false,
     birthDate: _day(json['birthDate']),
+    avatar: json['avatar'] as String?,
   );
 }
 
@@ -442,16 +447,18 @@ class MemberAbsence {
 
 /// Um perfil de criança para escolher no ecrã de entrada (depois do código da família).
 class ChildProfileOption {
-  const ChildProfileOption({required this.userId, required this.displayName, required this.color});
+  const ChildProfileOption({required this.userId, required this.displayName, required this.color, this.avatar});
 
   final String userId;
   final String displayName;
   final String color;
+  final String? avatar;
 
   factory ChildProfileOption.fromJson(Map<String, dynamic> json) => ChildProfileOption(
     userId: json['userId'] as String,
     displayName: json['displayName'] as String,
     color: json['color'] as String,
+    avatar: json['avatar'] as String?,
   );
 }
 

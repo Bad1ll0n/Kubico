@@ -479,7 +479,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
     ];
     return Card(
       child: ListTile(
-        leading: MemberAvatar(name: member.displayName, color: member.color, size: 40),
+        leading: MemberAvatar(name: member.displayName, color: member.color, emoji: member.avatar, size: 40),
         title: Text(isMe ? '${member.displayName} (tu)'.tr : member.displayName),
         subtitle: Text(
           [

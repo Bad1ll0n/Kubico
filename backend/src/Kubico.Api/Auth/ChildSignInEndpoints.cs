@@ -15,7 +15,7 @@ public record FamilyCodeRequest([property: Required] string FamilyCode);
 public record ChildLoginRequest([property: Required] string FamilyCode, Guid UserId, [property: Required] string Pin);
 
 /// <summary>Um perfil de criança para escolher no ecrã de entrada.</summary>
-public record ChildProfileOptionDto(Guid UserId, string DisplayName, string Color);
+public record ChildProfileOptionDto(Guid UserId, string DisplayName, string Color, string? Avatar = null);
 
 /// <summary>
 /// Entrada das crianças sem email: o código da família diz que casa é, a criança escolhe o seu perfil e escreve o
@@ -48,7 +48,7 @@ public static class ChildSignInEndpoints
         var profiles = await db.Memberships.AsNoTracking()
             .Where(m => m.HouseholdId == householdId && m.User.ManagedByHouseholdId == householdId)
             .OrderBy(m => m.User.DisplayName)
-            .Select(m => new ChildProfileOptionDto(m.UserId, m.User.DisplayName, m.Color))
+            .Select(m => new ChildProfileOptionDto(m.UserId, m.User.DisplayName, m.Color, m.User.AvatarEmoji))
             .ToListAsync(ct);
         return Results.Ok(profiles);
     }

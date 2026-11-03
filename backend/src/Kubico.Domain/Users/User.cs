@@ -31,6 +31,9 @@ public class User : IVersioned
 
     public DateOnly? BirthDate { get; set; }
 
+    /// <summary>O emoji escolhido para o avatar (F4-03); sem ele, o avatar mostra a inicial.</summary>
+    public string? AvatarEmoji { get; set; }
+
     /// <summary>PINs errados seguidos; ao fim de <see cref="MaxPinAttempts"/>, o perfil fica bloqueado uns minutos.</summary>
     public int FailedPinAttempts { get; set; }
 
