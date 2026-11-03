@@ -7,6 +7,7 @@ public enum HouseholdModule
     Chores = 1,
     Calendar = 2,
     Rewards = 3,
+    Meals = 4,
 }
 
 /// <summary>
@@ -66,6 +67,7 @@ public static class ModulePermissions
         HouseholdModule.Shopping => "Compras",
         HouseholdModule.Chores => "Tarefas",
         HouseholdModule.Calendar => "Calendário",
+        HouseholdModule.Meals => "Refeições",
         _ => "Recompensas",
     };
 }

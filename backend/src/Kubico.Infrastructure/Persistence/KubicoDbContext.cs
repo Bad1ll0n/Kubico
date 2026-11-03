@@ -3,6 +3,7 @@ using Kubico.Domain.Activity;
 using Kubico.Domain.Calendar;
 using Kubico.Domain.Chores;
 using Kubico.Domain.Households;
+using Kubico.Domain.Meals;
 using Kubico.Domain.Notifications;
 using Kubico.Domain.Rewards;
 using Kubico.Domain.Shopping;
@@ -25,6 +26,8 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<ShoppingItem> ShoppingItems => Set<ShoppingItem>();
     public DbSet<PurchaseRecord> PurchaseRecords => Set<PurchaseRecord>();
     public DbSet<RecurringItem> RecurringItems => Set<RecurringItem>();
+    public DbSet<Recipe> Recipes => Set<Recipe>();
+    public DbSet<MealPlanEntry> MealPlan => Set<MealPlanEntry>();
     public DbSet<ChorePhoto> ChorePhotos => Set<ChorePhoto>();
     public DbSet<ActivityEntry> ActivityEntries => Set<ActivityEntry>();
     public DbSet<Allowance> Allowances => Set<Allowance>();
@@ -199,6 +202,26 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasIndex(p => p.UserId);
             e.HasIndex(p => p.PurchasedAt);
             e.HasOne<ShoppingList>().WithMany().HasForeignKey(p => p.ListId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Recipe>(e =>
+        {
+            e.Property(r => r.Title).HasMaxLength(200);
+            e.Property(r => r.Notes).HasMaxLength(2000);
+            e.HasIndex(r => r.HouseholdId);
+            e.OwnsMany(r => r.Ingredients, i => i.ToJson());
+            e.HasOne<Household>().WithMany().HasForeignKey(r => r.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MealPlanEntry>(e =>
+        {
+            e.Property(m => m.Slot).HasConversion<string>().HasMaxLength(10);
+            e.Property(m => m.Text).HasMaxLength(200);
+            e.HasIndex(m => new { m.HouseholdId, m.Date, m.Slot }).IsUnique();
+            e.HasOne<Household>().WithMany().HasForeignKey(m => m.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+
+            // Apagar uma receita tira-a do plano (o dia fica vazio).
+            e.HasOne<Recipe>().WithMany().HasForeignKey(m => m.RecipeId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<RecurringItem>(e =>

@@ -152,6 +152,11 @@ public static class AccountEndpoints
                 .Select(p => new { p.HouseholdId, p.Name, p.PurchasedAt })
                 .ToListAsync(ct))
                 .Select(p => new { Casa = Casa(p.HouseholdId), Artigo = p.Name, CompradoEm = p.PurchasedAt }),
+            ReceitasCriadas = (await db.Recipes.AsNoTracking()
+                .Where(r => r.CreatedByUserId == userId)
+                .Select(r => new { r.HouseholdId, r.Title, r.CreatedAt })
+                .ToListAsync(ct))
+                .Select(r => new { Casa = Casa(r.HouseholdId), Receita = r.Title, CriadaEm = r.CreatedAt }),
             EventosCriados = events.Select(e => new
             {
                 Casa = Casa(e.HouseholdId), Evento = e.Title, Comeca = e.StartsAt, Dia = e.StartDate, CriadoEm = e.CreatedAt,

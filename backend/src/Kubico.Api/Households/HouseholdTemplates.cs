@@ -151,6 +151,9 @@ public static class HouseholdTemplates
             });
         }
 
+        // Todas as casas com modelo começam com receitas portuguesas de base (Refeições, F4-09).
+        db.Recipes.AddRange(Meals.BaseRecipes.For(household.Id, userId, now, language));
+
         foreach (var reward in definition.Rewards)
         {
             db.Rewards.Add(new Reward

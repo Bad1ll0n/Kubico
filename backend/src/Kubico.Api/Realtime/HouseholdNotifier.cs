@@ -31,6 +31,11 @@ public static class HouseholdEvents
     public const string RedemptionUpserted = "RedemptionUpserted";
     public const string RedemptionDeleted = "RedemptionDeleted";
 
+    /// <summary>Refeições (F4-09): uma receita mudou ou saiu; um dia do plano mudou (vai o dia, o que lá está ou null).</summary>
+    public const string RecipeUpserted = "RecipeUpserted";
+    public const string RecipeDeleted = "RecipeDeleted";
+    public const string MealPlanChanged = "MealPlanChanged";
+
     /// <summary>
     /// Mudaram os pontos ganhos (uma tarefa feita, não aceite, desfeita ou apagada): os saldos, a mesada e as
     /// estatísticas voltam a ler-se. Vai para a casa toda, só com o id da casa. Assim a app não tem de os voltar a pedir
@@ -190,6 +195,15 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub, HouseholdGroups gr
 
     public Task RedemptionDeleted(Guid householdId, Guid redemptionId, CancellationToken ct) =>
         Area(householdId, HouseholdModule.Rewards).SendAsync(HouseholdEvents.RedemptionDeleted, redemptionId, AfterCommit());
+
+    public Task RecipeUpserted(Guid householdId, Meals.RecipeDto recipe, CancellationToken ct) =>
+        Area(householdId, HouseholdModule.Meals).SendAsync(HouseholdEvents.RecipeUpserted, recipe, AfterCommit());
+
+    public Task RecipeDeleted(Guid householdId, Guid recipeId, CancellationToken ct) =>
+        Area(householdId, HouseholdModule.Meals).SendAsync(HouseholdEvents.RecipeDeleted, recipeId, AfterCommit());
+
+    public Task MealPlanChanged(Guid householdId, Meals.MealPlanEntryDto entry, CancellationToken ct) =>
+        Area(householdId, HouseholdModule.Meals).SendAsync(HouseholdEvents.MealPlanChanged, entry, AfterCommit());
 
     private IClientProxy Group(Guid householdId) => hub.Clients.Group(HouseholdHub.GroupName(householdId));
 
