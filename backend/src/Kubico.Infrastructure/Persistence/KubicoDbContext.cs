@@ -3,6 +3,7 @@ using Kubico.Domain.Activity;
 using Kubico.Domain.Calendar;
 using Kubico.Domain.Expenses;
 using Kubico.Domain.Chores;
+using Kubico.Domain.Home;
 using Kubico.Domain.Households;
 using Kubico.Domain.Meals;
 using Kubico.Domain.Notifications;
@@ -31,6 +32,11 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<MealPlanEntry> MealPlan => Set<MealPlanEntry>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<Settlement> Settlements => Set<Settlement>();
+    public DbSet<Appliance> Appliances => Set<Appliance>();
+    public DbSet<HomeDocument> HomeDocuments => Set<HomeDocument>();
+    public DbSet<HomeFile> HomeFiles => Set<HomeFile>();
+    public DbSet<HouseNote> HouseNotes => Set<HouseNote>();
+    public DbSet<HouseContact> HouseContacts => Set<HouseContact>();
     public DbSet<ChorePhoto> ChorePhotos => Set<ChorePhoto>();
     public DbSet<ActivityEntry> ActivityEntries => Set<ActivityEntry>();
     public DbSet<Allowance> Allowances => Set<Allowance>();
@@ -214,6 +220,55 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasIndex(r => r.HouseholdId);
             e.OwnsMany(r => r.Ingredients, i => i.ToJson());
             e.HasOne<Household>().WithMany().HasForeignKey(r => r.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Appliance>(e =>
+        {
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Room).HasMaxLength(100);
+            e.Property(x => x.Brand).HasMaxLength(100);
+            e.Property(x => x.Model).HasMaxLength(100);
+            e.Property(x => x.Plate).HasMaxLength(20);
+            e.Property(x => x.Notes).HasMaxLength(2000);
+            e.HasIndex(x => x.HouseholdId);
+            e.OwnsMany(x => x.Maintenance, m => m.ToJson());
+            e.HasOne<Household>().WithMany().HasForeignKey(x => x.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<HomeDocument>(e =>
+        {
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            e.HasIndex(x => x.HouseholdId);
+            e.HasIndex(x => x.OwnerUserId);
+            e.HasOne<Household>().WithMany().HasForeignKey(x => x.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<HomeFile>(e =>
+        {
+            e.Property(x => x.FileName).HasMaxLength(200);
+            e.Property(x => x.ContentType).HasMaxLength(50);
+            e.HasIndex(x => x.OwnerId);
+            e.HasIndex(x => x.HouseholdId);
+            e.HasOne<Household>().WithMany().HasForeignKey(x => x.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<HouseNote>(e =>
+        {
+            e.Property(x => x.Text).HasMaxLength(500);
+            e.HasIndex(x => x.HouseholdId);
+            e.HasOne<Household>().WithMany().HasForeignKey(x => x.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<HouseContact>(e =>
+        {
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Role).HasMaxLength(100);
+            e.Property(x => x.Phone).HasMaxLength(40);
+            e.Property(x => x.Notes).HasMaxLength(1000);
+            e.HasIndex(x => x.HouseholdId);
+            e.HasOne<Household>().WithMany().HasForeignKey(x => x.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Expense>(e =>

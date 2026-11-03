@@ -43,6 +43,9 @@ public enum NotificationKind
 
     /// <summary>Há mesadas por pagar (para quem gere as recompensas).</summary>
     AllowanceDue = 13,
+
+    /// <summary>A casa: garantia a acabar, manutenção, IUC, inspeção, IRS, documento a caducar, aniversário.</summary>
+    HomeReminder = 14,
 }
 
 /// <summary>

@@ -39,6 +39,9 @@ public static class HouseholdEvents
     /// <summary>Despesas (F4-10): mudou uma despesa ou um acerto; a app volta a pedir o resumo (os saldos mudam).</summary>
     public const string ExpensesChanged = "ExpensesChanged";
 
+    /// <summary>A área Casa (F4-07, F4-12, F4-13): mudou um equipamento, documento, recado ou contacto.</summary>
+    public const string HomeChanged = "HomeChanged";
+
     /// <summary>
     /// Mudaram os pontos ganhos (uma tarefa feita, não aceite, desfeita ou apagada): os saldos, a mesada e as
     /// estatísticas voltam a ler-se. Vai para a casa toda, só com o id da casa. Assim a app não tem de os voltar a pedir
@@ -210,6 +213,9 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub, HouseholdGroups gr
 
     public Task ExpensesChanged(Guid householdId, CancellationToken ct) =>
         Area(householdId, HouseholdModule.Expenses).SendAsync(HouseholdEvents.ExpensesChanged, householdId, AfterCommit());
+
+    public Task HomeChanged(Guid householdId, CancellationToken ct) =>
+        Area(householdId, HouseholdModule.Home).SendAsync(HouseholdEvents.HomeChanged, householdId, AfterCommit());
 
     private IClientProxy Group(Guid householdId) => hub.Clients.Group(HouseholdHub.GroupName(householdId));
 

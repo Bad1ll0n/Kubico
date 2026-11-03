@@ -33,6 +33,9 @@ public class Household : IVersioned
     /// </summary>
     public int? AutoApproveRewardsUpTo { get; set; }
 
+    /// <summary>Os avisos do IRS (e-Fatura e entrega da declaração) a quem gere a área Casa (F4-08).</summary>
+    public bool IrsReminders { get; set; } = true;
+
     public const string DefaultTimeZoneId = "Europe/Lisbon";
 
     /// <summary>Fuso da casa; se o sistema não o conhecer, usa UTC.</summary>

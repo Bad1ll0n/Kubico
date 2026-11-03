@@ -32,6 +32,9 @@ public class ReminderService(
     public static readonly TimeOnly WeeklySummaryAt = new(19, 0);
     public static readonly TimeOnly AllowanceReminderAt = new(18, 0);
 
+    /// <summary>Os avisos da casa (garantias, manutenções, carro, IRS, documentos, aniversários) saem às 9h.</summary>
+    public static readonly TimeOnly HomeRemindersAt = new(9, 0);
+
     public async Task<int> RunAsync(CancellationToken ct)
     {
         var now = clock.GetUtcNow();
@@ -41,6 +44,7 @@ public class ReminderService(
         sent += await MorningSummariesAsync(now, ct);
         sent += await WeeklySummariesAsync(now, ct);
         sent += await AllowanceRemindersAsync(now, ct);
+        sent += await HomeRemindersAsync(now, ct);
         return sent;
     }
 
@@ -330,6 +334,98 @@ public class ReminderService(
             var managers = await access.MembersWithAsync(allowance.HouseholdId, HouseholdModule.Rewards, ModuleAccess.Manage, ct);
             sent += await SendAsync(allowance.HouseholdId, managers, NotificationKind.AllowanceDue, allowance.UserId, dueAt,
                 $"Mesada de {name} por pagar", null, now, ct);
+        }
+
+        return sent;
+    }
+
+    /// <summary>
+    /// A área Casa (F4-07, F4-08, F4-12, F4-13), às 9h no fuso da casa: garantia a acabar daqui a 30 dias, manutenção
+    /// que vence hoje, IUC no primeiro dia do mês da matrícula, inspeção daqui a 30 dias, as datas do IRS (se a casa
+    /// os quiser), documentos que caducam daqui a 60 e 30 dias (ao dono e a quem gere) e aniversários amanhã.
+    /// </summary>
+    private async Task<int> HomeRemindersAsync(DateTimeOffset now, CancellationToken ct)
+    {
+        var households = await db.Households.AsNoTracking().ToListAsync(ct);
+        var sent = 0;
+        foreach (var household in households)
+        {
+            var today = household.Today(now);
+            var dueAt = ZonedTime.ToInstant(today.ToDateTime(HomeRemindersAt), household.TimeZone);
+            if (!IsDue(dueAt, now))
+            {
+                continue;
+            }
+
+            var reminders = new List<(Guid Entity, string Title, Guid? Owner, bool Everyone)>();
+            foreach (var a in await db.Appliances.AsNoTracking().Where(a => a.HouseholdId == household.Id).ToListAsync(ct))
+            {
+                if (a.WarrantyUntil == today.AddDays(30))
+                {
+                    reminders.Add((a.Id, $"A garantia de «{a.Name}» acaba daqui a 30 dias", null, false));
+                }
+
+                foreach (var task in a.Maintenance.Where(m => m.NextDue == today))
+                {
+                    reminders.Add((task.Id, $"Manutenção: {task.Title} ({a.Name})", null, false));
+                }
+
+                if (a.FirstRegistration is { } first)
+                {
+                    if (Domain.Home.PortugalCalendar.NextIuc(first, today) == today)
+                    {
+                        reminders.Add((a.Id, $"IUC de «{a.Name}» para pagar este mês", null, false));
+                    }
+
+                    if (Domain.Home.PortugalCalendar.NextInspection(first, today) == today.AddDays(30))
+                    {
+                        reminders.Add((a.Id, $"Inspeção de «{a.Name}» daqui a 30 dias", null, false));
+                    }
+                }
+            }
+
+            if (household.IrsReminders)
+            {
+                reminders.AddRange(Domain.Home.PortugalCalendar.IrsDates(today.Year)
+                    .Where(d => d.Date == today)
+                    .Select(d => (household.Id, d.Title, (Guid?)null, false)));
+            }
+
+            foreach (var d in await db.HomeDocuments.AsNoTracking()
+                         .Where(d => d.HouseholdId == household.Id && d.ExpiresOn != null).ToListAsync(ct))
+            {
+                if (d.ExpiresOn == today.AddDays(60) || d.ExpiresOn == today.AddDays(30))
+                {
+                    var days = d.ExpiresOn!.Value.DayNumber - today.DayNumber;
+                    reminders.Add((d.Id, $"«{d.Name}» caduca daqui a {days} dias", d.OwnerUserId, false));
+                }
+            }
+
+            foreach (var c in await db.HouseContacts.AsNoTracking()
+                         .Where(c => c.HouseholdId == household.Id && c.Birthday != null).ToListAsync(ct))
+            {
+                if (Home.HomeEndpoints.NextBirthday(c.Birthday!.Value, today) == today.AddDays(1))
+                {
+                    reminders.Add((c.Id, $"Amanhã faz anos: {c.Name}", null, true));
+                }
+            }
+
+            if (reminders.Count == 0)
+            {
+                continue;
+            }
+
+            var managers = await access.MembersWithAsync(household.Id, HouseholdModule.Home, ModuleAccess.Manage, ct);
+            var viewers = await access.MembersWithAsync(household.Id, HouseholdModule.Home, ModuleAccess.View, ct);
+            foreach (var (entity, title, owner, everyone) in reminders)
+            {
+                // Os documentos vão ao dono (se ainda vir a área) e a quem gere; os aniversários a quem vê a área; o
+                // resto a quem gere.
+                List<Guid> recipients = owner is { } who
+                    ? [.. managers.Append(who).Where(viewers.Contains).Distinct()]
+                    : everyone ? viewers : managers;
+                sent += await SendAsync(household.Id, recipients, NotificationKind.HomeReminder, entity, dueAt, title, null, now, ct);
+            }
         }
 
         return sent;

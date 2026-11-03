@@ -11,6 +11,7 @@ using Kubico.Domain.Users;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
 namespace Kubico.Api.Auth;
@@ -82,7 +83,8 @@ public static class AccountEndpoints
     }
 
     /// <summary>Um ficheiro JSON com os dados da conta e o que a pessoa fez em cada casa.</summary>
-    private static async Task<IResult> Export(ClaimsPrincipal principal, KubicoDbContext db, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> Export(
+        ClaimsPrincipal principal, KubicoDbContext db, TimeProvider clock, IDataProtectionProvider protection, CancellationToken ct)
     {
         var userId = principal.GetUserId();
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId, ct);
@@ -157,6 +159,14 @@ public static class AccountEndpoints
                 .Select(e => new { e.HouseholdId, e.Description, e.AmountCents, e.Date })
                 .ToListAsync(ct))
                 .Select(e => new { Casa = Casa(e.HouseholdId), Despesa = e.Description, Cents = e.AmountCents, Dia = e.Date }),
+            Documentos = (await db.HomeDocuments.AsNoTracking().Where(d => d.OwnerUserId == userId).ToListAsync(ct))
+                .Select(d => new
+                {
+                    Casa = Casa(d.HouseholdId), Documento = d.Name, Tipo = d.Kind.ToString(), Validade = d.ExpiresOn,
+                    Numero = Home.HomeEndpoints.UnprotectNumber(protection, d.ProtectedNumber),
+                }),
+            Recados = (await db.HouseNotes.AsNoTracking().Where(n => n.CreatedByUserId == userId).ToListAsync(ct))
+                .Select(n => new { Casa = Casa(n.HouseholdId), Recado = n.Text, CriadoEm = n.CreatedAt }),
             ReceitasCriadas = (await db.Recipes.AsNoTracking()
                 .Where(r => r.CreatedByUserId == userId)
                 .Select(r => new { r.HouseholdId, r.Title, r.CreatedAt })
