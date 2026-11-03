@@ -22,11 +22,13 @@ http.Response _json(Object body, [int status = 200]) => http.Response.bytes(
   headers: {'content-type': 'application/json; charset=utf-8'},
 );
 
-Map<String, String> _access(String shopping, String chores, String calendar, String rewards) => {
+Map<String, String> _access(String shopping, String chores, String calendar, String rewards, [String? meals]) => {
   'Shopping': shopping,
   'Chores': chores,
   'Calendar': calendar,
   'Rewards': rewards,
+  // As Refeições (F4-09) seguem o habitual: adultos gerem, os outros usam.
+  'Meals': meals ?? (rewards == 'Manage' ? 'Manage' : 'Participate'),
 };
 
 final _defaults = [

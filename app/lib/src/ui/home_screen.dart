@@ -22,6 +22,7 @@ import 'devices_screen.dart' deferred as devices;
 import 'help_screen.dart' deferred as help;
 import 'household_screen.dart';
 import 'kitchen_panel.dart' deferred as kitchen;
+import 'meals_view.dart';
 import 'notifications_screen.dart';
 import 'onboarding_screen.dart';
 import 'rewards_view.dart';
@@ -275,7 +276,9 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         );
 
-        final shopping = wide
+        final canShop = household.accessTo(HouseholdModule.shopping).canView;
+        final canEat = household.accessTo(HouseholdModule.meals).canView;
+        final Widget shoppingLists = wide
             ? Row(
                 children: [
                   SizedBox(width: 340, child: lists),
@@ -294,10 +297,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               )
             : lists;
+        // As Refeições vivem nas Compras (o plano da semana alimenta a lista), num separador próprio (F4-09).
+        final meals = MealsView(key: ValueKey('meals-${household.id}'), household: household);
+        final Widget shopping = canShop && canEat
+            ? _ShoppingTabs(lists: shoppingLists, meals: meals)
+            : canShop
+            ? shoppingLists
+            : meals;
         // Só aparecem as áreas a que o meu papel dá acesso nesta casa (e o Hoje, se houver alguma).
         final visible = [
           for (final s in _sections)
-            if (s.module != null && household.accessTo(s.module!).canView) s,
+            if (s.module != null &&
+                (household.accessTo(s.module!).canView || s.module == HouseholdModule.shopping && canEat))
+              s,
         ];
         final sections = [if (visible.isNotEmpty) _sections.first, ...visible];
         final section = sections.where((s) => s.module == _section).firstOrNull ?? sections.firstOrNull;
@@ -312,7 +324,7 @@ class _HomeScreenState extends State<HomeScreen> {
             household: household,
             onOpen: (module) => setState(() => _section = module),
           ),
-          HouseholdModule.shopping => shopping,
+          HouseholdModule.shopping || HouseholdModule.meals => shopping,
           HouseholdModule.chores => ChoresView(key: ValueKey('chores-${household.id}'), household: household),
           HouseholdModule.calendar => CalendarView(key: ValueKey('calendar-${household.id}'), household: household),
           HouseholdModule.rewards => RewardsView(key: ValueKey('rewards-${household.id}'), household: household),
@@ -533,6 +545,32 @@ class _HouseholdSwitcher extends StatelessWidget {
       ),
     );
   }
+}
+
+/// As Compras com dois separadores: as listas e as refeições.
+class _ShoppingTabs extends StatelessWidget {
+  const _ShoppingTabs({required this.lists, required this.meals});
+
+  final Widget lists;
+  final Widget meals;
+
+  @override
+  Widget build(BuildContext context) => DefaultTabController(
+    length: 2,
+    child: Column(
+      children: [
+        TabBar(
+          tabs: [
+            Tab(icon: const Icon(Icons.checklist_rounded), text: 'Listas'.tr),
+            Tab(icon: const Icon(Icons.restaurant_menu_rounded), text: 'Refeições'.tr),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(physics: const NeverScrollableScrollPhysics(), children: [lists, meals]),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Sem ligação, os ecrãs abrem com a última cópia guardada (F4-14): esta faixa, na cor de aviso, diz que é uma cópia.

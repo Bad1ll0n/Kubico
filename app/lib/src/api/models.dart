@@ -31,7 +31,8 @@ enum HouseholdModule {
   shopping('Shopping', 'Compras', 'adiciona e marca artigos'),
   chores('Chores', 'Tarefas', 'conclui as suas tarefas'),
   calendar('Calendar', 'Calendário', null),
-  rewards('Rewards', 'Recompensas', 'pede recompensas');
+  rewards('Rewards', 'Recompensas', 'pede recompensas'),
+  meals('Meals', 'Refeições', 'planeia as refeições');
 
   const HouseholdModule(this.apiValue, this._label, this._participateMeans);
 
@@ -503,6 +504,121 @@ class RecurringItem {
     quantity: json['quantity'] as String?,
     intervalDays: json['intervalDays'] as int,
     nextDate: DateTime.parse(json['nextDate'] as String),
+  );
+}
+
+/// Um ingrediente de uma receita: o nome (como vai para a lista), a quantidade e a secção do supermercado.
+class RecipeIngredient {
+  const RecipeIngredient({required this.name, this.quantity, this.category});
+
+  final String name;
+  final String? quantity;
+  final String? category;
+
+  factory RecipeIngredient.fromJson(Map<String, dynamic> json) => RecipeIngredient(
+    name: json['name'] as String,
+    quantity: json['quantity'] as String?,
+    category: json['category'] as String?,
+  );
+
+  Map<String, dynamic> toJson() => {'name': name, 'quantity': ?quantity, 'category': ?category};
+
+  @override
+  String toString() => quantity == null ? name : '$quantity $name';
+}
+
+/// Uma receita da casa (F4-09).
+class Recipe {
+  const Recipe({
+    required this.id,
+    required this.title,
+    required this.servings,
+    required this.ingredients,
+    required this.steps,
+    required this.tags,
+    required this.notes,
+  });
+
+  final String id;
+  final String title;
+  final int servings;
+  final List<RecipeIngredient> ingredients;
+  final List<String> steps;
+  final List<String> tags;
+  final String? notes;
+
+  factory Recipe.fromJson(Map<String, dynamic> json) => Recipe(
+    id: json['id'] as String,
+    title: json['title'] as String,
+    servings: json['servings'] as int? ?? 4,
+    ingredients: [
+      for (final i in json['ingredients'] as List? ?? const []) RecipeIngredient.fromJson(i as Map<String, dynamic>),
+    ],
+    steps: (json['steps'] as List?)?.cast<String>() ?? const [],
+    tags: (json['tags'] as List?)?.cast<String>() ?? const [],
+    notes: json['notes'] as String?,
+  );
+}
+
+/// Dados para criar ou mudar uma receita.
+class RecipeDraft {
+  const RecipeDraft({
+    required this.title,
+    this.servings = 4,
+    this.ingredients = const [],
+    this.steps = const [],
+    this.tags = const [],
+    this.notes,
+  });
+
+  final String title;
+  final int servings;
+  final List<RecipeIngredient> ingredients;
+  final List<String> steps;
+  final List<String> tags;
+  final String? notes;
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'servings': servings,
+    'ingredients': [for (final i in ingredients) i.toJson()],
+    'steps': steps,
+    'tags': tags,
+    if (notes != null && notes!.isNotEmpty) 'notes': notes,
+  };
+}
+
+/// Almoço ou jantar.
+enum MealSlot {
+  lunch('Lunch', 'Almoço'),
+  dinner('Dinner', 'Jantar');
+
+  const MealSlot(this.apiValue, this._label);
+
+  final String apiValue;
+  final String _label;
+
+  String get label => _label.tr;
+
+  static MealSlot fromApi(Object? value) => values.firstWhere((s) => s.apiValue == value, orElse: () => lunch);
+}
+
+/// O que se come num dia, a uma refeição: uma receita da casa ou um texto ("restos", "jantar fora").
+class MealPlanEntry {
+  const MealPlanEntry({required this.date, required this.slot, required this.recipeId, required this.text});
+
+  final DateTime date;
+  final MealSlot slot;
+  final String? recipeId;
+  final String? text;
+
+  bool get isEmpty => recipeId == null && (text == null || text!.isEmpty);
+
+  factory MealPlanEntry.fromJson(Map<String, dynamic> json) => MealPlanEntry(
+    date: DateTime.parse(json['date'] as String),
+    slot: MealSlot.fromApi(json['slot']),
+    recipeId: json['recipeId'] as String?,
+    text: json['text'] as String?,
   );
 }
 

@@ -348,6 +348,53 @@ class ApiClient {
   Future<void> deleteList(String householdId, String listId) =>
       _send('DELETE', '/api/households/$householdId/lists/$listId');
 
+  // Refeições (F4-09).
+
+  Future<List<Recipe>> getRecipes(String householdId) async =>
+      _readable(await _send('GET', '/api/households/$householdId/recipes'), Recipe.fromJson);
+
+  /// Cria a receita ou, com [recipeId], muda-a.
+  Future<Recipe> saveRecipe(String householdId, RecipeDraft draft, {String? recipeId}) async => Recipe.fromJson(
+    await _send(
+      recipeId == null ? 'POST' : 'PUT',
+      '/api/households/$householdId/recipes${recipeId == null ? '' : '/$recipeId'}',
+      body: draft.toJson(),
+    ),
+  );
+
+  Future<void> deleteRecipe(String householdId, String recipeId) =>
+      _send('DELETE', '/api/households/$householdId/recipes/$recipeId');
+
+  Future<List<MealPlanEntry>> getMealPlan(String householdId, DateTime from, DateTime to) async => _readable(
+    await _send('GET', '/api/households/$householdId/meals?from=${apiDate(from)}&to=${apiDate(to)}'),
+    MealPlanEntry.fromJson,
+  );
+
+  /// Põe uma receita ou um texto num dia; sem os dois, o dia fica vazio.
+  Future<MealPlanEntry> saveMeal(
+    String householdId,
+    DateTime date,
+    MealSlot slot, {
+    String? recipeId,
+    String? text,
+  }) async => MealPlanEntry.fromJson(
+    await _send(
+      'PUT',
+      '/api/households/$householdId/meals/${apiDate(date)}/${slot.apiValue}',
+      body: {'recipeId': ?recipeId, 'text': ?text},
+    ),
+  );
+
+  /// Os ingredientes das receitas planeadas entre dois dias vão para a lista. Devolve os nomes que foram.
+  Future<List<String>> mealsToList(String householdId, DateTime from, DateTime to, String listId) async {
+    final json = await _send(
+      'POST',
+      '/api/households/$householdId/meals/to-list',
+      body: {'from': apiDate(from), 'to': apiDate(to), 'listId': listId},
+    ) as Map<String, dynamic>;
+    return (json['names'] as List).cast<String>();
+  }
+
   /// "Costumas comprar" e a ordem das categorias aprendida nesta lista (F4-22).
   Future<ShoppingInsights> getShoppingInsights(String householdId, String listId) async => ShoppingInsights.fromJson(
     await _send('GET', '/api/households/$householdId/lists/$listId/insights') as Map<String, dynamic>,
