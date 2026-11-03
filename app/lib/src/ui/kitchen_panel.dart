@@ -179,7 +179,7 @@ class _KitchenPanelScreenState extends State<KitchenPanelScreen> {
 
   Widget _dayView(BuildContext context, _PanelData data) {
     final theme = Theme.of(context);
-    final today = DateUtils.dateOnly(_now);
+    final today = data.details.todayAt(_now);
     final tomorrow = DateTime(today.year, today.month, today.day + 1);
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final tiles = [

@@ -34,13 +34,18 @@ public record HouseholdSummaryDto(
 public record MemberDto(
     Guid UserId, string DisplayName, HouseholdRole Role, string Color, bool IsChildProfile = false, DateOnly? BirthDate = null);
 
+/// <summary>
+/// <c>UtcOffsetMinutes</c>: o desvio atual do fuso da casa em relação a UTC (60 no verão em Lisboa). A app usa-o para
+/// saber que dia é na casa (o telemóvel pode estar noutro fuso) sem trazer a base de dados dos fusos.
+/// </summary>
 public record HouseholdDto(
     Guid Id,
     string Name,
     string TimeZoneId,
     HouseholdRole MyRole,
     IReadOnlyList<MemberDto> Members,
-    IReadOnlyDictionary<HouseholdModule, ModuleAccess> MyAccess);
+    IReadOnlyDictionary<HouseholdModule, ModuleAccess> MyAccess,
+    int UtcOffsetMinutes = 0);
 
 public record InviteDto(
     string Code, HouseholdRole Role, DateTimeOffset ExpiresAt, int? MaxUses = null, int UsedCount = 0, DateTimeOffset? CreatedAt = null);
@@ -160,7 +165,12 @@ public static class HouseholdEndpoints
     }
 
     private static async Task<IResult> GetHousehold(
-        Guid householdId, ClaimsPrincipal principal, KubicoDbContext db, HouseholdAccess access, CancellationToken ct)
+        Guid householdId,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        TimeProvider clock,
+        CancellationToken ct)
     {
         var (role, error) = await access.RequireMemberAsync(principal.GetUserId(), householdId, ct);
         if (error is not null)
@@ -188,8 +198,10 @@ public static class HouseholdEndpoints
             ? household.Members
             : [.. household.Members.Select(m => m with { BirthDate = null })];
         var myAccess = await access.GetAllAccessAsync(householdId, role.Value, ct);
+        var zone = new Household { Name = household.Name, TimeZoneId = household.TimeZoneId }.TimeZone;
+        var offset = (int)zone.GetUtcOffset(clock.GetUtcNow()).TotalMinutes;
         return Results.Ok(new HouseholdDto(
-            household.Id, household.Name, household.TimeZoneId, role.Value, members, myAccess));
+            household.Id, household.Name, household.TimeZoneId, role.Value, members, myAccess, offset));
     }
 
     private static async Task<IResult> CreateInvite(

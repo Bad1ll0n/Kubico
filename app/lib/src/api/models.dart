@@ -457,6 +457,7 @@ class HouseholdDetails {
     required this.myRole,
     required this.members,
     this.myAccess = const {},
+    this.utcOffsetMinutes,
   });
 
   final String id;
@@ -464,6 +465,18 @@ class HouseholdDetails {
   final String timeZoneId;
   final HouseholdRole myRole;
   final List<Member> members;
+
+  /// O desvio atual do fuso da casa em relação a UTC, em minutos (null numa API antiga).
+  final int? utcOffsetMinutes;
+
+  /// Que dia é na casa a [now] (o telemóvel pode estar noutro fuso: quem viaja, a guarda partilhada). Sem o desvio,
+  /// usa o dia do telemóvel.
+  DateTime todayAt(DateTime now) {
+    final offset = utcOffsetMinutes;
+    if (offset == null) return DateTime(now.year, now.month, now.day);
+    final there = now.toUtc().add(Duration(minutes: offset));
+    return DateTime(there.year, there.month, there.day);
+  }
 
   /// O que o meu papel me deixa fazer em cada área (o habitual, se não vier).
   final Map<HouseholdModule, ModuleAccess> myAccess;
@@ -484,6 +497,7 @@ class HouseholdDetails {
     myRole: HouseholdRole.fromApi(json['myRole']),
     members: (json['members'] as List).map((m) => Member.fromJson(m as Map<String, dynamic>)).toList(),
     myAccess: ModuleAccess.parse(json['myAccess'], HouseholdRole.fromApi(json['myRole'])),
+    utcOffsetMinutes: json['utcOffsetMinutes'] as int?,
   );
 }
 

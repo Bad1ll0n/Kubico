@@ -119,7 +119,8 @@ class _TodayViewState extends State<TodayView> {
     }
 
     final me = context.watch<SessionController>().user;
-    final today = DateUtils.dateOnly(clock.now());
+    // O dia na casa (o telemóvel pode estar noutro fuso).
+    final today = data.details.todayAt(clock.now());
     final blocks = <Widget>[
       _Greeting(name: data.details.member(me?.id)?.displayName ?? me?.displayName ?? '', today: today),
       _WhoIsHome(details: data.details, absences: data.absences, today: today),

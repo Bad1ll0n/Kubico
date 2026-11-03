@@ -143,10 +143,13 @@ class _ChoresViewState extends State<ChoresView> {
 
   ModuleAccess get _access => widget.household.accessTo(HouseholdModule.chores);
 
+  /// Que dia é na casa (não no telemóvel, que pode estar noutro fuso): o mesmo "hoje" que o servidor usa.
+  DateTime get _today => _details?.todayAt(clock.now()) ?? DateUtils.dateOnly(clock.now());
+
   /// Quem gere conclui qualquer tarefa; quem usa, as suas e as de ninguém; quem só vê, nenhuma. Uma tarefa que se
   /// repete só se faz uma vez em cada ocorrência: a seguinte fica à espera do seu dia.
   bool _canComplete(Chore chore) =>
-      chore.isAvailableOn(clock.now()) &&
+      chore.isAvailableOn(_today) &&
       (_access.canManage ||
           (_access.canParticipate && (chore.assigneeUserId == null || chore.assigneeUserId == _myUserId)));
 
@@ -294,7 +297,7 @@ class _ChoresViewState extends State<ChoresView> {
           : StateView.error(message: errorText(_error!), offline: isOffline(_error!), onRetry: _load);
     }
 
-    final today = clock.now();
+    final today = _today;
     final grouped = <ChoreGroup, List<Chore>>{};
     final sorted = chores.values.toList()
       ..sort((a, b) {
