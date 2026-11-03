@@ -498,6 +498,11 @@ public static class AccountEndpoints
         }
 
         // Primeiro confirma-se tudo (nada muda se alguma casa ficasse sem administrador adulto).
+        // Tudo numa transação: se uma das casas falhar a meio (409, tempo esgotado), a pessoa não fica fora de umas e
+        // dentro de outras com a conta ainda a existir. As ligações a calendários externos apagam-se lá fora antes
+        // (melhor esforço) e os avisos de tempo real podem já ter saído.
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
         // Tranca as casas antes de as ler: quem sair ou mudar de papel ao mesmo tempo não deixa uma casa sem
         // administrador (um dos pedidos recebe 409).
         foreach (var householdId in await db.Memberships.Where(m => m.UserId == userId).Select(m => m.HouseholdId).ToListAsync(ct))
@@ -547,6 +552,7 @@ public static class AccountEndpoints
 
         db.ChangeTracker.Clear();
         await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync(ct);
+        await transaction.CommitAsync(ct);
         return Results.NoContent();
     }
 }
