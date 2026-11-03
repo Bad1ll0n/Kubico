@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kubico/src/storage/key_value_store.dart';
 import 'package:kubico/src/ui/design/components.dart';
+import 'package:kubico/src/ui/design/illustrations.dart';
 import 'package:kubico/src/ui/design/reading_mode.dart';
 import 'package:kubico/src/ui/theme.dart';
 
@@ -113,5 +114,34 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Sem tarefas por fazer'), findsOneWidget);
+  });
+
+  testWidgets('as ilustrações desenham-se no claro e no escuro e não vão para os leitores de ecrã', (tester) async {
+    for (final brightness in Brightness.values) {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildTheme(brightness),
+          home: Scaffold(
+            body: ListView(
+              children: [
+                for (final illustration in KubicoIllustration.values)
+                  StateView(
+                    inList: true,
+                    icon: Icons.inbox_rounded,
+                    illustration: illustration,
+                    title: 'Vazio ${illustration.name}',
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.byType(IllustrationView), findsWidgets);
+      expect(find.byIcon(Icons.inbox_rounded), findsNothing, reason: 'a ilustração fica no lugar do ícone');
+    }
+    final semantics = tester.ensureSemantics();
+    expect(find.bySemanticsLabel(RegExp('Vazio basket')), findsOneWidget);
+    semantics.dispose();
   });
 }

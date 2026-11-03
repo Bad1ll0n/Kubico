@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/strings.dart';
+import 'illustrations.dart';
 import 'tokens.dart';
+
+export 'illustrations.dart' show KubicoIllustration;
 
 /// A primeira letra de um nome (o primeiro carácter visível, não a primeira unidade UTF-16: "Élia", "🦁 Rui").
 String initialOf(String name) {
@@ -203,6 +206,7 @@ class StateView extends StatelessWidget {
     this.message,
     this.action,
     this.color,
+    this.illustration,
     this.inList = false,
     super.key,
   });
@@ -212,6 +216,7 @@ class StateView extends StatelessWidget {
       StateView(
         key: key,
         icon: offline ? Icons.cloud_off_rounded : Icons.error_outline_rounded,
+        illustration: offline ? KubicoIllustration.offline : null,
         title: offline ? 'Sem ligação'.tr : 'Algo correu mal'.tr,
         message: message,
         action: FilledButton.tonalIcon(
@@ -227,6 +232,9 @@ class StateView extends StatelessWidget {
   final Widget? action;
   final Color? color;
 
+  /// Uma ilustração no lugar do ícone (o ícone fica para quando não há).
+  final KubicoIllustration? illustration;
+
   /// Dentro de uma lista que já se desloca (sem centrar na altura nem se deslocar sozinho).
   final bool inList;
 
@@ -240,14 +248,17 @@ class StateView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ExcludeSemantics(
-              child: Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(color: tint.withValues(alpha: 0.14), shape: BoxShape.circle),
-                child: Icon(icon, size: 48, color: tint),
+            if (illustration != null)
+              IllustrationView(illustration!, color: tint)
+            else
+              ExcludeSemantics(
+                child: Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(color: tint.withValues(alpha: 0.14), shape: BoxShape.circle),
+                  child: Icon(icon, size: 48, color: tint),
+                ),
               ),
-            ),
             const SizedBox(height: KubicoSpace.s16),
             Text(title, style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
             if (message != null) ...[

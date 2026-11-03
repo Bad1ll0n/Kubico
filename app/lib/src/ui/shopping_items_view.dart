@@ -362,6 +362,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
                   return StateView(
                     inList: true,
                     icon: Icons.shopping_basket_outlined,
+                    illustration: KubicoIllustration.basket,
                     color: context.kubico.area(KubicoArea.shopping).color,
                     title: 'A lista está vazia'.tr,
                     message: 'Escreve, dita ou lê o código de barras do que falta.'.tr,

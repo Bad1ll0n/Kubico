@@ -7,6 +7,7 @@ import '../households/invite_link.dart';
 import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'scanner_screen.dart';
+import 'design/illustrations.dart';
 import 'theme.dart';
 
 /// Criar uma casa nova ou entrar numa existente com um código de convite.
@@ -99,6 +100,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Center(child: IllustrationView(KubicoIllustration.house, color: theme.colorScheme.primary, size: 120)),
+                const SizedBox(height: 16),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(20),

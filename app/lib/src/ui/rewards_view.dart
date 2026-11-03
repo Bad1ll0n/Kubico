@@ -195,6 +195,7 @@ class _RewardsViewState extends State<RewardsView> {
               StateView(
                 inList: true,
                 icon: Icons.card_giftcard_rounded,
+                illustration: KubicoIllustration.gift,
                 color: context.kubico.area(KubicoArea.rewards).color,
                 title: 'Ainda não há recompensas'.tr,
                 message: _canManage ? 'Cria a primeira e combina-a com as tarefas!'.tr : null,

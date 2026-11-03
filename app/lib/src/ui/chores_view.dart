@@ -333,6 +333,7 @@ class _ChoresViewState extends State<ChoresView> {
               (context) => StateView(
                 inList: true,
                 icon: Icons.task_alt_rounded,
+                illustration: KubicoIllustration.chores,
                 color: context.kubico.area(KubicoArea.chores).color,
                 title: 'Sem tarefas por fazer'.tr,
                 message: canManage ? 'Cria a primeira e escolhe quem a faz e quando se repete.'.tr : null,

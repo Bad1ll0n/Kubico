@@ -132,6 +132,7 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
     } else if (lists.isEmpty) {
       body = StateView(
         icon: Icons.checklist_rtl_rounded,
+        illustration: KubicoIllustration.basket,
         color: context.kubico.area(KubicoArea.shopping).color,
         title: 'Ainda não há listas'.tr,
         message: canManage
