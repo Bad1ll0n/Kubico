@@ -251,6 +251,7 @@ api.MapMemberEndpoints();
 api.MapPermissionEndpoints();
 api.MapActivityEndpoints();
 api.MapAbsenceEndpoints();
+api.MapTodayEndpoints();
 api.MapChildProfileEndpoints();
 api.MapChildSignInEndpoints();
 api.MapShoppingEndpoints();
@@ -277,22 +278,44 @@ internal static class DatabaseStartup
 {
     public static async Task InitializeDatabaseAsync(this WebApplication app)
     {
-        if (!app.Configuration.GetValue("Database:MigrateOnStartup", false))
-        {
-            return;
-        }
-
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<KubicoDbContext>();
 
-        // As migrações são geradas para PostgreSQL; em SQLite cria-se o esquema diretamente.
-        if (db.Database.IsSqlite())
+        if (app.Configuration.GetValue("Database:MigrateOnStartup", false))
         {
-            await db.Database.EnsureCreatedAsync();
+            // As migrações são geradas para PostgreSQL; em SQLite cria-se o esquema diretamente.
+            if (db.Database.IsSqlite())
+            {
+                await db.Database.EnsureCreatedAsync();
+            }
+            else
+            {
+                await db.Database.MigrateAsync();
+            }
         }
-        else
+
+        await WarmUpAsync(db);
+    }
+
+    /// <summary>
+    /// Aquece o EF Core antes do primeiro pedido (F4-20): constrói o modelo, abre o pool de ligações e compila as
+    /// consultas de quem entra (a pessoa e as suas casas). Sem isto, o primeiro /api/me depois de arrancar levava
+    /// cerca de 300 ms. Uma falha aqui não impede o arranque (a base pode ainda não estar pronta).
+    /// </summary>
+    private static async Task WarmUpAsync(KubicoDbContext db)
+    {
+        try
         {
-            await db.Database.MigrateAsync();
+            var someone = Guid.Empty;
+            _ = await db.Users.AsNoTracking().Where(u => u.Id == someone).Select(u => u.DisplayName).FirstOrDefaultAsync();
+            _ = await db.Memberships.AsNoTracking()
+                .Where(m => m.UserId == someone)
+                .Select(m => new { m.HouseholdId, m.Household.Name, m.Role })
+                .ToListAsync();
+        }
+        catch (Exception)
+        {
+            // Fica para o primeiro pedido.
         }
     }
 }

@@ -43,7 +43,7 @@ public static class AbsenceEndpoints
     }
 
     /// <summary>As ausências que ainda não acabaram (as de hoje e as futuras), pela ordem em que começam.</summary>
-    private static async Task<IResult> GetAbsences(
+    internal static async Task<IResult> GetAbsences(
         Guid householdId, ClaimsPrincipal principal, KubicoDbContext db, HouseholdAccess access, TimeProvider clock,
         CancellationToken ct)
     {

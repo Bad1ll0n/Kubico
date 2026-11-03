@@ -89,7 +89,7 @@ public static class ChoreEndpoints
         return api;
     }
 
-    private static async Task<IResult> GetChores(
+    internal static async Task<IResult> GetChores(
         Guid householdId,
         bool? includeDone,
         ClaimsPrincipal principal,

@@ -449,6 +449,26 @@ class ChildProfileOption {
   );
 }
 
+/// O que o ecrã Hoje e o painel de cozinha precisam, num só pedido (`GET /households/{id}/today`). As áreas que a
+/// pessoa não vê vêm a null.
+class TodayBundle {
+  const TodayBundle({
+    required this.details,
+    required this.absences,
+    required this.chores,
+    required this.calendar,
+    required this.lists,
+    required this.rewards,
+  });
+
+  final HouseholdDetails details;
+  final List<MemberAbsence> absences;
+  final List<Chore>? chores;
+  final CalendarRange? calendar;
+  final List<ShoppingList>? lists;
+  final RewardsOverview? rewards;
+}
+
 class HouseholdDetails {
   const HouseholdDetails({
     required this.id,

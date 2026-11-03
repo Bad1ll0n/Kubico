@@ -58,7 +58,22 @@ class _Server {
   late final client = MockClient((request) async {
     final path = request.url.path;
     requests.add('${request.method} $path${request.body.isEmpty ? '' : ' ${request.body}'}');
+    return _respond(path);
+  });
+
+  /// A resposta de uma área, já descodificada (para compor o /today).
+  Object? _read(String path) => jsonDecode(utf8.decode(_respond(path).bodyBytes));
+
+  http.Response _respond(String path) {
     return switch (path) {
+      '/api/households/h1/today' => _json({
+        'household': _read('/api/households/h1'),
+        'absences': _read('/api/households/h1/absences'),
+        'chores': _read('/api/households/h1/chores'),
+        'calendar': _read('/api/households/h1/events'),
+        'lists': _read('/api/households/h1/lists'),
+        'rewards': _read('/api/households/h1/rewards'),
+      }),
       '/api/me' => _json({
         'user': {
           'id': me,
@@ -177,7 +192,7 @@ class _Server {
       }),
       _ => http.Response('', 404),
     };
-  });
+  }
 }
 
 Future<List<HouseholdModule>> _pump(WidgetTester tester, _Server server) async {
@@ -217,9 +232,13 @@ void main() {
   ) async {
     await withClock(Clock.fixed(morning), () async {
       final semantics = tester.ensureSemantics();
-      final opened = await _pump(tester, _Server(me: 'mae', role: 'Admin'));
+      final server = _Server(me: 'mae', role: 'Admin');
+      final opened = await _pump(tester, server);
 
       expect(find.text('Bom dia, Mãe'), findsOneWidget);
+      expect(server.requests.where((r) => r.startsWith('GET /api/households/h1')), [
+        'GET /api/households/h1/today',
+      ], reason: 'um só pedido para o ecrã todo (F4-19)');
       // O Rui está fora: o avatar leva o selo e o leitor de ecrã di-lo.
       expect(find.byIcon(Icons.flight_takeoff_rounded), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp(r'Rui \(fora\)')), findsOneWidget);

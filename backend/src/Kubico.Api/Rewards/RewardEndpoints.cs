@@ -74,7 +74,7 @@ public static class RewardEndpoints
     }
 
     /// <summary>As recompensas, os pedidos recentes e o saldo de pontos de cada membro.</summary>
-    private static async Task<IResult> GetRewards(
+    internal static async Task<IResult> GetRewards(
         Guid householdId,
         ClaimsPrincipal principal,
         KubicoDbContext db,

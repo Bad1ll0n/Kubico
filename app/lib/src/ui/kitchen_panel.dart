@@ -105,32 +105,27 @@ class _KitchenPanelScreenState extends State<KitchenPanelScreen> {
     final api = context.read<ApiClient>();
     final shopping = context.read<ShoppingRepository>();
     final id = _household.id;
-    final today = DateUtils.dateOnly(clock.now());
     try {
+      // Um só pedido para tudo (F4-19); as compras vêm do repositório (que funciona sem rede).
       final results = await Future.wait<Object?>([
-        api.getHousehold(id),
-        api.getAbsences(id),
-        _household.accessTo(HouseholdModule.chores).canView ? api.getChores(id) : Future.value(),
-        _household.accessTo(HouseholdModule.calendar).canView
-            ? api.getCalendar(id, today, today.add(const Duration(days: 1)))
-            : Future.value(),
+        api.getToday(id),
         _household.accessTo(HouseholdModule.shopping).canView ? shopping.lists(id) : Future.value(),
-        _household.accessTo(HouseholdModule.rewards).canView ? api.getRewards(id) : Future.value(),
       ]);
+      final bundle = results[0]! as TodayBundle;
       // A lista com mais coisas por comprar.
-      final lists = (results[4] as List<ShoppingList>?) ?? const [];
+      final lists = (results[1] as List<ShoppingList>?) ?? const [];
       final list = lists.isEmpty ? null : (lists.toList()..sort((a, b) => b.pendingCount - a.pendingCount)).first;
       final items = list == null || list.pendingCount == 0 ? <ShoppingItem>[] : await shopping.items(id, list.id);
       if (!mounted) return;
       setState(() {
         _data = _PanelData(
-          details: results[0]! as HouseholdDetails,
-          absences: results[1]! as List<MemberAbsence>,
-          chores: results[2] as List<Chore>?,
-          calendar: results[3] as CalendarRange?,
+          details: bundle.details,
+          absences: bundle.absences,
+          chores: bundle.chores,
+          calendar: bundle.calendar,
           list: list,
           items: items.where((i) => !i.isChecked).toList(),
-          rewards: results[5] as RewardsOverview?,
+          rewards: bundle.rewards,
         );
         _error = null;
       });

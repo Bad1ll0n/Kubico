@@ -222,6 +222,24 @@ class ApiClient {
         ),
       );
 
+  /// O ecrã Hoje num só pedido (F4-19): a casa, as ausências e, das áreas que a pessoa vê, as tarefas, o calendário
+  /// de hoje e amanhã, as listas e as recompensas (null nas que não vê).
+  Future<TodayBundle> getToday(String householdId) async {
+    final json = await _send('GET', '/api/households/$householdId/today') as Map<String, dynamic>;
+    final chores = json['chores'];
+    final calendar = json['calendar'];
+    final lists = json['lists'];
+    final rewards = json['rewards'];
+    return TodayBundle(
+      details: HouseholdDetails.fromJson(json['household']),
+      absences: [for (final a in json['absences'] as List) MemberAbsence.fromJson(a as Map<String, dynamic>)],
+      chores: chores == null ? null : _readable(chores, Chore.fromJson),
+      calendar: calendar == null ? null : CalendarRange.fromJson(calendar as Map<String, dynamic>),
+      lists: lists == null ? null : _readable(lists, ShoppingList.fromJson),
+      rewards: rewards == null ? null : RewardsOverview.fromJson(rewards as Map<String, dynamic>),
+    );
+  }
+
   Future<List<MemberAbsence>> getAbsences(String householdId) async => [
     for (final a in await _send('GET', '/api/households/$householdId/absences') as List)
       MemberAbsence.fromJson(a as Map<String, dynamic>),

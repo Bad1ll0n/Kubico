@@ -68,7 +68,7 @@ public static class ShoppingEndpoints
         return api;
     }
 
-    private static async Task<IResult> GetLists(
+    internal static async Task<IResult> GetLists(
         Guid householdId, ClaimsPrincipal principal, KubicoDbContext db, HouseholdAccess access, CancellationToken ct)
     {
         var (_, _, error) = await access.RequireAsync(

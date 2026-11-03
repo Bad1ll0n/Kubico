@@ -76,27 +76,18 @@ class _TodayViewState extends State<TodayView> {
   }
 
   Future<void> _load() async {
-    final api = context.read<ApiClient>();
-    final id = _household.id;
-    final today = DateUtils.dateOnly(clock.now());
     try {
-      final results = await Future.wait<Object?>([
-        api.getHousehold(id),
-        api.getAbsences(id),
-        _household.accessTo(HouseholdModule.chores).canView ? api.getChores(id) : Future.value(),
-        _household.accessTo(HouseholdModule.calendar).canView ? api.getCalendar(id, today, today) : Future.value(),
-        _household.accessTo(HouseholdModule.shopping).canView ? api.getLists(id) : Future.value(),
-        _household.accessTo(HouseholdModule.rewards).canView ? api.getRewards(id) : Future.value(),
-      ]);
+      // Um só pedido para tudo (F4-19).
+      final bundle = await context.read<ApiClient>().getToday(_household.id);
       if (!mounted) return;
       setState(() {
         _data = _TodayData(
-          details: results[0]! as HouseholdDetails,
-          absences: results[1]! as List<MemberAbsence>,
-          chores: results[2] as List<Chore>?,
-          calendar: results[3] as CalendarRange?,
-          lists: results[4] as List<ShoppingList>?,
-          rewards: results[5] as RewardsOverview?,
+          details: bundle.details,
+          absences: bundle.absences,
+          chores: bundle.chores,
+          calendar: bundle.calendar,
+          lists: bundle.lists,
+          rewards: bundle.rewards,
         );
         _error = null;
       });

@@ -164,7 +164,7 @@ public static class HouseholdEndpoints
             new HouseholdSummaryDto(household.Id, household.Name, HouseholdRole.Admin, ModulePermissions.ResolveAll(HouseholdRole.Admin, [])));
     }
 
-    private static async Task<IResult> GetHousehold(
+    internal static async Task<IResult> GetHousehold(
         Guid householdId,
         ClaimsPrincipal principal,
         KubicoDbContext db,

@@ -97,7 +97,7 @@ public static class CalendarEndpoints
     }
 
     /// <summary>Ocorrências, eventos e feriados entre dois dias (inclusive, no fuso da casa).</summary>
-    private static async Task<IResult> GetCalendar(
+    internal static async Task<IResult> GetCalendar(
         Guid householdId,
         DateOnly? from,
         DateOnly? to,
