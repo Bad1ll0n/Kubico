@@ -1012,6 +1012,95 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.ToTable("ProductInfos");
                 });
 
+            modelBuilder.Entity("Kubico.Domain.Shopping.PurchaseRecord", b =>
+                {
+                    b.Property<Guid>("ItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ListId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("NameKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("PurchasedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ItemId");
+
+                    b.HasIndex("PurchasedAt");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("ListId", "PurchasedAt");
+
+                    b.ToTable("PurchaseRecords");
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Shopping.RecurringItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("IntervalDays")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ListId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly>("NextDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Quantity")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ListId");
+
+                    b.HasIndex("NextDate");
+
+                    b.ToTable("RecurringItems");
+                });
+
             modelBuilder.Entity("Kubico.Domain.Shopping.ShoppingItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1502,6 +1591,24 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.HasOne("Kubico.Domain.Households.Household", null)
                         .WithMany()
                         .HasForeignKey("HouseholdId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Shopping.PurchaseRecord", b =>
+                {
+                    b.HasOne("Kubico.Domain.Shopping.ShoppingList", null)
+                        .WithMany()
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Shopping.RecurringItem", b =>
+                {
+                    b.HasOne("Kubico.Domain.Shopping.ShoppingList", null)
+                        .WithMany()
+                        .HasForeignKey("ListId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

@@ -48,6 +48,7 @@ builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<NotificationDispatcher>();
 builder.Services.AddScoped<MaintenanceService>();
 builder.Services.AddScoped<ReminderService>();
+builder.Services.AddScoped<RecurringItemsService>();
 if (builder.Configuration.GetValue("Reminders:Enabled", true))
 {
     // Lembretes, resumos e mesada por pagar, de minuto a minuto: ver ReminderService.
@@ -262,6 +263,7 @@ api.MapTodayEndpoints();
 api.MapChildProfileEndpoints();
 api.MapChildSignInEndpoints();
 api.MapShoppingEndpoints();
+api.MapShoppingInsightsEndpoints();
 api.MapProductEndpoints();
 api.MapChoreEndpoints();
 api.MapChoreHistoryEndpoints();

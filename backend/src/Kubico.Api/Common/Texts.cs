@@ -372,6 +372,8 @@ public static partial class Texts
         ["pediu «{0}» (aprovado automaticamente)"] = "asked for “{0}” (approved automatically)",
         ["passou a aprovar sozinho os pedidos até {0} pontos"] = "now approves requests up to {0} points automatically",
         ["deixou de aprovar pedidos sozinho"] = "stopped approving requests automatically",
+        ["pôs «{0}» a repetir na lista «{1}»"] = "set “{0}” to repeat on the list “{1}”",
+        ["deixou de repetir «{0}»"] = "stopped repeating “{0}”",
         ["É a tua vez: {0}"] = "It's your turn: {0}",
         ["{0} fez: {1}"] = "{0} did: {1}",
         ["Com foto. Vê no histórico das tarefas."] = "With a photo. See it in the chore history.",

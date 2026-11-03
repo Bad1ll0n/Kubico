@@ -126,7 +126,11 @@ public static class AccountEndpoints
                 .ToListAsync(ct),
             PreferenciasDeAvisos = await db.NotificationPreferences.AsNoTracking()
                 .Where(p => p.UserId == userId)
-                .Select(p => new { Envio = p.Delivery.ToString(), ResumoAs = p.DigestAt, SilencioDas = p.QuietFrom, SilencioAte = p.QuietUntil, Fuso = p.TimeZoneId })
+                .Select(p => new
+                {
+                    Envio = p.Delivery.ToString(), ResumoAs = p.DigestAt, SilencioDas = p.QuietFrom, SilencioAte = p.QuietUntil,
+                    Fuso = p.TimeZoneId, ResumoDaManha = p.MorningSummary, ResumoDaManhaAs = p.MorningAt, ResumoDaSemana = p.WeeklySummary,
+                })
                 .SingleOrDefaultAsync(ct),
             Telemoveis = await db.PushDevices.AsNoTracking()
                 .Where(d => d.UserId == userId)
@@ -143,6 +147,11 @@ public static class AccountEndpoints
                 ComFoto = c.PhotoId != null, NaoAceite = c.RejectedAt != null,
             }),
             ArtigosDeCompras = shopping.Select(i => new { Casa = Casa(i.HouseholdId), i.Lista, Artigo = i.Name, Quantidade = i.Quantity, AdicionadoEm = i.CreatedAt }),
+            Compras = (await db.PurchaseRecords.AsNoTracking()
+                .Where(p => p.UserId == userId)
+                .Select(p => new { p.HouseholdId, p.Name, p.PurchasedAt })
+                .ToListAsync(ct))
+                .Select(p => new { Casa = Casa(p.HouseholdId), Artigo = p.Name, CompradoEm = p.PurchasedAt }),
             EventosCriados = events.Select(e => new
             {
                 Casa = Casa(e.HouseholdId), Evento = e.Title, Comeca = e.StartsAt, Dia = e.StartDate, CriadoEm = e.CreatedAt,

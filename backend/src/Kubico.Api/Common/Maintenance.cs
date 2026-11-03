@@ -7,7 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Kubico.Api.Common;
 
 /// <summary>O que uma limpeza apagou ou acertou (para o registo e os testes).</summary>
-public record MaintenanceReport(int Activity, int Notifications, int RefreshTokens, int Photos, int RecurrenceEnds);
+public record MaintenanceReport(
+    int Activity, int Notifications, int RefreshTokens, int Photos, int RecurrenceEnds, int Purchases = 0, int SentReminders = 0);
 
 /// <summary>
 /// Limpezas que não dependem de ninguém abrir um ecrã (P13): o histórico com mais de 30 dias, os avisos com mais de
@@ -31,7 +32,10 @@ public class MaintenanceService(KubicoDbContext db, TimeProvider clock)
             // Um token expirado já não serve para nada; os revogados e ainda válidos ficam (detetam reutilizações).
             await db.RefreshTokens.Where(t => t.ExpiresAt < now).ExecuteDeleteAsync(ct),
             await ChoreHistoryEndpoints.CleanUpAsync(db, null, now, ct),
-            await BackfillRecurrenceEndsAsync(ct));
+            await BackfillRecurrenceEndsAsync(ct),
+            // O que se comprou guarda-se um ano (sugestões e ordem do supermercado); os lembretes enviados, 60 dias.
+            await db.PurchaseRecords.Where(p => p.PurchasedAt < now - Shopping.ShoppingInsightsEndpoints.History).ExecuteDeleteAsync(ct),
+            await db.SentReminders.Where(r => r.SentAt < now - TimeSpan.FromDays(60)).ExecuteDeleteAsync(ct));
     }
 
     /// <summary>

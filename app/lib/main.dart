@@ -18,6 +18,7 @@ import 'src/session/child_device.dart';
 import 'src/session/device_kind.dart';
 import 'src/session/session_controller.dart';
 import 'src/session/token_store.dart';
+import 'src/shopping/shopping_order.dart';
 import 'src/shopping/shopping_repository.dart';
 import 'src/storage/key_value_store.dart';
 import 'src/ui/app.dart';
@@ -30,6 +31,7 @@ Future<void> main() async {
   await AppLanguage.restore(preferences);
   await ReadingMode.restore(preferences);
   await ChildDevice.restore(preferences);
+  await ShoppingOrder.restore(preferences);
   // A última cópia de cada leitura, para abrir sem rede (F4-14).
   final responses = ResponseCache(store: preferences);
   await responses.restore();

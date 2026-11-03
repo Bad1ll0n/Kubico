@@ -23,6 +23,8 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<Invite> Invites => Set<Invite>();
     public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
     public DbSet<ShoppingItem> ShoppingItems => Set<ShoppingItem>();
+    public DbSet<PurchaseRecord> PurchaseRecords => Set<PurchaseRecord>();
+    public DbSet<RecurringItem> RecurringItems => Set<RecurringItem>();
     public DbSet<ChorePhoto> ChorePhotos => Set<ChorePhoto>();
     public DbSet<ActivityEntry> ActivityEntries => Set<ActivityEntry>();
     public DbSet<Allowance> Allowances => Set<Allowance>();
@@ -185,6 +187,27 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             // A exportação RGPD procura o que cada pessoa pôs nas listas (P15).
             e.HasIndex(i => i.AddedByUserId);
             e.HasOne(i => i.List).WithMany(l => l.Items).HasForeignKey(i => i.ListId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PurchaseRecord>(e =>
+        {
+            e.HasKey(p => p.ItemId);
+            e.Property(p => p.Name).HasMaxLength(200);
+            e.Property(p => p.NameKey).HasMaxLength(200);
+            e.Property(p => p.Category).HasMaxLength(50);
+            e.HasIndex(p => new { p.ListId, p.PurchasedAt });
+            e.HasIndex(p => p.UserId);
+            e.HasIndex(p => p.PurchasedAt);
+            e.HasOne<ShoppingList>().WithMany().HasForeignKey(p => p.ListId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RecurringItem>(e =>
+        {
+            e.Property(r => r.Name).HasMaxLength(200);
+            e.Property(r => r.Quantity).HasMaxLength(50);
+            e.Property(r => r.Category).HasMaxLength(50);
+            e.HasIndex(r => r.NextDate);
+            e.HasOne<ShoppingList>().WithMany().HasForeignKey(r => r.ListId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Allowance>(e =>

@@ -410,6 +410,7 @@ public class ReminderWorker(IServiceScopeFactory scopes, ILogger<ReminderWorker>
             {
                 await using var scope = scopes.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<ReminderService>().RunAsync(stoppingToken);
+                await scope.ServiceProvider.GetRequiredService<Shopping.RecurringItemsService>().RunAsync(stoppingToken);
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {

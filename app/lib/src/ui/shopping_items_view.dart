@@ -8,6 +8,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
+import '../shopping/shopping_order.dart';
 import '../shopping/shopping_repository.dart';
 import '../shopping/voice_input.dart';
 import 'design/components.dart';
@@ -55,6 +56,9 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
   /// Os artigos por comprar e no carrinho, já ordenados; voltam a ordenar-se só quando os artigos mudam (P10).
   (List<ShoppingItem>, List<ShoppingItem>)? _sorted;
 
+  /// "Costumas comprar" e a ordem do supermercado aprendida (F4-22); null enquanto não chegam (ou sem rede).
+  ShoppingInsights? _insights;
+
   late final ShoppingRepository _shopping;
   String get _householdId => widget.householdId;
   String get _listId => widget.list.id;
@@ -70,7 +74,24 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
       ..add(_shopping.rejections.listen(_onRejected));
     // A fila de alterações enviou-se (ou a rede voltou): o servidor tem a versão final.
     _shopping.addListener(_onShoppingChanged);
+    ShoppingOrder.learned.addListener(_resort);
     _load();
+  }
+
+  void _resort() => setState(() => _sorted = null);
+
+  /// As sugestões e a ordem aprendida: um extra, que nunca impede a lista de abrir.
+  Future<void> _loadInsights() async {
+    try {
+      final insights = await context.read<ApiClient>().getShoppingInsights(_householdId, _listId);
+      if (!mounted) return;
+      setState(() {
+        _insights = insights;
+        _sorted = null;
+      });
+    } catch (_) {
+      // Sem rede ou sem acesso: a lista funciona sem elas.
+    }
   }
 
   @override
@@ -79,6 +100,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
       s.cancel();
     }
     _shopping.removeListener(_onShoppingChanged);
+    ShoppingOrder.learned.removeListener(_resort);
     _input.dispose();
     _inputFocus.dispose();
     super.dispose();
@@ -93,6 +115,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
           _sorted = null;
           _error = null;
         });
+        unawaited(_loadInsights());
       }
     } catch (e) {
       if (mounted) setState(() => _error = e);
@@ -276,8 +299,8 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     }
 
     final (pending, done) = _sorted ??= (
-      items.values.where((i) => !i.isChecked).toList()..sort(_byCategoryThenDate),
-      items.values.where((i) => i.isChecked).toList()..sort(_byCategoryThenDate),
+      items.values.where((i) => !i.isChecked).toList()..sort(_compare),
+      items.values.where((i) => i.isChecked).toList()..sort(_compare),
     );
 
     // Uma lista plana de linhas (artigos por comprar, o cabeçalho do carrinho e os artigos comprados), construída só
@@ -323,6 +346,13 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
               ],
             ),
           ),
+        _ListTools(
+          learnedOrder: ShoppingOrder.learned.value,
+          hasLearnedOrder: _insights?.categoryOrder.isNotEmpty ?? false,
+          onLearnedOrder: ShoppingOrder.set,
+          onRecurring: _showRecurring,
+        ),
+        if (widget.canEdit && (_insights?.suggestions.isNotEmpty ?? false)) _suggestions(_insights!.suggestions),
         if (widget.canEdit)
           Padding(
             padding: const EdgeInsets.all(12),
@@ -457,6 +487,13 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
       child: CheckboxListTile(
         value: item.isChecked,
         onChanged: widget.canEdit ? (_) => _toggle(item) : null,
+        secondary: widget.canEdit
+            ? IconButton(
+                tooltip: 'Repetir «${item.name}»'.tr,
+                icon: const Icon(Icons.repeat_rounded),
+                onPressed: () => _repeat(item),
+              )
+            : null,
         controlAffinity: ListTileControlAffinity.leading,
         title: Text(
           item.name,
@@ -469,9 +506,142 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     );
   }
 
-  static int _byCategoryThenDate(ShoppingItem a, ShoppingItem b) {
+  /// Por categoria (na ordem aprendida, se houver e estiver ligada; senão alfabética, sem categoria no fim) e depois
+  /// pela ordem em que se puseram.
+  int _compare(ShoppingItem a, ShoppingItem b) {
+    final learned = ShoppingOrder.learned.value ? _insights?.categoryOrder : null;
+    int rank(ShoppingItem i) {
+      final category = i.category?.toLowerCase();
+      if (category == null) return 1 << 20;
+      final index = learned?.indexWhere((c) => c.toLowerCase() == category) ?? -1;
+      return index < 0 ? 1 << 19 : index;
+    }
+
+    final byRank = rank(a).compareTo(rank(b));
+    if (byRank != 0) return byRank;
     final category = (a.category ?? '￿').toLowerCase().compareTo((b.category ?? '￿').toLowerCase());
     return category != 0 ? category : a.createdAt.compareTo(b.createdAt);
+  }
+
+  /// "Costumas comprar": um toque põe o artigo na lista.
+  Widget _suggestions(List<PurchaseSuggestion> suggestions) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Costumas comprar'.tr, style: theme.textTheme.labelLarge),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final s in suggestions)
+                ActionChip(
+                  avatar: const Icon(Icons.add_rounded, size: 18),
+                  label: Text(s.name),
+                  tooltip: 'Costumas comprar a cada ${s.everyDays} dias'.tr,
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    _upsert(_shopping.addItem(_householdId, _listId, name: s.name, category: s.category));
+                    setState(() {
+                      _insights = ShoppingInsights(
+                        suggestions: [..._insights!.suggestions.where((x) => x != s)],
+                        categoryOrder: _insights!.categoryOrder,
+                      );
+                    });
+                  },
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// "Repetir": o artigo volta à lista sozinho (F4-22a).
+  Future<void> _repeat(ShoppingItem item) async {
+    final days = await showDialog<int>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text('Repetir «${item.name}»'.tr),
+        children: [
+          for (final (days, label) in [
+            (7, 'Todas as semanas'.tr),
+            (14, 'A cada duas semanas'.tr),
+            (30, 'Todos os meses'.tr),
+            (1, 'Todos os dias'.tr),
+          ])
+            SimpleDialogOption(onPressed: () => Navigator.pop(context, days), child: Text(label)),
+        ],
+      ),
+    );
+    if (days == null || !mounted) return;
+    try {
+      await context.read<ApiClient>().createRecurringItem(
+        _householdId,
+        _listId,
+        name: item.name,
+        intervalDays: days,
+        quantity: item.quantity,
+        category: item.category,
+      );
+      _tell('«${item.name}» volta à lista sozinho.'.tr);
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  /// Os artigos que se repetem nesta lista, para os ver e deixar de repetir.
+  Future<void> _showRecurring() async {
+    final api = context.read<ApiClient>();
+    List<RecurringItem> items;
+    try {
+      items = await api.getRecurringItems(_householdId, _listId);
+    } catch (e) {
+      if (mounted) showError(context, e);
+      return;
+    }
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.only(bottom: 24),
+          children: [
+            ListTile(title: Text('Artigos que se repetem'.tr, style: Theme.of(context).textTheme.titleMedium)),
+            if (items.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text('Nenhum. Mantém um artigo carregado e escolhe "Repetir".'.tr),
+              ),
+            for (final r in items)
+              ListTile(
+                leading: const Icon(Icons.repeat_rounded),
+                title: Text(r.name),
+                subtitle: Text('A cada ${r.intervalDays} dias · próxima a ${r.nextDate.day}/${r.nextDate.month}'.tr),
+                trailing: widget.canEdit
+                    ? IconButton(
+                        tooltip: 'Deixar de repetir'.tr,
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        onPressed: () async {
+                          try {
+                            await api.deleteRecurringItem(_householdId, _listId, r.id);
+                            setSheetState(() => items = [...items.where((x) => x.id != r.id)]);
+                          } catch (e) {
+                            if (context.mounted) showError(context, e);
+                          }
+                        },
+                      )
+                    : null,
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -513,4 +683,43 @@ class _SyncBanner extends StatelessWidget {
   final match = RegExp(r'^(\d+(?:[.,]\d+)?\s?(?:x|kg|g|l|ml|un)?)\s+(.+)$', caseSensitive: false).firstMatch(text);
   if (match == null) return (text, null);
   return (match.group(2)!.trim(), match.group(1)!.trim());
+}
+
+/// A linha de ferramentas da lista: a ordem do supermercado e os artigos que se repetem.
+class _ListTools extends StatelessWidget {
+  const _ListTools({
+    required this.learnedOrder,
+    required this.hasLearnedOrder,
+    required this.onLearnedOrder,
+    required this.onRecurring,
+  });
+
+  final bool learnedOrder;
+  final bool hasLearnedOrder;
+  final ValueChanged<bool> onLearnedOrder;
+  final VoidCallback onRecurring;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: PopupMenuButton<String>(
+        tooltip: 'Mais opções da lista'.tr,
+        icon: const Icon(Icons.tune_rounded),
+        onSelected: (value) => switch (value) {
+          'order' => onLearnedOrder(!learnedOrder),
+          _ => onRecurring(),
+        },
+        itemBuilder: (_) => [
+          CheckedPopupMenuItem(
+            value: 'order',
+            checked: learnedOrder,
+            enabled: hasLearnedOrder || learnedOrder,
+            child: Text('Pela ordem em que costumo comprar'.tr),
+          ),
+          PopupMenuItem(value: 'recurring', child: Text('Artigos que se repetem'.tr)),
+        ],
+      ),
+    );
+  }
 }

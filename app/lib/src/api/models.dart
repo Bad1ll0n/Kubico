@@ -451,6 +451,61 @@ class ChildProfileOption {
 
 /// O que o ecrã Hoje e o painel de cozinha precisam, num só pedido (`GET /households/{id}/today`). As áreas que a
 /// pessoa não vê vêm a null.
+/// Um artigo que se costuma comprar e que já passou do costume ("Costumas comprar", F4-22b).
+class PurchaseSuggestion {
+  const PurchaseSuggestion({required this.name, required this.category, required this.everyDays});
+
+  final String name;
+  final String? category;
+
+  /// De quantos em quantos dias se costuma comprar.
+  final int everyDays;
+
+  factory PurchaseSuggestion.fromJson(Map<String, dynamic> json) => PurchaseSuggestion(
+    name: json['name'] as String,
+    category: json['category'] as String?,
+    everyDays: json['everyDays'] as int,
+  );
+}
+
+/// As sugestões e a ordem das categorias aprendida numa lista.
+class ShoppingInsights {
+  const ShoppingInsights({required this.suggestions, required this.categoryOrder});
+
+  final List<PurchaseSuggestion> suggestions;
+  final List<String> categoryOrder;
+
+  factory ShoppingInsights.fromJson(Map<String, dynamic> json) => ShoppingInsights(
+    suggestions: [for (final s in json['suggestions'] as List) PurchaseSuggestion.fromJson(s as Map<String, dynamic>)],
+    categoryOrder: (json['categoryOrder'] as List).cast<String>(),
+  );
+}
+
+/// Um artigo que volta à lista sozinho a cada [intervalDays] dias (F4-22a).
+class RecurringItem {
+  const RecurringItem({
+    required this.id,
+    required this.name,
+    required this.quantity,
+    required this.intervalDays,
+    required this.nextDate,
+  });
+
+  final String id;
+  final String name;
+  final String? quantity;
+  final int intervalDays;
+  final DateTime nextDate;
+
+  factory RecurringItem.fromJson(Map<String, dynamic> json) => RecurringItem(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    quantity: json['quantity'] as String?,
+    intervalDays: json['intervalDays'] as int,
+    nextDate: DateTime.parse(json['nextDate'] as String),
+  );
+}
+
 class TodayBundle {
   const TodayBundle({
     required this.details,

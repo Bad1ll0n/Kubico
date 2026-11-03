@@ -341,6 +341,12 @@ public static class ShoppingEndpoints
         }, access: ModuleAccess.Participate);
         await db.SaveChangesAsync(ct);
 
+        // O que se compra alimenta as sugestões e a ordem do supermercado (F4-22).
+        if (countsChange)
+        {
+            await ShoppingInsightsEndpoints.RecordPurchaseAsync(db, householdId, item, userId, item.UpdatedAt, ct);
+        }
+
         var dto = ToDto(item);
         await notifier.ShoppingItemUpserted(householdId, dto, ct);
         if (countsChange)

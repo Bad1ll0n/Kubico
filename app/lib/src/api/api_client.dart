@@ -348,6 +348,32 @@ class ApiClient {
   Future<void> deleteList(String householdId, String listId) =>
       _send('DELETE', '/api/households/$householdId/lists/$listId');
 
+  /// "Costumas comprar" e a ordem das categorias aprendida nesta lista (F4-22).
+  Future<ShoppingInsights> getShoppingInsights(String householdId, String listId) async => ShoppingInsights.fromJson(
+    await _send('GET', '/api/households/$householdId/lists/$listId/insights') as Map<String, dynamic>,
+  );
+
+  Future<List<RecurringItem>> getRecurringItems(String householdId, String listId) async =>
+      _readable(await _send('GET', '/api/households/$householdId/lists/$listId/recurring'), RecurringItem.fromJson);
+
+  Future<RecurringItem> createRecurringItem(
+    String householdId,
+    String listId, {
+    required String name,
+    required int intervalDays,
+    String? quantity,
+    String? category,
+  }) async => RecurringItem.fromJson(
+    await _send(
+      'POST',
+      '/api/households/$householdId/lists/$listId/recurring',
+      body: {'name': name, 'intervalDays': intervalDays, 'quantity': ?quantity, 'category': ?category},
+    ),
+  );
+
+  Future<void> deleteRecurringItem(String householdId, String listId, String id) =>
+      _send('DELETE', '/api/households/$householdId/lists/$listId/recurring/$id');
+
   Future<List<ShoppingItem>> getItems(String householdId, String listId) async =>
       _readable(await _send('GET', _itemsPath(householdId, listId)), ShoppingItem.fromJson);
 
