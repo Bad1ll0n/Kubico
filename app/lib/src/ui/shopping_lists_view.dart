@@ -101,7 +101,7 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Apagar "${list.name}"?'.tr),
+        title: Text('Apagar «${list.name}»?'.tr),
         content: Text('Os artigos desta lista também são apagados para toda a casa.'.tr),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancelar'.tr)),

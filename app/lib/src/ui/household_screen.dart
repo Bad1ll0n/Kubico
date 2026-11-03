@@ -602,7 +602,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
     HouseholdRole.admin => 'Gere a casa, os membros e os convites'.tr,
     HouseholdRole.adult => 'Cria e gere listas e conteúdos'.tr,
     HouseholdRole.child => 'Vê e adiciona artigos, sem apagar listas'.tr,
-    HouseholdRole.guest => 'Acesso limitado (babysitter, visitas)'.tr,
+    HouseholdRole.guest => 'Acesso limitado (ama, visitas)'.tr,
   };
 }
 

@@ -207,9 +207,9 @@ class _ChoresViewState extends State<ChoresView> {
             content: Text(
               [
                 if (doer != null && points > 0)
-                  '+$points pontos para $doer!'.tr
+                  (points == 1 ? '+1 ponto para $doer!'.tr : '+$points pontos para $doer!'.tr)
                 else if (points > 0)
-                  '+$points pontos!'.tr
+                  (points == 1 ? '+1 ponto!'.tr : '+$points pontos!'.tr)
                 else
                   'Feito!'.tr,
                 if (next != null && updated.rotates) 'Agora é a vez de $next.'.tr,
@@ -250,9 +250,11 @@ class _ChoresViewState extends State<ChoresView> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text(
-              result.points > 0 ? '${chore.title}: +${result.points} pontos!'.tr : '${chore.title}: feito!'.tr,
-            ),
+            content: Text(switch (result.points) {
+              0 => '${chore.title}: feito!'.tr,
+              1 => '${chore.title}: +1 ponto!'.tr,
+              final points => '${chore.title}: +$points pontos!'.tr,
+            }),
           ),
         );
     } catch (e) {

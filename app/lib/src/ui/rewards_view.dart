@@ -105,9 +105,9 @@ class _RewardsViewState extends State<RewardsView> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Trocar ${reward.cost} pontos?'.tr),
+        title: Text(reward.cost == 1 ? 'Trocar 1 ponto?'.tr : 'Trocar ${reward.cost} pontos?'.tr),
         content: Text(
-          _canManage ? 'Por "${reward.title}".'.tr : 'Por "${reward.title}". Um adulto tem de aprovar o pedido.'.tr,
+          _canManage ? 'Por «${reward.title}».'.tr : 'Por «${reward.title}». Um adulto tem de aprovar o pedido.'.tr,
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancelar'.tr)),
@@ -351,7 +351,7 @@ class _RewardTile extends StatelessWidget {
                     const SizedBox(height: KubicoSpace.s8),
                     if (missing > 0)
                       Text(
-                        'Faltam $missing pontos'.tr,
+                        missing == 1 ? 'Falta 1 ponto'.tr : 'Faltam $missing pontos'.tr,
                         style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                       )
                     else if (onRedeem != null)
