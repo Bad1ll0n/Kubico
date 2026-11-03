@@ -74,6 +74,9 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
   String? _dropOff;
   String? _pickUp;
 
+  /// O lembrete, em minutos antes (null: sem lembrete). F4-11.
+  int? _reminder;
+
   bool get _isNew => widget.event == null;
 
   /// Uma alteração a um só dia de uma série não se repete.
@@ -103,6 +106,7 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
       }
     }
 
+    _reminder = event?.reminderMinutes.firstOrNull;
     final recurrence = Recurrence.parse(event?.recurrence);
     _frequency = recurrence?.frequency;
     _interval = recurrence?.interval ?? 1;
@@ -221,8 +225,33 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
       // As boleias só fazem sentido em eventos com hora.
       dropOffUserId: _allDay ? null : _dropOff,
       pickUpUserId: _allDay ? null : _pickUp,
+      reminderMinutes: [?_reminder],
     );
     Navigator.pop(context, CalendarEventSaved(draft));
+  }
+
+  /// As escolhas do lembrete: nos eventos com hora, minutos antes; nos de dia inteiro, no dia (às 9h) ou na véspera.
+  Widget _reminderField() {
+    final options = <int?, String>{
+      null: 'Sem lembrete'.tr,
+      if (_allDay) ...{0: 'No próprio dia, às 9h'.tr, 1440: 'Na véspera, às 9h'.tr, 2880: 'Dois dias antes'.tr},
+      if (!_allDay) ...{
+        0: 'À hora do evento'.tr,
+        10: '10 minutos antes'.tr,
+        30: '30 minutos antes'.tr,
+        60: '1 hora antes'.tr,
+        1440: '1 dia antes'.tr,
+      },
+    };
+    final value = _reminder;
+    if (value != null && !options.containsKey(value)) options[value] = '$value minutos antes'.tr;
+    return DropdownButtonFormField<int?>(
+      key: ValueKey('reminder-$_allDay'),
+      initialValue: value,
+      decoration: InputDecoration(labelText: 'Lembrete'.tr, prefixIcon: const Icon(Icons.notifications_active_rounded)),
+      items: [for (final e in options.entries) DropdownMenuItem<int?>(value: e.key, child: Text(e.value))],
+      onChanged: (v) => setState(() => _reminder = v),
+    );
   }
 
   Widget _rideField(String label, String? value, ValueChanged<String?> onChanged) {
@@ -292,6 +321,8 @@ class _CalendarEventEditorState extends State<_CalendarEventEditor> {
               textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(labelText: 'Local (opcional)'.tr),
             ),
+            const SizedBox(height: 12),
+            _reminderField(),
             if (_canRepeat) ...[
               const SizedBox(height: 12),
               DropdownButtonFormField<RecurrenceFrequency?>(

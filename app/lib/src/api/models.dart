@@ -784,6 +784,7 @@ class Chore {
     this.doneSteps = const [],
     this.requiresPhoto = false,
     this.availableFrom,
+    this.remindAt,
   });
 
   final String id;
@@ -814,6 +815,9 @@ class Chore {
   /// adiantam as seguintes). Null nas que não se repetem.
   final DateTime? availableFrom;
 
+  /// A que horas (no fuso da casa) se lembra a quem a tem, no dia em que é para fazer.
+  final ({int hour, int minute})? remindAt;
+
   /// Se já se pode concluir hoje.
   bool isAvailableOn(DateTime today) {
     final from = availableFrom;
@@ -840,6 +844,7 @@ class Chore {
     doneSteps: doneSteps ?? this.doneSteps,
     requiresPhoto: requiresPhoto,
     availableFrom: availableFrom,
+    remindAt: remindAt,
   );
 
   factory Chore.fromJson(Map<String, dynamic> json) => Chore(
@@ -859,6 +864,7 @@ class Chore {
     doneSteps: (json['doneSteps'] as List?)?.cast<int>() ?? const [],
     requiresPhoto: json['requiresPhoto'] as bool? ?? false,
     availableFrom: json['availableFrom'] == null ? null : DateTime.parse(json['availableFrom'] as String),
+    remindAt: json['remindAt'] == null ? null : _time(json['remindAt'] as String),
   );
 }
 
@@ -925,6 +931,7 @@ class ChoreDraft {
     this.timeOfDay = ChoreTimeOfDay.any,
     this.steps = const [],
     this.requiresPhoto = false,
+    this.remindAt,
   });
 
   final String title;
@@ -938,6 +945,9 @@ class ChoreDraft {
   final List<String> steps;
   final bool requiresPhoto;
 
+  /// A que horas se lembra a quem a tem, no dia em que é para fazer.
+  final ({int hour, int minute})? remindAt;
+
   factory ChoreDraft.from(Chore chore) => ChoreDraft(
     title: chore.title,
     notes: chore.notes,
@@ -949,6 +959,7 @@ class ChoreDraft {
     timeOfDay: chore.timeOfDay,
     steps: chore.steps,
     requiresPhoto: chore.requiresPhoto,
+    remindAt: chore.remindAt,
   );
 
   Map<String, dynamic> toJson() => {
@@ -962,6 +973,7 @@ class ChoreDraft {
     'timeOfDay': timeOfDay.apiValue,
     'steps': steps,
     'requiresPhoto': requiresPhoto,
+    if (remindAt != null) 'remindAt': _timeJson(remindAt!),
   };
 }
 
@@ -1014,6 +1026,7 @@ class CalendarEvent {
     this.seriesId,
     this.originalDate,
     required this.updatedAt,
+    this.reminderMinutes = const [],
   });
 
   final String id;
@@ -1040,6 +1053,9 @@ class CalendarEvent {
   final DateTime? originalDate;
   final DateTime updatedAt;
 
+  /// Lembretes, em minutos antes do início (nos de dia inteiro, antes das 9h do primeiro dia).
+  final List<int> reminderMinutes;
+
   bool get isRecurring => recurrence != null;
 
   factory CalendarEvent.fromJson(Map<String, dynamic> json) => CalendarEvent(
@@ -1060,6 +1076,7 @@ class CalendarEvent {
     seriesId: json['seriesId'] as String?,
     originalDate: _day(json['originalDate']),
     updatedAt: DateTime.parse(json['updatedAt'] as String),
+    reminderMinutes: (json['reminderMinutes'] as List?)?.cast<int>() ?? const [],
   );
 }
 
@@ -1196,6 +1213,7 @@ class CalendarEventDraft {
     this.participantUserIds = const [],
     this.dropOffUserId,
     this.pickUpUserId,
+    this.reminderMinutes = const [],
   });
 
   final String title;
@@ -1208,6 +1226,7 @@ class CalendarEventDraft {
   final List<String> participantUserIds;
   final String? dropOffUserId;
   final String? pickUpUserId;
+  final List<int> reminderMinutes;
 
   CalendarEventDraft copyWith({DateTime? start, DateTime? end}) => CalendarEventDraft(
     title: title,
@@ -1220,6 +1239,7 @@ class CalendarEventDraft {
     participantUserIds: participantUserIds,
     dropOffUserId: dropOffUserId,
     pickUpUserId: pickUpUserId,
+    reminderMinutes: reminderMinutes,
   );
 
   factory CalendarEventDraft.from(CalendarEvent event) => CalendarEventDraft(
@@ -1233,6 +1253,7 @@ class CalendarEventDraft {
     participantUserIds: event.participantUserIds,
     dropOffUserId: event.dropOffUserId,
     pickUpUserId: event.pickUpUserId,
+    reminderMinutes: event.reminderMinutes,
   );
 
   Map<String, dynamic> toJson() => {
@@ -1248,6 +1269,7 @@ class CalendarEventDraft {
     'participantUserIds': participantUserIds,
     if (dropOffUserId != null) 'dropOffUserId': dropOffUserId,
     if (pickUpUserId != null) 'pickUpUserId': pickUpUserId,
+    if (reminderMinutes.isNotEmpty) 'reminderMinutes': reminderMinutes,
   };
 }
 
@@ -1657,11 +1679,14 @@ class MemberPoints {
 
 /// As recompensas da casa, os pedidos recentes (pendentes primeiro) e o saldo de cada membro.
 class RewardsOverview {
-  const RewardsOverview({required this.rewards, required this.redemptions, required this.points});
+  const RewardsOverview({required this.rewards, required this.redemptions, required this.points, this.autoApproveUpTo});
 
   final List<Reward> rewards;
   final List<RewardRedemption> redemptions;
   final List<MemberPoints> points;
+
+  /// Os pedidos até este custo aprovam-se sozinhos; null = todos esperam por um adulto.
+  final int? autoApproveUpTo;
 
   MemberPoints? pointsOf(String? userId) {
     for (final p in points) {
@@ -1678,6 +1703,7 @@ class RewardsOverview {
       rewards: [for (final r in rewards) Reward.fromJson(r as Map<String, dynamic>)],
       redemptions: [for (final r in redemptions) RewardRedemption.fromJson(r as Map<String, dynamic>)],
       points: [for (final p in points) MemberPoints.fromJson(p as Map<String, dynamic>)],
+      autoApproveUpTo: json['autoApproveUpTo'] as int?,
     );
   }
 }
@@ -1762,6 +1788,9 @@ class NotificationPreferences {
     required this.quietFrom,
     required this.quietUntil,
     required this.timeZoneId,
+    this.morningSummary = true,
+    this.morningAt = (hour: 7, minute: 30),
+    this.weeklySummary = true,
   });
 
   final NotificationDelivery delivery;
@@ -1770,12 +1799,22 @@ class NotificationPreferences {
   final ({int hour, int minute})? quietUntil;
   final String timeZoneId;
 
+  /// O resumo da manhã (o que há hoje), à hora [morningAt] no fuso da casa.
+  final bool morningSummary;
+  final ({int hour, int minute}) morningAt;
+
+  /// O resumo da semana (domingo às 19h), para quem gere as tarefas.
+  final bool weeklySummary;
+
   factory NotificationPreferences.fromJson(Map<String, dynamic> json) => NotificationPreferences(
     delivery: NotificationDelivery.fromApi(json['delivery'] as String),
     digestAt: _time(json['digestAt'] as String),
     quietFrom: json['quietFrom'] == null ? null : _time(json['quietFrom'] as String),
     quietUntil: json['quietUntil'] == null ? null : _time(json['quietUntil'] as String),
     timeZoneId: json['timeZoneId'] as String,
+    morningSummary: json['morningSummary'] as bool? ?? true,
+    morningAt: json['morningAt'] == null ? (hour: 7, minute: 30) : _time(json['morningAt'] as String),
+    weeklySummary: json['weeklySummary'] as bool? ?? true,
   );
 
   Map<String, dynamic> toJson() => {
@@ -1784,5 +1823,8 @@ class NotificationPreferences {
     'quietFrom': quietFrom == null ? null : _timeJson(quietFrom!),
     'quietUntil': quietUntil == null ? null : _timeJson(quietUntil!),
     'timeZoneId': timeZoneId,
+    'morningSummary': morningSummary,
+    'morningAt': _timeJson(morningAt),
+    'weeklySummary': weeklySummary,
   };
 }

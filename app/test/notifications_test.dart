@@ -124,7 +124,9 @@ void main() {
     expect(find.text('Marcar como lidos'), findsNothing);
   });
 
-  testWidgets('as preferências guardam o resumo diário e as horas de silêncio', (tester) async {
+  testWidgets('as preferências guardam o resumo diário, as horas de silêncio e os resumos da manhã e da semana', (
+    tester,
+  ) async {
     final server = _Server();
     await _pump(tester, server);
 
@@ -138,6 +140,10 @@ void main() {
     expect(find.text('Hora do resumo'), findsOneWidget);
     await tester.tap(find.text('Horas de silêncio'));
     await tester.pumpAndSettle();
+    // O resumo da manhã liga-se por omissão (F4-21); aqui desliga-se.
+    await tester.ensureVisible(find.text('Resumo da manhã'));
+    await tester.tap(find.text('Resumo da manhã'));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Guardar'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Guardar'));
@@ -149,6 +155,9 @@ void main() {
       'quietFrom': '22:00:00',
       'quietUntil': '08:00:00',
       'timeZoneId': 'Europe/Lisbon',
+      'morningSummary': false,
+      'morningAt': '07:30:00',
+      'weeklySummary': true,
     });
     expect(find.text('Preferências guardadas.'), findsOneWidget);
   });

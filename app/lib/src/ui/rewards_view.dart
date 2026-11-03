@@ -134,6 +134,34 @@ class _RewardsViewState extends State<RewardsView> {
     return 'Pedido cancelado. Os pontos voltaram.'.tr;
   });
 
+  /// Aprovar sozinho os pedidos até N pontos (F4-26).
+  Future<void> _editAutoApprove(int? current) async {
+    const choices = [10, 20, 50, 100];
+    final picked = await showDialog<int>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text('Aprovar sozinho'.tr),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Text('Os pedidos até este custo ficam aprovados logo, sem esperar por um adulto.'.tr),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 0),
+            child: Text('Nunca: um adulto aprova todos'.tr),
+          ),
+          for (final c in choices)
+            SimpleDialogOption(onPressed: () => Navigator.pop(context, c), child: Text('Até $c pontos'.tr)),
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+    await _run(() async {
+      await _api.saveRewardSettings(_householdId, autoApproveUpTo: picked == 0 ? null : picked);
+      return 'Preferências guardadas.'.tr;
+    });
+  }
+
   Future<void> _edit([Reward? reward]) async {
     final result = await showRewardEditor(context, reward: reward);
     if (result == null || !mounted) return;
@@ -206,6 +234,17 @@ class _RewardsViewState extends State<RewardsView> {
                 available: available,
                 onRedeem: _access.canParticipate ? () => _redeem(reward) : null,
                 onTap: _canManage ? () => _edit(reward) : null,
+              ),
+            if (_canManage)
+              ListTile(
+                leading: const Icon(Icons.bolt_rounded),
+                title: Text('Aprovar sozinho'.tr),
+                subtitle: Text(
+                  overview.autoApproveUpTo == null
+                      ? 'Nunca: um adulto aprova todos'.tr
+                      : 'Até ${overview.autoApproveUpTo} pontos'.tr,
+                ),
+                onTap: () => _editAutoApprove(overview.autoApproveUpTo),
               ),
             if (history.isNotEmpty) ...[
               _Header('Histórico'.tr),

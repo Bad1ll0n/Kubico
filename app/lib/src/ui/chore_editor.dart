@@ -60,6 +60,9 @@ class _ChoreEditorState extends State<_ChoreEditor> {
   late ChoreTimeOfDay _timeOfDay;
   late bool _requiresPhoto;
 
+  /// A que horas se lembra a quem a tem (null: sem lembrete). F4-11.
+  ({int hour, int minute})? _remindAt;
+
   /// Os passos da rotina (cada um com a sua caixa de texto).
   final _steps = <TextEditingController>[];
 
@@ -79,6 +82,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
     _rotates = _rotation.isNotEmpty;
     _timeOfDay = chore?.timeOfDay ?? ChoreTimeOfDay.any;
     _requiresPhoto = chore?.requiresPhoto ?? false;
+    _remindAt = chore?.remindAt;
     for (final step in chore?.steps ?? const <String>[]) {
       _steps.add(TextEditingController(text: step));
     }
@@ -119,6 +123,15 @@ class _ChoreEditorState extends State<_ChoreEditor> {
     if (picked != null) setState(() => _dueDate = picked);
   }
 
+  Future<void> _pickRemindAt() async {
+    final current = _remindAt ?? (hour: 19, minute: 0);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: current.hour, minute: current.minute),
+    );
+    if (picked != null) setState(() => _remindAt = (hour: picked.hour, minute: picked.minute));
+  }
+
   void _save() {
     final title = _title.text.trim();
     if (title.isEmpty) return;
@@ -137,6 +150,7 @@ class _ChoreEditorState extends State<_ChoreEditor> {
           rotationUserIds: rotation,
           timeOfDay: _timeOfDay,
           requiresPhoto: _requiresPhoto,
+          remindAt: _remindAt,
           steps: [
             for (final s in _steps)
               if (s.text.trim().isNotEmpty) s.text.trim(),
@@ -189,6 +203,30 @@ class _ChoreEditorState extends State<_ChoreEditor> {
                   IconButton(
                     tooltip: 'Remover prazo'.tr,
                     onPressed: () => setState(() => _dueDate = null),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // O lembrete chega a quem tem a tarefa no dia em que é para fazer, se ainda não estiver feita.
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickRemindAt,
+                    icon: const Icon(Icons.notifications_active_rounded),
+                    label: Text(
+                      _remindAt == null
+                          ? 'Sem lembrete'.tr
+                          : 'Lembrar às ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay(hour: _remindAt!.hour, minute: _remindAt!.minute), alwaysUse24HourFormat: true)}'
+                                .tr,
+                    ),
+                  ),
+                ),
+                if (_remindAt != null)
+                  IconButton(
+                    tooltip: 'Remover lembrete'.tr,
+                    onPressed: () => setState(() => _remindAt = null),
                     icon: const Icon(Icons.close_rounded),
                   ),
               ],

@@ -19,12 +19,16 @@ class NotificationTarget {
     return switch (kind) {
       'ChoreAssigned' ||
       'ChoreCompleted' ||
-      'ChoreRejected' => NotificationTarget(householdId: householdId, module: HouseholdModule.chores),
+      'ChoreRejected' ||
+      'ChoreReminder' ||
+      'WeeklySummary' => NotificationTarget(householdId: householdId, module: HouseholdModule.chores),
       'EventAssigned' ||
-      'RideAssigned' => NotificationTarget(householdId: householdId, module: HouseholdModule.calendar),
+      'RideAssigned' ||
+      'EventReminder' => NotificationTarget(householdId: householdId, module: HouseholdModule.calendar),
       'RewardRequested' ||
       'RewardDecided' ||
-      'AllowancePaid' => NotificationTarget(householdId: householdId, module: HouseholdModule.rewards),
+      'AllowancePaid' ||
+      'AllowanceDue' => NotificationTarget(householdId: householdId, module: HouseholdModule.rewards),
       'ChildPinLocked' => NotificationTarget(householdId: householdId, members: true),
       _ => NotificationTarget(householdId: householdId),
     };

@@ -602,6 +602,10 @@ class ApiClient {
 
   // --- Recompensas ---
 
+  /// Aprovar sozinho os pedidos até [autoApproveUpTo] pontos (null: todos esperam por um adulto).
+  Future<void> saveRewardSettings(String householdId, {int? autoApproveUpTo}) =>
+      _send('PUT', '/api/households/$householdId/rewards/settings', body: {'autoApproveUpTo': autoApproveUpTo});
+
   Future<RewardsOverview> getRewards(String householdId) async =>
       RewardsOverview.fromJson(await _send('GET', '/api/households/$householdId/rewards') as Map<String, dynamic>);
 

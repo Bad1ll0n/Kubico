@@ -139,6 +139,9 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
   var _quiet = false;
   var _quietFrom = const TimeOfDay(hour: 22, minute: 0);
   var _quietUntil = const TimeOfDay(hour: 8, minute: 0);
+  var _morning = true;
+  var _morningAt = const TimeOfDay(hour: 7, minute: 30);
+  var _weekly = true;
   Object? _error;
   var _saving = false;
 
@@ -161,6 +164,9 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
         _quiet = preferences.quietFrom != null;
         if (preferences.quietFrom case final from?) _quietFrom = _toTime(from);
         if (preferences.quietUntil case final until?) _quietUntil = _toTime(until);
+        _morning = preferences.morningSummary;
+        _morningAt = _toTime(preferences.morningAt);
+        _weekly = preferences.weeklySummary;
       });
     } catch (e) {
       if (mounted) setState(() => _error = e);
@@ -177,6 +183,9 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
           quietFrom: _quiet ? _fromTime(_quietFrom) : null,
           quietUntil: _quiet ? _fromTime(_quietUntil) : null,
           timeZoneId: _saved?.timeZoneId ?? 'Europe/Lisbon',
+          morningSummary: _morning,
+          morningAt: _fromTime(_morningAt),
+          weeklySummary: _weekly,
         ),
       );
       if (!mounted) return;
@@ -246,6 +255,29 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
                     onTap: () => _pick(_quietUntil, (t) => _quietUntil = t),
                   ),
                 ],
+                const Divider(height: 32),
+                // Os resumos (F4-21): o que há hoje, de manhã; e a semana da casa, ao domingo.
+                SwitchListTile(
+                  title: Text('Resumo da manhã'.tr),
+                  subtitle: Text('Os eventos, as tarefas e as compras do dia, numa só mensagem.'.tr),
+                  value: _morning,
+                  onChanged: (value) => setState(() => _morning = value),
+                ),
+                if (_morning)
+                  ListTile(
+                    leading: const Icon(Icons.wb_twilight_rounded),
+                    title: Text('Hora do resumo da manhã'.tr),
+                    trailing: Text(time(_morningAt)),
+                    onTap: () => _pick(_morningAt, (t) => _morningAt = t),
+                  ),
+                SwitchListTile(
+                  title: Text('Resumo da semana'.tr),
+                  subtitle: Text(
+                    'Ao domingo às 19h, para quem gere as tarefas: o que se fez e o que ficou por fazer.'.tr,
+                  ),
+                  value: _weekly,
+                  onChanged: (value) => setState(() => _weekly = value),
+                ),
                 const SizedBox(height: 16),
                 Text('Todos os avisos aparecem também aqui na app, no sino.'.tr, style: theme.textTheme.bodySmall),
                 const SizedBox(height: 24),
