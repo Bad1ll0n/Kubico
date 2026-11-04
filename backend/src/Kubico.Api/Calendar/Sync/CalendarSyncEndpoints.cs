@@ -549,12 +549,12 @@ public static class CalendarSyncEndpoints
             <title>{{Html(title)}} · Kubico</title>
             <style>
             body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 15vh auto; padding: 0 1rem; line-height: 1.5;
-                   background: #fff8f3; color: #2a1f1a; }
+                   background: #f7f5ef; color: #1f2620; }
             @media (prefers-color-scheme: dark) { body { background: #1b1512; color: #f3e6dd; } }
             h1 { font-size: 1.4rem; }
             button { font: inherit; padding: .5rem 1.2rem; margin-right: .5rem; border-radius: 1.2rem; border: 1px solid #7a665c;
                      background: transparent; color: inherit; }
-            button[value=connect] { background: #b4472f; color: #fff; border-color: #b4472f; }
+            button[value=connect] { background: #3e6b57; color: #fff; border-color: #3e6b57; }
             </style>
             </head>
             <body>

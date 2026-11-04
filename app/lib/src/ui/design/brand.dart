@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 
-/// As cores do símbolo: o telhado terracota e o creme da casa.
+/// As cores do símbolo: o verde-salva da marca, o creme, a hortelã e o damasco (as mesmas da paleta, suaves para os
+/// olhos).
 abstract final class KubicoBrand {
-  static const terracotta = Color(0xFFB4472F);
-  static const cream = Color(0xFFFFF8F3);
-  static const night = Color(0xFF1B1512);
+  static const sage = Color(0xFF3E6B57);
+  static const cream = Color(0xFFF7F5EF);
+  static const mint = Color(0xFFA5D1BB);
+  static const apricot = Color(0xFFE8956D);
+  static const night = Color(0xFF161A17);
 }
 
-/// O símbolo do Kubico ("casa" em Angola): uma casinha creme com telhado e chaminé sobre terracota. O mesmo desenho
-/// serve para o logótipo na app e para os ícones das plataformas (`tool/brand_icons_test.dart`), por isso não
-/// depende de imagens.
+/// O símbolo do Kubico: um cubo ("kubico") em perspetiva, com as três faces em creme, hortelã e damasco, sobre o
+/// verde-salva. O mesmo desenho serve para o logótipo na app e para os ícones das plataformas
+/// (`tool/brand_icons_test.dart`), por isso não depende de imagens.
 class KubicoMark extends StatelessWidget {
   const KubicoMark({this.size = 72, super.key});
 
@@ -26,7 +29,7 @@ class KubicoMark extends StatelessWidget {
 /// Pinta o símbolo num quadrado. Com [fullBleed], o fundo ocupa tudo e o desenho fica na zona segura central (80 %),
 /// como pedem os ícones "maskable" da web e os adaptativos do Android; sem ele, o fundo é um quadrado arredondado.
 class KubicoMarkPainter extends CustomPainter {
-  const KubicoMarkPainter({this.fullBleed = false, this.background = KubicoBrand.terracotta});
+  const KubicoMarkPainter({this.fullBleed = false, this.background = KubicoBrand.sage});
 
   final bool fullBleed;
   final Color background;
@@ -45,42 +48,47 @@ class KubicoMarkPainter extends CustomPainter {
     final scale = fullBleed ? side * 0.8 : side;
     final origin = fullBleed ? Offset(side * 0.1, side * 0.1) : Offset.zero;
     Offset p(double x, double y) => origin + Offset(x * scale, y * scale);
-    final cream = Paint()..color = KubicoBrand.cream;
+    Path face(List<Offset> points) => Path()..addPolygon(points, true);
 
-    // Chaminé, por baixo do telhado.
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromPoints(p(0.615, 0.27), p(0.695, 0.42)), Radius.circular(scale * 0.015)),
-      cream,
-    );
+    // O cubo: o vértice de cima, o centro (onde se juntam as três faces) e os cantos.
+    final top = p(0.5, 0.2);
+    final left = p(0.22, 0.36);
+    final right = p(0.78, 0.36);
+    final center = p(0.5, 0.52);
+    final bottomLeft = p(0.22, 0.68);
+    final bottomRight = p(0.78, 0.68);
+    final bottom = p(0.5, 0.84);
 
-    // Telhado: um "V" invertido grosso, com as pontas redondas.
-    final roof = Path()
-      ..moveTo(p(0.2, 0.52).dx, p(0.2, 0.52).dy)
-      ..lineTo(p(0.5, 0.25).dx, p(0.5, 0.25).dy)
-      ..lineTo(p(0.8, 0.52).dx, p(0.8, 0.52).dy);
-    canvas.drawPath(
-      roof,
-      Paint()
-        ..color = KubicoBrand.cream
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = scale * 0.09
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
+    // Os cantos arredondados vêm de um traço da mesma cor à volta de cada face.
+    void draw(List<Offset> points, Color color) {
+      final path = face(points);
+      canvas
+        ..drawPath(path, Paint()..color = color)
+        ..drawPath(
+          path,
+          Paint()
+            ..color = color
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = scale * 0.05
+            ..strokeJoin = StrokeJoin.round,
+        );
+    }
 
-    // Corpo da casa e a porta.
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromPoints(p(0.3, 0.5), p(0.7, 0.78)), Radius.circular(scale * 0.06)),
-      cream,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndCorners(
-        Rect.fromPoints(p(0.445, 0.6), p(0.555, 0.78)),
-        topLeft: Radius.circular(scale * 0.055),
-        topRight: Radius.circular(scale * 0.055),
-      ),
-      Paint()..color = background,
-    );
+    // A face de cima por último: tapa as junções das outras duas.
+    draw([left, center, bottom, bottomLeft], KubicoBrand.cream);
+    draw([center, right, bottomRight, bottom], KubicoBrand.apricot);
+    draw([top, right, center, left], KubicoBrand.mint);
+
+    // As arestas entre as faces, finas, na cor do fundo: o cubo lê-se mesmo pequeno (favicon).
+    final edge = Paint()
+      ..color = background
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = scale * 0.022
+      ..strokeCap = StrokeCap.butt;
+    canvas
+      ..drawLine(center, left, edge)
+      ..drawLine(center, right, edge)
+      ..drawLine(center, bottom, edge);
   }
 
   @override

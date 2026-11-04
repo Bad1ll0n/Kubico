@@ -196,7 +196,7 @@ class _KitchenPanelScreenState extends State<KitchenPanelScreen> {
     final dark = _night;
     final theme = buildTheme(dark ? Brightness.dark : Brightness.light);
     return Theme(
-      data: dark ? theme.copyWith(scaffoldBackgroundColor: const Color(0xFF0F0B09)) : theme,
+      data: dark ? theme.copyWith(scaffoldBackgroundColor: KubicoPalette.dark.surfaceContainerLowest) : theme,
       child: MediaQuery(
         data: media.copyWith(textScaler: TextScaler.linear(scaled)),
         child: Builder(

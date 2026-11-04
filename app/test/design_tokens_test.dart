@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kubico/src/ui/design/components.dart';
@@ -77,5 +79,19 @@ void main() {
     expect(initialOf('  rui'), 'R');
     expect(initialOf(''), '?');
     expect(initialOf('🦁 Leão'), '🦁');
+  });
+
+  test('o ecrã de carregamento da web e o manifesto usam as cores da paleta (não divergem)', () {
+    String hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+    final html = File('web/index.html').readAsStringSync().toLowerCase();
+    final manifest = File('web/manifest.json').readAsStringSync().toLowerCase();
+    const light = KubicoPalette.light;
+    const dark = KubicoPalette.dark;
+
+    for (final color in [light.surface, light.primary, light.surfaceContainerHighest, dark.surface, dark.primary]) {
+      expect(html, contains(hex(color)), reason: 'web/index.html');
+    }
+    expect(manifest, contains('"background_color": "${hex(light.surface)}"'));
+    expect(manifest, contains('"theme_color": "${hex(light.primary)}"'));
   });
 }
