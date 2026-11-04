@@ -66,6 +66,7 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
         // E as limpezas diárias (MaintenanceService, chamado à mão nos testes que as verificam).
         builder.UseSetting("Maintenance:Enabled", "false");
         builder.UseSetting("Reminders:Enabled", "false");
+        builder.UseSetting("SmartHome:Enabled", "false");
 
         // O limite de pedidos por IP desliga-se aqui (todos os testes vêm do mesmo "IP"); RateLimitTests liga-o.
         builder.UseSetting("RateLimiting:Enabled", "false");
@@ -77,6 +78,7 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<TimeProvider>(Clock);
             services.AddSingleton<Kubico.Api.Shopping.IProductCatalog>(Products);
             services.AddSingleton<Kubico.Api.Assistant.IAssistant>(Assistant);
+            services.AddSingleton<Kubico.Api.Home.IHomeAssistantClient>(HomeAssistant);
         });
     }
 
@@ -85,6 +87,9 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
 
     /// <summary>O assistente dos testes (não chama o Claude).</summary>
     public FakeAssistant Assistant { get; } = new();
+
+    /// <summary>O Home Assistant dos testes.</summary>
+    public FakeHomeAssistant HomeAssistant { get; } = new();
 
     /// <summary>Regista um utilizador novo e devolve um cliente já autenticado.</summary>
     public async Task<(HttpClient Client, AuthResponse Auth)> CreateUserAsync(string? name = null, string? email = null)

@@ -410,6 +410,34 @@ class ApiClient {
   Future<Uint8List> getHomeFile(String householdId, String fileId) async =>
       (await _execute('GET', '${_home(householdId)}/files/$fileId')).bodyBytes;
 
+  // Casa inteligente (F4-16c).
+
+  String _smart(String householdId) => '/api/households/$householdId/smart-home';
+
+  Future<SmartHome> getSmartHome(String householdId) async =>
+      SmartHome.fromJson(await _send('GET', _smart(householdId)) as Map<String, dynamic>);
+
+  Future<SmartHome> connectSmartHome(String householdId, String baseUrl, String token) async => SmartHome.fromJson(
+    await _send('PUT', '${_smart(householdId)}/connection', body: {'baseUrl': baseUrl, 'token': token})
+        as Map<String, dynamic>,
+  );
+
+  Future<void> disconnectSmartHome(String householdId) => _send('DELETE', '${_smart(householdId)}/connection');
+
+  Future<SmartHome> checkSmartHome(String householdId) async =>
+      SmartHome.fromJson(await _send('POST', '${_smart(householdId)}/check') as Map<String, dynamic>);
+
+  Future<List<SmartHomeEntity>> getSmartHomeEntities(String householdId) async => [
+    for (final e in await _send('GET', '${_smart(householdId)}/entities') as List<dynamic>)
+      SmartHomeEntity.fromJson(e as Map<String, dynamic>),
+  ];
+
+  Future<void> saveSmartHomeRule(String householdId, SmartHomeRule rule, {bool isNew = false}) =>
+      _send(isNew ? 'POST' : 'PUT', '${_smart(householdId)}/rules${isNew ? '' : '/${rule.id}'}', body: rule.toJson());
+
+  Future<void> deleteSmartHomeRule(String householdId, String ruleId) =>
+      _send('DELETE', '${_smart(householdId)}/rules/$ruleId');
+
   // Assistente (F4-24).
 
   Future<AssistantStatus> getAssistant(String householdId) async =>

@@ -662,6 +662,27 @@ public static partial class Texts
         ["limpou 1 artigo comprado da lista «{0}»"] = "cleared 1 bought item from the list “{0}”",
         ["limpou {0} artigos comprados da lista «{1}»"] = "cleared {0} bought items from the list “{1}”",
 
+        // Casa inteligente
+        ["Este endereço não parece ser um Home Assistant."] = "This address doesn't look like a Home Assistant.",
+        ["O Home Assistant respondeu algo que não se percebe."] = "Home Assistant sent a reply that can't be understood.",
+        ["Não foi possível chegar ao Home Assistant nesse endereço."] = "Couldn't reach Home Assistant at that address.",
+        ["O Home Assistant não aceitou o token."] = "Home Assistant didn't accept the token.",
+        ["O Home Assistant respondeu com um erro."] = "Home Assistant replied with an error.",
+        ["Escreve o endereço completo do Home Assistant (por exemplo http://192.168.1.50:8123)."] =
+            "Write the full Home Assistant address (for example http://192.168.1.50:8123).",
+        ["Não encontrei esse endereço."] = "Couldn't find that address.",
+        ["Esse endereço não pode ser usado."] = "That address can't be used.",
+        ["A casa já tem o máximo de regras (50)."] = "The household already has the maximum number of rules (50).",
+        ["Escolhe uma entidade do Home Assistant (por exemplo sensor.maquina_de_lavar)."] =
+            "Choose a Home Assistant entity (for example sensor.washing_machine).",
+        ["A pessoa escolhida não é desta casa."] = "The person you chose isn't in this household.",
+        ["A casa ainda não está ligada ao Home Assistant."] = "The household isn't connected to Home Assistant yet.",
+        ["O token do Home Assistant tem de voltar a ser escrito."] = "The Home Assistant token has to be entered again.",
+        ["ligou a casa ao Home Assistant"] = "connected the household to Home Assistant",
+        ["desligou a casa do Home Assistant"] = "disconnected the household from Home Assistant",
+        ["criou a regra «{0}» da casa inteligente"] = "created the smart home rule “{0}”",
+        ["a casa inteligente criou a tarefa «{0}»"] = "the smart home created the chore “{0}”",
+
         // Fotografia de perfil
         ["Os perfis das crianças usam um emoji em vez de fotografia."] = "Children's profiles use an emoji instead of a photo.",
 

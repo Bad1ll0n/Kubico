@@ -14,6 +14,7 @@ import 'chore_history_screen.dart' show pickChorePhoto;
 import 'dates_pt.dart';
 import 'deferred.dart';
 import 'pdf_preview_screen.dart' deferred as pdf;
+import 'smart_home_view.dart';
 import 'design/components.dart';
 import 'theme.dart';
 
@@ -84,8 +85,10 @@ class _HomeAreaScreenState extends State<HomeAreaScreen> {
   @override
   Widget build(BuildContext context) {
     final home = _home;
+    // A casa inteligente só aparece a quem gere a Casa (tem o token do Home Assistant).
+    final smart = _access.canManage;
     return DefaultTabController(
-      length: 4,
+      length: smart ? 5 : 4,
       child: Scaffold(
         appBar: AppBar(
           title: Text('A casa'.tr),
@@ -96,6 +99,7 @@ class _HomeAreaScreenState extends State<HomeAreaScreen> {
               Tab(text: 'Equipamentos'.tr),
               Tab(text: 'Documentos'.tr),
               Tab(text: 'Contactos'.tr),
+              if (smart) Tab(text: 'Casa inteligente'.tr),
             ],
           ),
         ),
@@ -103,7 +107,15 @@ class _HomeAreaScreenState extends State<HomeAreaScreen> {
             ? (_error == null
                   ? const Center(child: CircularProgressIndicator())
                   : StateView.error(message: errorText(_error!), offline: isOffline(_error!), onRetry: _load))
-            : TabBarView(children: [_notes(home), _appliances(home), _documents(home), _contacts(home)]),
+            : TabBarView(
+                children: [
+                  _notes(home),
+                  _appliances(home),
+                  _documents(home),
+                  _contacts(home),
+                  if (smart) SmartHomeView(householdId: _householdId, members: _details?.members ?? const []),
+                ],
+              ),
       ),
     );
   }

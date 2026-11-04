@@ -37,6 +37,8 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<HomeFile> HomeFiles => Set<HomeFile>();
     public DbSet<HouseNote> HouseNotes => Set<HouseNote>();
     public DbSet<HouseContact> HouseContacts => Set<HouseContact>();
+    public DbSet<SmartHomeConnection> SmartHomeConnections => Set<SmartHomeConnection>();
+    public DbSet<SmartHomeRule> SmartHomeRules => Set<SmartHomeRule>();
     public DbSet<ChorePhoto> ChorePhotos => Set<ChorePhoto>();
     public DbSet<ActivityEntry> ActivityEntries => Set<ActivityEntry>();
     public DbSet<Allowance> Allowances => Set<Allowance>();
@@ -259,6 +261,25 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
         modelBuilder.Entity<HouseNote>(e =>
         {
             e.Property(x => x.Text).HasMaxLength(500);
+            e.HasIndex(x => x.HouseholdId);
+            e.HasOne<Household>().WithMany().HasForeignKey(x => x.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SmartHomeConnection>(e =>
+        {
+            e.HasKey(x => x.HouseholdId);
+            e.Property(x => x.BaseUrl).HasMaxLength(300);
+            e.Property(x => x.LastError).HasMaxLength(300);
+            e.HasOne<Household>().WithOne().HasForeignKey<SmartHomeConnection>(x => x.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SmartHomeRule>(e =>
+        {
+            e.Property(x => x.EntityId).HasMaxLength(255);
+            e.Property(x => x.EntityName).HasMaxLength(200);
+            e.Property(x => x.ToState).HasMaxLength(100);
+            e.Property(x => x.ChoreTitle).HasMaxLength(200);
+            e.Property(x => x.LastState).HasMaxLength(255);
             e.HasIndex(x => x.HouseholdId);
             e.HasOne<Household>().WithMany().HasForeignKey(x => x.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });

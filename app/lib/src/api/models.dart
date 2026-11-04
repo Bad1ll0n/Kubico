@@ -2469,3 +2469,106 @@ class AssistantProposal {
     dailyLimit: json['dailyLimit'] as int? ?? 0,
   );
 }
+
+// Casa inteligente (F4-16c).
+
+/// Uma regra: quando a entidade do Home Assistant passa para [toState], cria-se a tarefa [choreTitle].
+class SmartHomeRule {
+  const SmartHomeRule({
+    required this.id,
+    required this.entityId,
+    this.entityName,
+    required this.toState,
+    required this.choreTitle,
+    this.assigneeUserId,
+    this.points = 0,
+    this.enabled = true,
+    this.lastState,
+    this.lastTriggeredAt,
+  });
+
+  final String id;
+  final String entityId;
+  final String? entityName;
+  final String toState;
+  final String choreTitle;
+  final String? assigneeUserId;
+  final int points;
+  final bool enabled;
+  final String? lastState;
+  final DateTime? lastTriggeredAt;
+
+  factory SmartHomeRule.fromJson(Map<String, dynamic> json) => SmartHomeRule(
+    id: json['id'] as String,
+    entityId: json['entityId'] as String,
+    entityName: json['entityName'] as String?,
+    toState: json['toState'] as String,
+    choreTitle: json['choreTitle'] as String,
+    assigneeUserId: json['assigneeUserId'] as String?,
+    points: json['points'] as int? ?? 0,
+    enabled: json['enabled'] as bool? ?? true,
+    lastState: json['lastState'] as String?,
+    lastTriggeredAt: _instant(json['lastTriggeredAt']),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'entityId': entityId,
+    'entityName': ?entityName,
+    'toState': toState,
+    'choreTitle': choreTitle,
+    'assigneeUserId': ?assigneeUserId,
+    'points': points,
+    'enabled': enabled,
+  };
+
+  SmartHomeRule copyWith({bool? enabled}) => SmartHomeRule(
+    id: id,
+    entityId: entityId,
+    entityName: entityName,
+    toState: toState,
+    choreTitle: choreTitle,
+    assigneeUserId: assigneeUserId,
+    points: points,
+    enabled: enabled ?? this.enabled,
+    lastState: lastState,
+    lastTriggeredAt: lastTriggeredAt,
+  );
+}
+
+/// A ligação ao Home Assistant e as regras. O token nunca vem do servidor.
+class SmartHome {
+  const SmartHome({required this.connected, this.baseUrl, this.lastCheckedAt, this.lastError, this.rules = const []});
+
+  final bool connected;
+  final String? baseUrl;
+  final DateTime? lastCheckedAt;
+  final String? lastError;
+  final List<SmartHomeRule> rules;
+
+  factory SmartHome.fromJson(Map<String, dynamic> json) => SmartHome(
+    connected: json['connected'] as bool? ?? false,
+    baseUrl: json['baseUrl'] as String?,
+    lastCheckedAt: _instant(json['lastCheckedAt']),
+    lastError: json['lastError'] as String?,
+    rules: [
+      for (final r in json['rules'] as List<dynamic>? ?? const []) SmartHomeRule.fromJson(r as Map<String, dynamic>),
+    ],
+  );
+}
+
+/// Uma entidade do Home Assistant (para escolher numa regra).
+class SmartHomeEntity {
+  const SmartHomeEntity({required this.entityId, required this.state, this.name});
+
+  final String entityId;
+  final String state;
+  final String? name;
+
+  String get label => name == null || name!.isEmpty ? entityId : '$name ($entityId)';
+
+  factory SmartHomeEntity.fromJson(Map<String, dynamic> json) => SmartHomeEntity(
+    entityId: json['entityId'] as String,
+    state: json['state'] as String? ?? '',
+    name: json['name'] as String?,
+  );
+}

@@ -115,6 +115,15 @@ if (builder.Configuration.GetValue("CalendarSync:Enabled", true))
 }
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
+// A casa inteligente (F4-16c): o Home Assistant de cada casa, a cada minuto (SmartHomeService).
+builder.Services.AddHttpClient<IHomeAssistantClient, HomeAssistantClient>(http => http.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddScoped<SmartHomeService>();
+if (builder.Configuration.GetValue("SmartHome:Enabled", true))
+{
+    builder.Services.AddHostedService<SmartHomeWorker>();
+}
+
 // O assistente (F4-24) com o Claude: sem Assistant:ApiKey (ou ANTHROPIC_API_KEY), fica desligado.
 builder.Services.AddOptions<AssistantOptions>().Bind(builder.Configuration.GetSection(AssistantOptions.SectionName))
     .PostConfigure(o => o.ApiKey ??= Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") is { Length: > 0 } key ? key : null);
@@ -284,6 +293,7 @@ api.MapExpenseEndpoints();
 api.MapHomeEndpoints();
 api.MapAssistantEndpoints();
 api.MapProfilePhotoEndpoints();
+api.MapSmartHomeEndpoints();
 api.MapProductEndpoints();
 api.MapChoreEndpoints();
 api.MapChoreHistoryEndpoints();
