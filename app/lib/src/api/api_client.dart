@@ -564,6 +564,14 @@ class ApiClient {
   Future<void> deleteItem(String householdId, String listId, String itemId) =>
       _send('DELETE', '${_itemsPath(householdId, listId)}/$itemId');
 
+  /// A ordem nova dos artigos de uma lista (os ids pela ordem em que aparecem).
+  Future<void> reorderItems(String householdId, String listId, List<String> itemIds) =>
+      _send('PUT', '/api/households/$householdId/lists/$listId/items/order', body: {'ids': itemIds});
+
+  /// A ordem nova das listas da casa.
+  Future<void> reorderLists(String householdId, List<String> listIds) =>
+      _send('PUT', '/api/households/$householdId/lists/order', body: {'ids': listIds});
+
   Future<void> clearChecked(String householdId, String listId) =>
       _send('POST', '${_itemsPath(householdId, listId)}/clear-checked');
 

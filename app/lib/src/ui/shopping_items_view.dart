@@ -156,6 +156,11 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
           _items?.removeWhere((id, _) => gone.contains(id));
           _sorted = null;
         });
+      case ShoppingItemsReordered(:final listId, :final itemIds) when listId == widget.list.id:
+        setState(() {
+          _applyOrder(itemIds);
+          _sorted = null;
+        });
       default:
         break;
     }
@@ -394,12 +399,16 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
         Expanded(
           child: RefreshIndicator(
             onRefresh: _load,
-            child: ListView.builder(
+            // Arrastar (carregar sem largar) muda a ordem dos artigos por comprar dentro da sua categoria.
+            child: ReorderableListView.builder(
               padding: const EdgeInsets.only(bottom: 24),
               itemCount: rowCount,
+              buildDefaultDragHandles: false,
+              onReorderItem: (from, to) => _reorder(pendingRows, from, to),
               itemBuilder: (context, index) {
                 if (empty) {
                   return StateView(
+                    key: const ValueKey('vazia'),
                     inList: true,
                     icon: Icons.shopping_basket_rounded,
                     illustration: KubicoIllustration.basket,
@@ -410,9 +419,14 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
                 }
                 if (index < pendingRows.length) {
                   return switch (pendingRows[index]) {
+                    final ShoppingItem item when widget.canEdit => ReorderableDelayedDragStartListener(
+                      key: ValueKey(item.id),
+                      index: index,
+                      child: _itemTile(item, reorder: (by) => _move(pendingRows, index, by)),
+                    ),
                     final ShoppingItem item => _itemTile(item),
                     final (String, int) header => _categoryHeader(header.$1, header.$2),
-                    _ => const SizedBox.shrink(),
+                    _ => SizedBox.shrink(key: ValueKey('linha-$index')),
                   };
                 }
                 if (index > pendingRows.length) return _itemTile(done[index - pendingRows.length - 1]);
@@ -469,6 +483,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
   Widget _categoryHeader(String category, int count) {
     final theme = Theme.of(context);
     return Padding(
+      key: ValueKey('categoria-$category'),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
       child: Text(
         '${category.toUpperCase()} · $count',
@@ -477,7 +492,50 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     );
   }
 
-  Widget _itemTile(ShoppingItem item) {
+  /// Arrastar da linha [from] para [to] (índices do ReorderableListView, já sem a linha que sai). Só conta entre os artigos por comprar e
+  /// dentro da categoria do artigo: largado noutra categoria, fica no princípio ou no fim da sua.
+  void _reorder(List<Object> rows, int from, int to) {
+    if (from >= rows.length || rows[from] is! ShoppingItem) return;
+    final moved = rows[from] as ShoppingItem;
+    final reordered = [...rows]..removeAt(from);
+    reordered.insert(to.clamp(0, reordered.length), moved);
+    final ids = [
+      for (final row in reordered)
+        if (row is ShoppingItem && row.category == moved.category) row.id,
+    ];
+    final before = [
+      for (final row in rows)
+        if (row is ShoppingItem && row.category == moved.category) row.id,
+    ];
+    if (ids.join() == before.join()) return;
+    _shopping.reorder(_householdId, _listId, ids);
+    setState(() {
+      _applyOrder(ids);
+      _sorted = null;
+    });
+  }
+
+  /// Para o leitor de ecrã: sobe ([by] = -1) ou desce (+1) um lugar entre os artigos da mesma categoria.
+  void _move(List<Object> rows, int index, int by) {
+    final item = rows[index] as ShoppingItem;
+    var target = index + by;
+    while (target >= 0 && target < rows.length && rows[target] is! ShoppingItem) {
+      target += by;
+    }
+    if (target < 0 || target >= rows.length || (rows[target] as ShoppingItem).category != item.category) return;
+    _reorder(rows, index, target);
+  }
+
+  void _applyOrder(List<String> ids) {
+    final items = _items;
+    if (items == null) return;
+    for (var i = 0; i < ids.length; i++) {
+      final item = items[ids[i]];
+      if (item != null) items[item.id] = item.copyWith(position: i);
+    }
+  }
+
+  Widget _itemTile(ShoppingItem item, {void Function(int by)? reorder}) {
     final theme = Theme.of(context);
     // A categoria já está no cabeçalho (quando há cabeçalhos); a quantidade fica.
     final subtitle = [item.quantity, if (item.isChecked) item.category].whereType<String>().join(' · ');
@@ -509,7 +567,13 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
       onDismissed: (_) => _delete(item),
       child: Semantics(
         customSemanticsActions: widget.canEdit
-            ? {CustomSemanticsAction(label: 'Apagar «${item.name}»'.tr): () => _delete(item)}
+            ? {
+                CustomSemanticsAction(label: 'Apagar «${item.name}»'.tr): () => _delete(item),
+                if (reorder != null) ...{
+                  CustomSemanticsAction(label: 'Mover para cima'.tr): () => reorder(-1),
+                  CustomSemanticsAction(label: 'Mover para baixo'.tr): () => reorder(1),
+                },
+              }
             : const {},
         child: CheckboxListTile(
           value: item.isChecked,
@@ -538,7 +602,7 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
   }
 
   /// Por categoria (na ordem aprendida, se houver e estiver ligada; senão alfabética, sem categoria no fim) e depois
-  /// pela ordem em que se puseram.
+  /// pela ordem escolhida à mão (arrastar) ou em que se puseram.
   int _compare(ShoppingItem a, ShoppingItem b) {
     final learned = ShoppingOrder.learned.value ? _insights?.categoryOrder : null;
     int rank(ShoppingItem i) {
@@ -551,7 +615,10 @@ class _ShoppingItemsViewState extends State<ShoppingItemsView> {
     final byRank = rank(a).compareTo(rank(b));
     if (byRank != 0) return byRank;
     final category = (a.category ?? '￿').toLowerCase().compareTo((b.category ?? '￿').toLowerCase());
-    return category != 0 ? category : a.createdAt.compareTo(b.createdAt);
+    if (category != 0) return category;
+    // Dentro da categoria: a ordem escolhida à mão e, depois, os que ninguém arrumou, pela ordem em que se puseram.
+    final byPosition = (a.position ?? 1 << 30).compareTo(b.position ?? 1 << 30);
+    return byPosition != 0 ? byPosition : a.createdAt.compareTo(b.createdAt);
   }
 
   /// "Costumas comprar": um toque põe o artigo na lista.

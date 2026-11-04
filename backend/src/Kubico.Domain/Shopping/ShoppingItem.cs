@@ -15,6 +15,12 @@ public class ShoppingItem
     public string? Barcode { get; set; }
 
     public bool IsChecked { get; set; }
+
+    /// <summary>
+    /// A ordem escolhida à mão dentro da categoria (arrastar para reordenar). Null nos que ninguém mexeu: ficam depois,
+    /// pela ordem em que se puseram.
+    /// </summary>
+    public int? Position { get; set; }
     public Guid? CheckedByUserId { get; set; }
     public Guid AddedByUserId { get; set; }
 

@@ -1531,6 +1531,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int?>("Position")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Quantity")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
@@ -1563,6 +1566,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

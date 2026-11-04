@@ -280,7 +280,7 @@ public static class ActivityEndpoints
             {
                 var list = await db.ShoppingLists.AsNoTracking()
                     .Where(l => l.Id == id)
-                    .Select(l => new ShoppingListDto(l.Id, l.HouseholdId, l.Name, l.Items.Count, l.Items.Count(i => i.IsChecked)))
+                    .Select(l => new ShoppingListDto(l.Id, l.HouseholdId, l.Name, l.Items.Count, l.Items.Count(i => i.IsChecked), l.Position))
                     .SingleOrDefaultAsync(ct);
                 await (list is null ? notifier.ShoppingListDeleted(householdId, id, ct) : notifier.ShoppingListUpserted(householdId, list, ct));
             }

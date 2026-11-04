@@ -38,6 +38,19 @@ class ShoppingItemsDeleted extends HouseholdEvent {
   final List<String> itemIds;
 }
 
+/// A ordem nova dos artigos de uma lista (alguém arrastou um artigo): os ids, por ordem.
+class ShoppingItemsReordered extends HouseholdEvent {
+  const ShoppingItemsReordered(this.listId, this.itemIds);
+  final String listId;
+  final List<String> itemIds;
+}
+
+/// A ordem nova das listas da casa: os ids, por ordem.
+class ShoppingListsReordered extends HouseholdEvent {
+  const ShoppingListsReordered(this.listIds);
+  final List<String> listIds;
+}
+
 class ChoreUpserted extends HouseholdEvent {
   const ChoreUpserted(this.chore);
   final Chore chore;
@@ -188,6 +201,15 @@ class HouseholdRealtime {
     connection.on(
       'ShoppingItemsDeleted',
       (args) => _emit(args, (a) => ShoppingItemsDeleted(a[0] as String, (a[1] as List).cast<String>())),
+    );
+
+    connection.on(
+      'ShoppingItemsReordered',
+      (args) => _emit(args, (a) => ShoppingItemsReordered(a[0] as String, (a[1] as List).cast<String>())),
+    );
+    connection.on(
+      'ShoppingListsReordered',
+      (args) => _emit(args, (a) => ShoppingListsReordered((a[0] as List).cast<String>())),
     );
 
     connection.on('ChoreUpserted', (args) => _emit(args, (a) => ChoreUpserted(Chore.fromJson(_map(a[0])))));

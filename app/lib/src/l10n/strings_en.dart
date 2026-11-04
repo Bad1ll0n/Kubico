@@ -910,4 +910,7 @@ const englishTexts = <String, String>{
   'Tarefa nova, até {0}': 'New chore, due {0}',
   'Despesa de {0}, dividida pelos adultos': 'Expense of {0}, split between the adults',
   'Escreve o que queres ou junta uma fotografia ou um PDF.': 'Write what you want or attach a photo or a PDF.',
+  // Arrastar para reordenar.
+  'Mover para cima': 'Move up',
+  'Mover para baixo': 'Move down',
 };

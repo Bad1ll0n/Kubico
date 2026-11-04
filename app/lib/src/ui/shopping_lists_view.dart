@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show CustomSemanticsAction;
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
@@ -74,8 +75,10 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
         setState(() {
           _lists = [..._lists ?? <ShoppingList>[]].where((l) => l.id != list.id).toList()
             ..add(list)
-            ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+            ..sort(ShoppingList.compare);
         });
+      case ShoppingListsReordered(:final listIds):
+        setState(() => _lists = _ordered(_lists, listIds));
       case ShoppingListDeleted(:final listId):
         setState(() => _lists = _lists?.where((l) => l.id != listId).toList());
         widget.onDeleted(listId);
@@ -83,6 +86,27 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
       // é preciso voltar a pedir as listas (antes era um GET /lists por artigo, em cada aparelho).
       default:
         break;
+    }
+  }
+
+  /// As listas com as posições de [ids] (as outras ficam com a sua).
+  static List<ShoppingList>? _ordered(List<ShoppingList>? lists, List<String> ids) => lists == null
+      ? null
+      : ([for (final l in lists) ids.contains(l.id) ? l.withPosition(ids.indexOf(l.id)) : l]
+          ..sort(ShoppingList.compare));
+
+  /// Arrastar uma lista (quem gere as Compras): aparece logo e vai para o servidor; se falhar, volta a ler.
+  Future<void> _reorder(int oldIndex, int newIndex) async {
+    final lists = [...?_lists];
+    final moved = lists.removeAt(oldIndex);
+    lists.insert(newIndex, moved);
+    final ids = [for (final l in lists) l.id];
+    setState(() => _lists = _ordered(lists, ids));
+    try {
+      await _api.reorderLists(widget.household.id, ids);
+    } catch (e) {
+      if (mounted) showError(context, e);
+      await _load();
     }
   }
 
@@ -142,12 +166,16 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
     } else {
       body = RefreshIndicator(
         onRefresh: _load,
-        child: ListView.builder(
+        // Quem gere as Compras arrasta as listas (carregar sem largar); o leitor de ecrã tem "mover para cima/baixo".
+        child: ReorderableListView.builder(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
           itemCount: lists.length,
+          buildDefaultDragHandles: false,
+          onReorderItem: _reorder,
           itemBuilder: (context, index) {
             final list = lists[index];
-            return Card(
+            final card = Card(
+              key: ValueKey(list.id),
               child: ListTile(
                 selected: list.id == widget.selectedListId,
                 leading: const Icon(Icons.shopping_cart_rounded),
@@ -161,6 +189,19 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
                       )
                     : null,
                 onTap: () => widget.onOpen(list),
+              ),
+            );
+            if (!canManage) return card;
+            return ReorderableDelayedDragStartListener(
+              key: ValueKey(list.id),
+              index: index,
+              child: Semantics(
+                customSemanticsActions: {
+                  if (index > 0) CustomSemanticsAction(label: 'Mover para cima'.tr): () => _reorder(index, index - 1),
+                  if (index < lists.length - 1)
+                    CustomSemanticsAction(label: 'Mover para baixo'.tr): () => _reorder(index, index + 1),
+                },
+                child: card,
               ),
             );
           },

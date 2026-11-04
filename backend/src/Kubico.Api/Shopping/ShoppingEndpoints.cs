@@ -32,7 +32,10 @@ public record UpdateShoppingItemRequest(
     [property: StringLength(50)] string? Category = null,
     bool? IsChecked = null);
 
-public record ShoppingListDto(Guid Id, Guid HouseholdId, string Name, int ItemCount, int CheckedCount);
+public record ShoppingListDto(Guid Id, Guid HouseholdId, string Name, int ItemCount, int CheckedCount, int Position = 0);
+
+/// <summary>A ordem nova: os ids pela ordem em que devem aparecer (os que faltarem ficam como estavam).</summary>
+public record ReorderRequest([property: Required, MaxLength(1000)] List<Guid> Ids);
 
 public record ShoppingItemDto(
     Guid Id,
@@ -45,7 +48,8 @@ public record ShoppingItemDto(
     Guid? CheckedByUserId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    string? Barcode = null);
+    string? Barcode = null,
+    int? Position = null);
 
 public static class ShoppingEndpoints
 {
@@ -58,12 +62,14 @@ public static class ShoppingEndpoints
         lists.MapGet("/", GetLists);
         lists.MapPost("/", CreateList);
         lists.MapDelete("/{listId:guid}", DeleteList);
+        lists.MapPut("/order", ReorderLists);
 
         lists.MapGet("/{listId:guid}/items", GetItems);
         lists.MapPost("/{listId:guid}/items", AddItem);
         lists.MapPatch("/{listId:guid}/items/{itemId:guid}", UpdateItem);
         lists.MapDelete("/{listId:guid}/items/{itemId:guid}", DeleteItem);
         lists.MapPost("/{listId:guid}/items/clear-checked", ClearChecked);
+        lists.MapPut("/{listId:guid}/items/order", ReorderItems);
 
         return api;
     }
@@ -80,9 +86,10 @@ public static class ShoppingEndpoints
 
         var lists = await db.ShoppingLists.AsNoTracking()
             .Where(l => l.HouseholdId == householdId)
-            .OrderBy(l => l.Name)
+            .OrderBy(l => l.Position)
+            .ThenBy(l => l.Name)
             .Select(l => new ShoppingListDto(
-                l.Id, l.HouseholdId, l.Name, l.Items.Count, l.Items.Count(i => i.IsChecked)))
+                l.Id, l.HouseholdId, l.Name, l.Items.Count, l.Items.Count(i => i.IsChecked), l.Position))
             .ToListAsync(ct);
 
         return Results.Ok(lists);
@@ -106,17 +113,19 @@ public static class ShoppingEndpoints
             return error;
         }
 
+        var last = await db.ShoppingLists.Where(l => l.HouseholdId == householdId).MaxAsync(l => (int?)l.Position, ct);
         var list = new ShoppingList
         {
             HouseholdId = householdId,
             Name = request.Name.Trim(),
             CreatedAt = clock.GetUtcNow(),
+            Position = (last ?? -1) + 1,
         };
         db.ShoppingLists.Add(list);
         activity.Capture(householdId, principal.GetUserId(), HouseholdModule.Shopping, $"criou a lista «{list.Name}»");
         await db.SaveChangesAsync(ct);
 
-        var dto = new ShoppingListDto(list.Id, householdId, list.Name, 0, 0);
+        var dto = new ShoppingListDto(list.Id, householdId, list.Name, 0, 0, list.Position);
         await notifier.ShoppingListUpserted(householdId, dto, ct);
 
         return Results.Created($"/api/households/{householdId}/lists/{list.Id}", dto);
@@ -178,6 +187,7 @@ public static class ShoppingEndpoints
         var ordered = items
             .OrderBy(i => i.IsChecked)
             .ThenBy(i => i.Category ?? "￿", StringComparer.OrdinalIgnoreCase)
+            .ThenBy(i => i.Position ?? int.MaxValue)
             .ThenBy(i => i.CreatedAt)
             .Select(ToDto)
             .ToList();
@@ -446,7 +456,7 @@ public static class ShoppingEndpoints
     internal static Task<ShoppingListDto?> ListDtoAsync(KubicoDbContext db, Guid listId, CancellationToken ct) =>
         db.ShoppingLists.AsNoTracking()
             .Where(l => l.Id == listId)
-            .Select(l => new ShoppingListDto(l.Id, l.HouseholdId, l.Name, l.Items.Count, l.Items.Count(i => i.IsChecked)))
+            .Select(l => new ShoppingListDto(l.Id, l.HouseholdId, l.Name, l.Items.Count, l.Items.Count(i => i.IsChecked), l.Position))
             .SingleOrDefaultAsync(ct);
 
     /// <summary>
@@ -475,5 +485,75 @@ public static class ShoppingEndpoints
 
     internal static ShoppingItemDto ToDto(ShoppingItem i) => new(
         i.Id, i.ListId, i.Name, i.Quantity, i.Category, i.IsChecked,
-        i.AddedByUserId, i.CheckedByUserId, i.CreatedAt, i.UpdatedAt, i.Barcode);
+        i.AddedByUserId, i.CheckedByUserId, i.CreatedAt, i.UpdatedAt, i.Barcode, i.Position);
+
+    /// <summary>Arrastar as listas: a nova ordem das listas da casa (só quem gere as Compras).</summary>
+    private static async Task<IResult> ReorderLists(
+        Guid householdId,
+        ReorderRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        HouseholdNotifier notifier,
+        CancellationToken ct)
+    {
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.Manage, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var ids = request.Ids.Distinct().ToList();
+        var lists = await db.ShoppingLists.Where(l => l.HouseholdId == householdId && ids.Contains(l.Id)).ToListAsync(ct);
+        foreach (var list in lists)
+        {
+            list.Position = ids.IndexOf(list.Id);
+        }
+
+        await db.SaveChangesAsync(ct);
+        await notifier.ShoppingListsReordered(householdId, [.. ids.Where(id => lists.Any(l => l.Id == id))], ct);
+        return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Arrastar os artigos: a ordem nova dentro da lista (quem usa as Compras). Os ids de fora da lista ignoram-se; os
+    /// artigos que faltarem ficam como estavam. Uma só mensagem em tempo real (<c>ShoppingItemsReordered</c>).
+    /// </summary>
+    private static async Task<IResult> ReorderItems(
+        Guid householdId,
+        Guid listId,
+        ReorderRequest request,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        HouseholdNotifier notifier,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var (_, _, error) = await access.RequireAsync(
+            principal.GetUserId(), householdId, HouseholdModule.Shopping, ModuleAccess.Participate, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        if (!await ListBelongsTo(db, listId, householdId, ct))
+        {
+            return Results.NotFound();
+        }
+
+        var ids = request.Ids.Distinct().ToList();
+        var items = await db.ShoppingItems.Where(i => i.ListId == listId && ids.Contains(i.Id)).ToListAsync(ct);
+        var now = clock.GetUtcNow();
+        foreach (var item in items)
+        {
+            item.Position = ids.IndexOf(item.Id);
+            item.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync(ct);
+        await notifier.ShoppingItemsReordered(householdId, listId, [.. ids.Where(id => items.Any(i => i.Id == id))], ct);
+        return Results.NoContent();
+    }
 }

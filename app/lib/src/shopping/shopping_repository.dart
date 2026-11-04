@@ -9,7 +9,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../storage/key_value_store.dart';
 
-enum ShoppingChangeType { add, check, delete, clear }
+enum ShoppingChangeType { add, check, delete, clear, reorder }
 
 /// Uma alteração a uma lista, à espera de chegar ao servidor. Enviam-se por ordem.
 class ShoppingChange {
@@ -23,6 +23,7 @@ class ShoppingChange {
     this.category,
     this.barcode,
     this.isChecked,
+    this.itemIds,
     required this.at,
   });
 
@@ -35,6 +36,9 @@ class ShoppingChange {
   final String? category;
   final String? barcode;
   final bool? isChecked;
+
+  /// Na [ShoppingChangeType.reorder]: os artigos pela ordem nova.
+  final List<String>? itemIds;
   final DateTime at;
 
   /// O artigo como aparece na lista enquanto o servidor não o confirma.
@@ -61,6 +65,7 @@ class ShoppingChange {
     if (category != null) 'category': category,
     if (barcode != null) 'barcode': barcode,
     if (isChecked != null) 'isChecked': isChecked,
+    'itemIds': ?itemIds,
     'at': at.toIso8601String(),
   };
 
@@ -74,6 +79,7 @@ class ShoppingChange {
     category: json['category'] as String?,
     barcode: json['barcode'] as String?,
     isChecked: json['isChecked'] as bool?,
+    itemIds: (json['itemIds'] as List<dynamic>?)?.cast<String>(),
     at: DateTime.parse(json['at'] as String),
   );
 }
@@ -230,6 +236,17 @@ class ShoppingRepository extends ChangeNotifier {
     ),
   );
 
+  /// Arrastar: a ordem nova dos artigos (aparece logo; chega aos outros quando houver rede).
+  void reorder(String householdId, String listId, List<String> itemIds) => _enqueue(
+    ShoppingChange(
+      type: ShoppingChangeType.reorder,
+      householdId: householdId,
+      listId: listId,
+      itemIds: itemIds,
+      at: clock.now().toUtc(),
+    ),
+  );
+
   void deleteItem(String householdId, String listId, String itemId) => _enqueue(
     ShoppingChange(
       type: ShoppingChangeType.delete,
@@ -347,6 +364,9 @@ class ShoppingRepository extends ChangeNotifier {
       case ShoppingChangeType.clear:
         await api.clearChecked(householdId, listId);
         await _updateCachedItems(listId, (items) => items..removeWhere((_, i) => i.isChecked));
+      case ShoppingChangeType.reorder:
+        await api.reorderItems(householdId, listId, change.itemIds!);
+        await _updateCachedItems(listId, (items) => _applyOrder(items, change.itemIds!));
     }
   }
 
@@ -369,9 +389,20 @@ class ShoppingRepository extends ChangeNotifier {
           byId.remove(change.itemId);
         case ShoppingChangeType.clear:
           byId.removeWhere((_, i) => i.isChecked);
+        case ShoppingChangeType.reorder:
+          _applyOrder(byId, change.itemIds!);
       }
     }
     return byId.values.toList();
+  }
+
+  /// Dá a cada artigo de [itemIds] a sua posição (os outros ficam como estavam).
+  static Map<String, ShoppingItem> _applyOrder(Map<String, ShoppingItem> items, List<String> itemIds) {
+    for (var i = 0; i < itemIds.length; i++) {
+      final item = items[itemIds[i]];
+      if (item != null) items[item.id] = item.copyWith(position: i);
+    }
+    return items;
   }
 
   void _setOffline(bool offline) {

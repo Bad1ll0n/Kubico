@@ -1093,6 +1093,7 @@ class ShoppingList {
     required this.name,
     required this.itemCount,
     required this.checkedCount,
+    this.position = 0,
   });
 
   final String id;
@@ -1100,6 +1101,15 @@ class ShoppingList {
   final String name;
   final int itemCount;
   final int checkedCount;
+
+  /// A ordem das listas na casa (arrastar para reordenar).
+  final int position;
+
+  /// Pela ordem escolhida e, entre as que têm a mesma, pelo nome.
+  static int compare(ShoppingList a, ShoppingList b) {
+    final byPosition = a.position.compareTo(b.position);
+    return byPosition != 0 ? byPosition : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  }
 
   int get pendingCount => itemCount - checkedCount;
 
@@ -1109,6 +1119,7 @@ class ShoppingList {
     'name': name,
     'itemCount': itemCount,
     'checkedCount': checkedCount,
+    'position': position,
   };
 
   factory ShoppingList.fromJson(Map<String, dynamic> json) => ShoppingList(
@@ -1117,6 +1128,16 @@ class ShoppingList {
     name: json['name'] as String,
     itemCount: json['itemCount'] as int,
     checkedCount: json['checkedCount'] as int,
+    position: json['position'] as int? ?? 0,
+  );
+
+  ShoppingList withPosition(int position) => ShoppingList(
+    id: id,
+    householdId: householdId,
+    name: name,
+    itemCount: itemCount,
+    checkedCount: checkedCount,
+    position: position,
   );
 }
 
@@ -1132,6 +1153,7 @@ class ShoppingItem {
     required this.createdAt,
     required this.updatedAt,
     this.barcode,
+    this.position,
   });
 
   final String id;
@@ -1147,7 +1169,10 @@ class ShoppingItem {
   /// O código de barras, quando o artigo foi lido com a câmara.
   final String? barcode;
 
-  ShoppingItem copyWith({bool? isChecked}) => ShoppingItem(
+  /// A ordem escolhida à mão dentro da categoria (null: pela ordem em que se pôs, depois dos arrumados).
+  final int? position;
+
+  ShoppingItem copyWith({bool? isChecked, int? position}) => ShoppingItem(
     id: id,
     listId: listId,
     name: name,
@@ -1158,6 +1183,7 @@ class ShoppingItem {
     createdAt: createdAt,
     updatedAt: updatedAt,
     barcode: barcode,
+    position: position ?? this.position,
   );
 
   Map<String, dynamic> toJson() => {
@@ -1171,6 +1197,7 @@ class ShoppingItem {
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
     'barcode': ?barcode,
+    'position': ?position,
   };
 
   factory ShoppingItem.fromJson(Map<String, dynamic> json) => ShoppingItem(
@@ -1184,6 +1211,7 @@ class ShoppingItem {
     createdAt: DateTime.parse(json['createdAt'] as String),
     updatedAt: DateTime.parse(json['updatedAt'] as String),
     barcode: json['barcode'] as String?,
+    position: json['position'] as int?,
   );
 }
 

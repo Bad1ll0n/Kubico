@@ -19,6 +19,12 @@ public static class HouseholdEvents
 
     /// <summary>Vários artigos de uma lista saíram de uma vez (limpar o carrinho): leva o id da lista e os dos artigos.</summary>
     public const string ShoppingItemsDeleted = "ShoppingItemsDeleted";
+
+    /// <summary>A ordem nova dos artigos de uma lista (arrastar): leva o id da lista e os dos artigos, por ordem.</summary>
+    public const string ShoppingItemsReordered = "ShoppingItemsReordered";
+
+    /// <summary>A ordem nova das listas da casa: leva os ids, por ordem.</summary>
+    public const string ShoppingListsReordered = "ShoppingListsReordered";
     public const string ChoreUpserted = "ChoreUpserted";
     public const string ChoreDeleted = "ChoreDeleted";
     public const string CalendarEventUpserted = "CalendarEventUpserted";
@@ -108,6 +114,12 @@ public class HouseholdNotifier(IHubContext<HouseholdHub> hub, HouseholdGroups gr
             1 => ShoppingItemDeleted(householdId, listId, itemIds.Single(), ct),
             _ => Area(householdId, HouseholdModule.Shopping).SendAsync(HouseholdEvents.ShoppingItemsDeleted, listId, itemIds, ct),
         };
+
+    public Task ShoppingItemsReordered(Guid householdId, Guid listId, IReadOnlyList<Guid> itemIds, CancellationToken ct) =>
+        Area(householdId, HouseholdModule.Shopping).SendAsync(HouseholdEvents.ShoppingItemsReordered, listId, itemIds, AfterCommit());
+
+    public Task ShoppingListsReordered(Guid householdId, IReadOnlyList<Guid> listIds, CancellationToken ct) =>
+        Area(householdId, HouseholdModule.Shopping).SendAsync(HouseholdEvents.ShoppingListsReordered, listIds, AfterCommit());
 
     public Task ChoreUpserted(Guid householdId, ChoreDto chore, CancellationToken ct) =>
         Area(householdId, HouseholdModule.Chores).SendAsync(HouseholdEvents.ChoreUpserted, chore, AfterCommit());
