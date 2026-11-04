@@ -918,4 +918,9 @@ const englishTexts = <String, String>{
   'Mudar a fotografia': 'Change photo',
   'Tirar a fotografia': 'Remove photo',
   'Fotografia guardada.': 'Photo saved.',
+  // Ver PDF.
+  'Guardado.': 'Saved.',
+  'Guardar no dispositivo': 'Save to device',
+  'Abre-se no visualizador de PDF do aparelho.': "It opens in the device's PDF viewer.",
+  'Abrir o PDF': "Open the PDF",
 };

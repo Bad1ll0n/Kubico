@@ -12,6 +12,8 @@ import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import 'chore_history_screen.dart' show pickChorePhoto;
 import 'dates_pt.dart';
+import 'deferred.dart';
+import 'pdf_preview_screen.dart' deferred as pdf;
 import 'design/components.dart';
 import 'theme.dart';
 
@@ -337,7 +339,7 @@ class _Section extends StatelessWidget {
   );
 }
 
-/// Os ficheiros de um equipamento: as imagens abrem-se aqui; os PDF mostram o nome e o tamanho.
+/// Os ficheiros de um equipamento: as imagens abrem-se num diálogo e os PDF no visualizador (biblioteca diferida).
 class _Files extends StatelessWidget {
   const _Files({required this.files, required this.householdId});
 
@@ -362,7 +364,14 @@ class _Files extends StatelessWidget {
                     builder: (context) => Dialog(child: InteractiveViewer(child: Image.memory(bytes))),
                   );
                 }
-              : null,
+              : () => pushDeferred<void>(
+                  context,
+                  pdf.loadLibrary,
+                  () => pdf.PdfPreviewScreen(
+                    name: f.fileName,
+                    load: () => context.read<ApiClient>().getHomeFile(householdId, f.id),
+                  ),
+                ),
         ),
     ],
   );

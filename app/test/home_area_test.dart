@@ -10,6 +10,7 @@ import 'package:kubico/src/notifications/open_notification.dart';
 import 'package:kubico/src/realtime/household_realtime.dart';
 import 'package:kubico/src/session/session_controller.dart';
 import 'package:kubico/src/session/token_store.dart';
+import 'package:kubico/src/ui/pdf_preview_screen.dart';
 import 'package:kubico/src/ui/home_area_screen.dart';
 import 'package:provider/provider.dart';
 
@@ -60,7 +61,9 @@ class _Server {
             'maintenance': [
               {'id': 'm1', 'title': 'Revisão', 'intervalDays': 365, 'lastDone': null, 'nextDue': '2027-01-10'},
             ],
-            'files': <Object>[],
+            'files': [
+              {'id': 'f1', 'fileName': 'fatura.pdf', 'contentType': 'application/pdf', 'size': 9},
+            ],
           },
         ],
         'documents': [
@@ -91,6 +94,11 @@ class _Server {
         ],
         'irsReminders': true,
       }),
+      ('GET', '/api/households/h1/home/files/f1') => http.Response.bytes(
+        utf8.encode('%PDF-1.4 '),
+        200,
+        headers: {'content-type': 'application/pdf'},
+      ),
       ('POST', _) => _json({}, 201),
       _ => http.Response('', 404),
     };
@@ -140,6 +148,16 @@ void main() {
     await tester.tap(find.text('Feita'));
     await tester.pumpAndSettle();
     expect(server.requests.last, 'POST /api/households/h1/home/appliances/a1/maintenance/m1/done ');
+
+    // O PDF abre-se dentro da app (o PDFium não corre nos testes: um visualizador falso mostra o que recebeu).
+    PdfPreviewScreen.debugViewer = (bytes, name) => Text('PDF $name com ${bytes.length} bytes');
+    addTearDown(() => PdfPreviewScreen.debugViewer = null);
+    await tester.tap(find.text('fatura.pdf'));
+    await tester.pumpAndSettle();
+    expect(find.text('PDF fatura.pdf com 9 bytes'), findsOneWidget);
+    expect(find.byTooltip('Guardar no dispositivo'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Documentos'));
     await tester.pumpAndSettle();
