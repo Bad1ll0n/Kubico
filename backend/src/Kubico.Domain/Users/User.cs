@@ -34,6 +34,12 @@ public class User : IVersioned
     /// <summary>O emoji escolhido para o avatar (F4-03); sem ele, o avatar mostra a inicial.</summary>
     public string? AvatarEmoji { get; set; }
 
+    /// <summary>
+    /// A versão da fotografia de perfil (muda a cada fotografia nova; null sem fotografia). A fotografia fica em
+    /// <see cref="UserPhoto"/>; só os adultos com conta a têm.
+    /// </summary>
+    public Guid? PhotoVersion { get; set; }
+
     /// <summary>PINs errados seguidos; ao fim de <see cref="MaxPinAttempts"/>, o perfil fica bloqueado uns minutos.</summary>
     public int FailedPinAttempts { get; set; }
 

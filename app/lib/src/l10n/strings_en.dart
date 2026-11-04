@@ -913,4 +913,9 @@ const englishTexts = <String, String>{
   // Arrastar para reordenar.
   'Mover para cima': 'Move up',
   'Mover para baixo': 'Move down',
+  // Fotografia de perfil.
+  'Pôr uma fotografia': 'Add a photo',
+  'Mudar a fotografia': 'Change photo',
+  'Tirar a fotografia': 'Remove photo',
+  'Fotografia guardada.': 'Photo saved.',
 };

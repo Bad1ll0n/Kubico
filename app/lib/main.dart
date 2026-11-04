@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'src/ui/design/components.dart' show AvatarPhotos;
 import 'src/api/api_client.dart';
 import 'src/config.dart';
 import 'src/households/invite_link.dart';
@@ -62,6 +63,7 @@ Future<void> main() async {
     await chores.clear();
     await responses.clear();
     notifications.clear();
+    AvatarPhotos.clear();
   };
 
   // A cópia das listas grava-se com um pequeno atraso; ao ir para segundo plano (ou fechar), grava-se já.

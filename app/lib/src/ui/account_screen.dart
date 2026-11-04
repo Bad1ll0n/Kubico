@@ -1,6 +1,7 @@
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
@@ -8,6 +9,7 @@ import '../api/models.dart';
 import '../l10n/strings.dart';
 import '../session/session_controller.dart';
 import 'change_password.dart';
+import 'design/components.dart';
 import 'design/reading_mode.dart';
 import 'rename_dialog.dart';
 import 'theme.dart';
@@ -379,6 +381,7 @@ class AvatarCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final user = context.watch<SessionController>().user;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -386,6 +389,32 @@ class AvatarCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('O meu avatar'.tr, style: theme.textTheme.titleMedium),
+            // A fotografia é só para quem tem conta: os perfis das crianças ficam com o emoji.
+            if (user != null && !user.isChildProfile) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  MemberAvatar(name: user.displayName, color: '', photo: user.photo, size: 56),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => _pickPhoto(context),
+                          icon: const Icon(Icons.add_a_photo_rounded),
+                          label: Text(user.photo == null ? 'Pôr uma fotografia'.tr : 'Mudar a fotografia'.tr),
+                        ),
+                        if (user.photo != null)
+                          TextButton(onPressed: () => _removePhoto(context), child: Text('Tirar a fotografia'.tr)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
             const SizedBox(height: 4),
             Text('Escolhe um emoji para aparecer no lugar da inicial.'.tr, style: theme.textTheme.bodySmall),
             const SizedBox(height: 12),
@@ -406,6 +435,59 @@ class AvatarCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _pickPhoto(BuildContext context) async {
+    final api = context.read<ApiClient>();
+    final session = context.read<SessionController>();
+    final picker = ImagePicker();
+    final source = picker.supportsImageSource(ImageSource.camera)
+        ? await showModalBottomSheet<ImageSource>(
+            context: context,
+            showDragHandle: true,
+            builder: (context) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.photo_camera_rounded),
+                    title: Text('Tirar foto'.tr),
+                    onTap: () => Navigator.pop(context, ImageSource.camera),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.photo_library_rounded),
+                    title: Text('Escolher uma foto'.tr),
+                    onTap: () => Navigator.pop(context, ImageSource.gallery),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : ImageSource.gallery;
+    if (source == null) return;
+    // Pequena: um avatar não precisa de mais e chega depressa a toda a casa.
+    final photo = await picker.pickImage(source: source, maxWidth: 512, maxHeight: 512, imageQuality: 85);
+    if (photo == null) return;
+    try {
+      await api.uploadProfilePhoto(await photo.readAsBytes(), photo.name);
+      await session.refresh();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fotografia guardada.'.tr)));
+      }
+    } catch (e) {
+      if (context.mounted) showError(context, e);
+    }
+  }
+
+  Future<void> _removePhoto(BuildContext context) async {
+    final api = context.read<ApiClient>();
+    final session = context.read<SessionController>();
+    try {
+      await api.deleteProfilePhoto();
+      await session.refresh();
+    } catch (e) {
+      if (context.mounted) showError(context, e);
+    }
   }
 
   Future<void> _set(BuildContext context, String? emoji) async {

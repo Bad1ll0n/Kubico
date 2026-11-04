@@ -98,6 +98,9 @@ enum ModuleAccess {
   };
 }
 
+/// A fotografia de perfil de alguém: de quem é e a versão (muda a cada fotografia nova, para não mostrar a antiga).
+typedef MemberPhoto = ({String userId, String version});
+
 /// Quem está a usar a app. Um perfil de criança não tem email: entra com o código da família e um PIN.
 class User {
   const User({
@@ -106,12 +109,18 @@ class User {
     required this.displayName,
     this.isChildProfile = false,
     this.language = 'pt',
+    this.photoVersion,
   });
 
   final String id;
   final String? email;
   final String displayName;
   final bool isChildProfile;
+
+  /// A versão da fotografia de perfil (null sem fotografia).
+  final String? photoVersion;
+
+  MemberPhoto? get photo => photoVersion == null ? null : (userId: id, version: photoVersion!);
 
   /// A língua em que recebe os avisos ("pt" ou "en").
   final String language;
@@ -122,6 +131,7 @@ class User {
     displayName: json['displayName'] as String,
     isChildProfile: json['isChildProfile'] as bool? ?? false,
     language: json['language'] as String? ?? 'pt',
+    photoVersion: json['photo'] as String?,
   );
 
   Map<String, dynamic> toJson() => {
@@ -130,6 +140,7 @@ class User {
     'displayName': displayName,
     'isChildProfile': isChildProfile,
     'language': language,
+    'photo': ?photoVersion,
   };
 }
 
@@ -390,6 +401,7 @@ class Member {
     this.isChildProfile = false,
     this.birthDate,
     this.avatar,
+    this.photoVersion,
   });
 
   final String userId;
@@ -399,6 +411,11 @@ class Member {
 
   /// O emoji do avatar (F4-03); null mostra a inicial.
   final String? avatar;
+
+  /// A versão da fotografia de perfil (só adultos com conta); a fotografia vence o emoji.
+  final String? photoVersion;
+
+  MemberPhoto? get photo => photoVersion == null ? null : (userId: userId, version: photoVersion!);
 
   /// Perfil de criança: sem conta própria, entra com o código da família e um PIN.
   final bool isChildProfile;
@@ -412,6 +429,7 @@ class Member {
     isChildProfile: json['isChildProfile'] as bool? ?? false,
     birthDate: _day(json['birthDate']),
     avatar: json['avatar'] as String?,
+    photoVersion: json['photo'] as String?,
   );
 }
 

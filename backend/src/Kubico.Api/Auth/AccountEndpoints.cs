@@ -124,6 +124,8 @@ public static class AccountEndpoints
             {
                 user.Id, Nome = user.DisplayName, user.Email, CriadaEm = user.CreatedAt, DataDeNascimento = user.BirthDate,
                 VerificacaoEmDoisPassos = user.TwoFactorEnabled, Lingua = user.Language, Avatar = user.AvatarEmoji,
+                Fotografia = await db.UserPhotos.AsNoTracking().Where(p => p.UserId == userId)
+                    .Select(p => new { Tipo = p.ContentType, Base64 = Convert.ToBase64String(p.Data) }).SingleOrDefaultAsync(ct),
             },
             Casas = households.Select(h => new { Casa = h.Name, Papel = h.Role.ToString(), Cor = h.Color, EntrouEm = h.JoinedAt }),
             Sessoes = await db.RefreshTokens.AsNoTracking()

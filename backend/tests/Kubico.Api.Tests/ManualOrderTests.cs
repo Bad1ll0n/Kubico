@@ -50,10 +50,10 @@ public class ManualOrderTests(KubicoApiFactory factory) : IClassFixture<KubicoAp
         var stranger1 = await stranger.PutAsJsonAsync($"{items}/order", new ReorderRequest([yogurt.Id]), TestJson.Options);
         var stranger2 = await stranger.PutAsJsonAsync($"/api/households/{strangerHousehold}/lists/{list.Id}/items/order",
             new ReorderRequest([yogurt.Id]), TestJson.Options);
-        var after = await mum.GetFromJsonAsync<List<ShoppingItemDto>>(items, TestJson.Options);
+        var after = (await mum.GetFromJsonAsync<List<ShoppingItemDto>>(items, TestJson.Options))!;
         var pilhas = await mum.GetFromJsonAsync<List<ShoppingItemDto>>($"/api/households/{household}/lists/{other.Id}/items", TestJson.Options);
 
-        Assert.Equal([apples.Id, cheese.Id, milk.Id, yogurt.Id], after!.Select(i => i.Id));
+        Assert.Equal([apples.Id, cheese.Id, milk.Id, yogurt.Id], after.Select(i => i.Id));
         Assert.Equal(0, after.Single(i => i.Id == cheese.Id).Position);
         Assert.Null(after.Single(i => i.Id == yogurt.Id).Position);
         Assert.Null(Assert.Single(pilhas!).Position);

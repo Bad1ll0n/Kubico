@@ -1714,6 +1714,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<string>("PendingTotpSecret")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("PhotoVersion")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("PinHash")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -1746,6 +1749,25 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.HasIndex("ManagedByHouseholdId");
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Users.UserPhoto", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("UserPhotos");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
@@ -2251,6 +2273,15 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ManagedByHouseholdId")
                         .OnDelete(DeleteBehavior.Cascade);
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Users.UserPhoto", b =>
+                {
+                    b.HasOne("Kubico.Domain.Users.User", null)
+                        .WithOne()
+                        .HasForeignKey("Kubico.Domain.Users.UserPhoto", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Kubico.Domain.Chores.Chore", b =>

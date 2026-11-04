@@ -70,7 +70,13 @@ class _ExpensesViewState extends State<ExpensesView> {
     final member = _details?.member(userId);
     return member == null
         ? const Icon(Icons.person_rounded)
-        : MemberAvatar(name: member.displayName, color: member.color, emoji: member.avatar, size: 32);
+        : MemberAvatar(
+            name: member.displayName,
+            color: member.color,
+            emoji: member.avatar,
+            photo: member.photo,
+            size: 32,
+          );
   }
 
   String _name(String userId) => _details?.member(userId)?.displayName ?? 'Antigo membro'.tr;
@@ -292,7 +298,13 @@ class _ExpenseEditorState extends State<_ExpenseEditor> {
               children: [
                 for (final m in widget.members)
                   FilterChip(
-                    avatar: MemberAvatar(name: m.displayName, color: m.color, emoji: m.avatar, size: 24),
+                    avatar: MemberAvatar(
+                      name: m.displayName,
+                      color: m.color,
+                      emoji: m.avatar,
+                      photo: m.photo,
+                      size: 24,
+                    ),
                     label: Text(m.displayName),
                     selected: _split.contains(m.userId),
                     onSelected: (on) => setState(() => on ? _split.add(m.userId) : _split.remove(m.userId)),

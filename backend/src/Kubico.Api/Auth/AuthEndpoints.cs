@@ -36,7 +36,8 @@ public record TwoFactorChallengeDto(bool TwoFactorRequired, string ChallengeToke
 public record TwoFactorLoginRequest([property: Required] string ChallengeToken, [property: Required] string Code);
 
 /// <summary>Quem tem a sessão. Os perfis de criança não têm email. <c>Language</c> é a língua em que recebe os avisos ("pt" ou "en").</summary>
-public record UserDto(Guid Id, string? Email, string DisplayName, bool IsChildProfile, string Language);
+/// <summary><c>Photo</c>: a versão da fotografia de perfil (para a pedir em <c>/api/users/{id}/photo</c>), null sem ela.</summary>
+public record UserDto(Guid Id, string? Email, string DisplayName, bool IsChildProfile, string Language, Guid? Photo = null);
 
 /// <summary>
 /// Sessão iniciada: o token de acesso (curto) e o refresh token, para pedir um par novo em <c>/auth/refresh</c>.
@@ -311,5 +312,5 @@ public static class AuthEndpoints
     private static readonly HashSet<string> KnownDevices = ["android", "ios", "windows", "macos", "linux", "web"];
 
     public static UserDto ToDto(this User user) =>
-        new(user.Id, user.Email, user.DisplayName, user.IsChildProfile, user.Language);
+        new(user.Id, user.Email, user.DisplayName, user.IsChildProfile, user.Language, user.PhotoVersion);
 }

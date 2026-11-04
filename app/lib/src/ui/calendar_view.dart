@@ -450,7 +450,7 @@ class _CalendarViewState extends State<CalendarView> {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: FilterChip(
-                avatar: MemberAvatar(name: m.displayName, color: m.color, emoji: m.avatar, size: 24),
+                avatar: MemberAvatar(name: m.displayName, color: m.color, emoji: m.avatar, photo: m.photo, size: 24),
                 label: Text(m.displayName),
                 selected: !_hidden.contains(m.userId),
                 showCheckmark: false,
@@ -860,6 +860,7 @@ class _OccurrenceTile extends StatelessWidget {
                         name: member.displayName,
                         color: member.color,
                         emoji: member.avatar,
+                        photo: member.photo,
                         size: 24,
                       ),
                     ),

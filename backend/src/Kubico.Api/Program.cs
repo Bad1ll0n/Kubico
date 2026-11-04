@@ -283,6 +283,7 @@ api.MapMealEndpoints();
 api.MapExpenseEndpoints();
 api.MapHomeEndpoints();
 api.MapAssistantEndpoints();
+api.MapProfilePhotoEndpoints();
 api.MapProductEndpoints();
 api.MapChoreEndpoints();
 api.MapChoreHistoryEndpoints();

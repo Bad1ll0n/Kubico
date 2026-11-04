@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
+import '../../api/api_client.dart';
+import '../../api/models.dart' show MemberPhoto;
 import '../../l10n/strings.dart';
 import 'illustrations.dart';
 import 'tokens.dart';
@@ -23,6 +28,7 @@ class MemberAvatar extends StatelessWidget {
     this.size = 32,
     this.away = false,
     this.emoji,
+    this.photo,
     super.key,
   });
 
@@ -36,10 +42,13 @@ class MemberAvatar extends StatelessWidget {
   /// O emoji escolhido (F4-03), no lugar da inicial; a cor da pessoa fica no círculo.
   final String? emoji;
 
+  /// A fotografia de perfil, se houver: aparece por cima do círculo (que fica enquanto carrega ou se falhar).
+  final MemberPhoto? photo;
+
   @override
   Widget build(BuildContext context) {
     final tones = context.memberTones(color);
-    final avatar = Container(
+    final circle = Container(
       width: size,
       height: size,
       alignment: Alignment.center,
@@ -58,12 +67,52 @@ class MemberAvatar extends StatelessWidget {
               ),
       ),
     );
+    final picture = photo;
+    final avatar = picture == null
+        ? circle
+        : FutureBuilder<Uint8List?>(
+            future: AvatarPhotos.load(context.read<ApiClient>(), picture),
+            builder: (context, snapshot) => snapshot.data == null
+                ? circle
+                : ClipOval(
+                    child: Image.memory(
+                      snapshot.data!,
+                      width: size,
+                      height: size,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                    ),
+                  ),
+          );
     return Semantics(
       label: away ? '$name (fora)'.tr : name,
       excludeSemantics: true,
       child: away ? _Away(size: size, child: avatar) : avatar,
     );
   }
+}
+
+/// As fotografias de perfil já descarregadas, por pessoa e versão: cada uma pede-se uma vez por sessão da app (o
+/// servidor também responde 304 com o ETag). Uma falha não fica guardada (volta a tentar-se na próxima vez).
+abstract final class AvatarPhotos {
+  static final _loaded = <String, Future<Uint8List?>>{};
+  static const _max = 200;
+
+  static Future<Uint8List?> load(ApiClient api, MemberPhoto photo) {
+    final key = '${photo.userId}:${photo.version}';
+    return _loaded[key] ??= () async {
+      if (_loaded.length > _max) _loaded.remove(_loaded.keys.first);
+      try {
+        return await api.getUserPhoto(photo.userId);
+      } catch (_) {
+        unawaited(Future<void>.delayed(Duration.zero, () => _loaded.remove(key)));
+        return null;
+      }
+    }();
+  }
+
+  /// No fim da sessão: as fotografias não ficam para a próxima pessoa.
+  static void clear() => _loaded.clear();
 }
 
 class _Away extends StatelessWidget {

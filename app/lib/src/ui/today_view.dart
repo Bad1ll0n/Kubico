@@ -278,7 +278,7 @@ class _TodayViewState extends State<TodayView> {
                 if (chore.points > 0) PointsBadge(chore.points),
                 if (data.details.member(chore.assigneeUserId) case final m?) ...[
                   const SizedBox(width: KubicoSpace.s8),
-                  MemberAvatar(name: m.displayName, color: m.color, emoji: m.avatar, size: 28),
+                  MemberAvatar(name: m.displayName, color: m.color, emoji: m.avatar, photo: m.photo, size: 28),
                 ],
               ],
             ),
@@ -369,7 +369,7 @@ class _TodayViewState extends State<TodayView> {
         for (final r in pending.take(4))
           _Line(
             leading: switch (data.details.member(r.userId)) {
-              final m? => MemberAvatar(name: m.displayName, color: m.color, emoji: m.avatar, size: 32),
+              final m? => MemberAvatar(name: m.displayName, color: m.color, emoji: m.avatar, photo: m.photo, size: 32),
               null => const Icon(Icons.person_rounded),
             },
             title: r.rewardTitle,
@@ -445,6 +445,7 @@ class _WhoIsHome extends StatelessWidget {
                     name: m.displayName,
                     color: m.color,
                     emoji: m.avatar,
+                    photo: m.photo,
                     size: 48,
                     away: away.contains(m.userId),
                   ),
@@ -636,7 +637,7 @@ class _Avatars extends StatelessWidget {
       for (final m in members.take(3))
         Padding(
           padding: const EdgeInsets.only(left: 4),
-          child: MemberAvatar(name: m.displayName, color: m.color, emoji: m.avatar, size: 28),
+          child: MemberAvatar(name: m.displayName, color: m.color, emoji: m.avatar, photo: m.photo, size: 28),
         ),
       if (members.length > 3)
         Padding(

@@ -313,6 +313,17 @@ class ApiClient {
   /// O emoji do avatar (F4-03); null volta à inicial.
   Future<void> setAvatar(String? emoji) => _send('PUT', '/api/account/avatar', body: {'emoji': emoji});
 
+  /// A fotografia de perfil (sem metadados no servidor); devolve a conta com a versão nova.
+  Future<User> uploadProfilePhoto(Uint8List bytes, String name) async => User.fromJson(
+    await _send('PUT', '/api/account/photo', upload: (field: 'photo', bytes: bytes, filename: name))
+        as Map<String, dynamic>,
+  );
+
+  Future<void> deleteProfilePhoto() => _send('DELETE', '/api/account/photo');
+
+  /// A fotografia de alguém da mesma casa.
+  Future<Uint8List> getUserPhoto(String userId) async => (await _execute('GET', '/api/users/$userId/photo')).bodyBytes;
+
   Future<User> changeName(String name) async =>
       User.fromJson(await _send('PUT', '/api/account/name', body: {'displayName': name}) as Map<String, dynamic>);
 

@@ -662,6 +662,9 @@ public static partial class Texts
         ["limpou 1 artigo comprado da lista «{0}»"] = "cleared 1 bought item from the list “{0}”",
         ["limpou {0} artigos comprados da lista «{1}»"] = "cleared {0} bought items from the list “{1}”",
 
+        // Fotografia de perfil
+        ["Os perfis das crianças usam um emoji em vez de fotografia."] = "Children's profiles use an emoji instead of a photo.",
+
         // Assistente
         ["O assistente não está disponível para as crianças."] = "The assistant isn't available for children.",
         ["O assistente não está disponível neste servidor."] = "The assistant isn't available on this server.",
