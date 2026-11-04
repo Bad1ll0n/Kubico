@@ -1,0 +1,309 @@
+using System.Security.Claims;
+using Kubico.Api.Activity;
+using Kubico.Api.Common;
+using Kubico.Api.Notifications;
+using Kubico.Api.Realtime;
+using Kubico.Api.Rewards;
+using Kubico.Domain.Chores;
+using Kubico.Domain.Households;
+using Kubico.Domain.Notifications;
+using Kubico.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace Kubico.Api.Chores;
+
+public record ChorePhotoDto(Guid Id);
+
+/// <summary>Uma tarefa feita. <c>Rejected</c>: quem gere as tarefas não a aceitou (não conta para os pontos).</summary>
+public record ChoreHistoryItemDto(
+    Guid Id,
+    Guid ChoreId,
+    string ChoreTitle,
+    Guid UserId,
+    int Points,
+    DateTimeOffset CompletedAt,
+    Guid? PhotoId,
+    bool Rejected);
+
+/// <summary>
+/// Fotos de prova e histórico: quem fez o quê, com a foto quando a tarefa a pede. Quem gere as tarefas pode não
+/// aceitar uma conclusão: os pontos deixam de contar e a tarefa volta para quem a fez.
+/// </summary>
+public static class ChoreHistoryEndpoints
+{
+    /// <summary>Até quantos dias depois se pode não aceitar uma conclusão (o mesmo que o histórico mostra).</summary>
+    private const int MaxRejectDays = 30;
+
+    public static RouteGroupBuilder MapChoreHistoryEndpoints(this RouteGroupBuilder api)
+    {
+        var chores = api.MapGroup("/households/{householdId:guid}/chores")
+            .WithTags("Chores")
+            .RequireAuthorization();
+
+        // A app autentica-se com o token no cabeçalho (sem cookies): não há pedidos forjados por outro site.
+        chores.MapPost("/photos", UploadPhoto).DisableAntiforgery()
+            // Um pedido maior do que a foto máxima (mais a margem do multipart) é cortado logo, sem o ler todo.
+            .WithMetadata(new RequestSizeLimitAttribute(ChorePhoto.MaxBytes + 64 * 1024));
+        chores.MapGet("/photos/{photoId:guid}", GetPhoto);
+        chores.MapGet("/history", GetHistory);
+        chores.MapPost("/completions/{completionId:guid}/reject", Reject);
+        return api;
+    }
+
+    private static async Task<IResult> UploadPhoto(
+        Guid householdId,
+        IFormFile photo,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Chores, ModuleAccess.Participate, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        if (photo.Length == 0 || photo.Length > ChorePhoto.MaxBytes)
+        {
+            return Invalid("A foto tem de ter no máximo 5 MB.");
+        }
+
+        using var buffer = new MemoryStream();
+        await photo.CopyToAsync(buffer, ct);
+        // Confirma o tipo pelos bytes e tira os metadados (EXIF com a localização GPS, XMP, textos) antes de guardar.
+        var received = buffer.ToArray();
+        if (ChorePhoto.DetectContentType(received) is not { } contentType
+            || PhotoMetadata.Strip(received, contentType) is not { } data)
+        {
+            return Invalid("Isto não parece uma foto (JPEG, PNG ou WebP).");
+        }
+
+        if (PhotoMetadata.ReadSize(data, contentType) is not { Width: > 0, Height: > 0 } size)
+        {
+            return Invalid("Isto não parece uma foto (JPEG, PNG ou WebP).");
+        }
+
+        if (size.Width > PhotoMetadata.MaxSide || size.Height > PhotoMetadata.MaxSide)
+        {
+            return Invalid("A foto é grande demais (no máximo 4096 × 4096 píxeis).");
+        }
+
+        var now = clock.GetUtcNow();
+        await CleanUpAsync(db, householdId, now, ct);
+
+        // Cada pessoa só tem algumas fotos por usar de cada vez (as que não provam nenhuma tarefa saem ao fim de um dia):
+        // um convidado ou uma criança não enchem a base de dados com envios seguidos.
+        var unused = await db.ChorePhotos.CountAsync(p => p.HouseholdId == householdId && p.UploadedByUserId == userId
+            && !db.ChoreCompletions.Any(c => c.PhotoId == p.Id), ct);
+        if (unused >= ChorePhoto.MaxUnusedPerPerson)
+        {
+            return Results.Problem(
+                title: "Tens demasiadas fotos por usar. Conclui as tarefas com elas ou espera até amanhã.",
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
+        var stored = new ChorePhoto
+        {
+            HouseholdId = householdId, UploadedByUserId = userId, ContentType = contentType, Data = data, CreatedAt = now,
+        };
+        db.ChorePhotos.Add(stored);
+        await db.SaveChangesAsync(ct);
+        return Results.Created($"/api/households/{householdId}/chores/photos/{stored.Id}", new ChorePhotoDto(stored.Id));
+    }
+
+    /// <summary>
+    /// A foto (muitas vezes de uma criança ou do quarto dela) só a veem quem a enviou e quem gere as Tarefas: não os
+    /// convidados nem as outras crianças. A foto nunca muda: vai com o id como ETag e "private, no-cache" (só o próprio aparelho guarda uma cópia e
+    /// confirma-a sempre; o acesso volta a ser verificado). Quando a app já a tem, a resposta é 304, sem ler os bytes.
+    /// </summary>
+    private static async Task<IResult> GetPhoto(
+        Guid householdId,
+        Guid photoId,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, level, error) = await access.RequireAsync(userId, householdId, HouseholdModule.Chores, ModuleAccess.View, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var manages = level >= ModuleAccess.Manage;
+        var photos = db.ChorePhotos.AsNoTracking()
+            .Where(p => p.Id == photoId && p.HouseholdId == householdId && (manages || p.UploadedByUserId == userId));
+        var etag = HttpCaching.ETagOf(photoId);
+        if (HttpCaching.ClientHas(http, etag))
+        {
+            if (!await photos.AnyAsync(ct))
+            {
+                return Results.NotFound();
+            }
+
+            HttpCaching.PrivateWithETag(http, etag);
+            return Results.StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        var photo = await photos.Select(p => new { p.ContentType, p.Data }).SingleOrDefaultAsync(ct);
+        if (photo is null)
+        {
+            return Results.NotFound();
+        }
+
+        HttpCaching.PrivateWithETag(http, etag);
+        return Results.File(photo.Data, photo.ContentType);
+    }
+
+    /// <summary>As tarefas feitas nos últimos dias (por omissão 30), das mais recentes para as mais antigas.</summary>
+    private static async Task<IResult> GetHistory(
+        Guid householdId,
+        int? days,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        HouseholdAccess access,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, level, error) = await access.RequireAsync(userId, householdId, HouseholdModule.Chores, ModuleAccess.View, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        // A foto de prova só vai para quem a pode ver (ver GetPhoto).
+        var manages = level >= ModuleAccess.Manage;
+        var since = clock.GetUtcNow().AddDays(-Math.Clamp(days ?? 30, 1, 365));
+        var items = await db.ChoreCompletions.AsNoTracking()
+            .Where(c => c.Chore.HouseholdId == householdId && c.CompletedAt >= since)
+            .OrderByDescending(c => c.CompletedAt)
+            .Take(200)
+            .Select(c => new ChoreHistoryItemDto(
+                c.Id, c.ChoreId, c.Chore.Title, c.UserId, c.Points, c.CompletedAt,
+                manages || db.ChorePhotos.Any(p => p.Id == c.PhotoId && p.UploadedByUserId == userId) ? c.PhotoId : null,
+                c.RejectedAt != null))
+            .ToListAsync(ct);
+        return Results.Ok(items);
+    }
+
+    /// <summary>
+    /// Não aceitar uma tarefa feita: os pontos deixam de contar e a tarefa volta para quem a fez, para hoje. Se os
+    /// pontos já foram trocados por recompensas, responde 409 (código "points-spent"); com <c>force=true</c>, quem
+    /// gere as tarefas confirma e a pessoa fica a dever esses pontos.
+    /// </summary>
+    private static async Task<IResult> Reject(
+        Guid householdId,
+        Guid completionId,
+        bool? force,
+        ClaimsPrincipal principal,
+        KubicoDbContext db,
+        ActivityLog activity,
+        HouseholdAccess access,
+        HouseholdNotifier notifier,
+        NotificationService notifications,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var (_, _, error) = await access.RequireAsync(
+            userId, householdId, HouseholdModule.Chores, ModuleAccess.Manage, ct);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var completion = await db.ChoreCompletions
+            .Include(c => c.Chore).ThenInclude(c => c.Household)
+            .SingleOrDefaultAsync(c => c.Id == completionId && c.Chore.HouseholdId == householdId, ct);
+        if (completion is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (completion.RejectedAt is not null)
+        {
+            return Results.Problem(title: "Esta tarefa já não foi aceite.", statusCode: StatusCodes.Status409Conflict);
+        }
+
+        if (completion.CompletedAt < clock.GetUtcNow().AddDays(-MaxRejectDays))
+        {
+            return Results.Problem(
+                title: "Só se pode não aceitar o que foi feito nos últimos 30 dias.", statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var now = clock.GetUtcNow();
+        var chore = completion.Chore;
+        var doer = await db.Users.Where(u => u.Id == completion.UserId).Select(u => u.DisplayName).SingleOrDefaultAsync(ct) ?? "antigo membro";
+
+        // Tranca o saldo de quem a fez antes de o ler (um pedido de recompensa em simultâneo não passa).
+        if (completion.Points > 0 && await Points.LockAsync(db, householdId, completion.UserId, ct) is not null && force != true)
+        {
+            var left = await Points.AvailableAsync(db, householdId, completion.UserId, ct) - completion.Points;
+            if (left < 0)
+            {
+                return Points.SpentProblem(doer, -left);
+            }
+        }
+
+        // Só a última conclusão faz a tarefa voltar atrás; nas mais antigas (já houve outra depois) tiram-se só os pontos.
+        var isLatest = !await db.ChoreCompletions.AnyAsync(
+            c => c.ChoreId == chore.Id && c.RejectedAt == null && c.CompletedAt > completion.CompletedAt, ct);
+        completion.RejectedAt = now;
+        completion.RejectedByUserId = userId;
+        if (isLatest && chore.ArchivedAt is null)
+        {
+            chore.Reopen(completion.UserId, chore.Household.Today(now), now);
+        }
+
+        activity.Capture(householdId, userId, HouseholdModule.Chores, $"não aceitou «{chore.Title}», feita por {doer}");
+        await db.SaveChangesAsync(ct);
+
+        await notifier.ChoreUpserted(householdId, ChoreEndpoints.ToDto(chore), ct);
+        await notifier.PointsChanged(householdId, ct);
+        await notifications.NotifyAsync(
+            householdId,
+            [completion.UserId],
+            userId,
+            NotificationKind.ChoreRejected,
+            $"Faz outra vez: {chore.Title}",
+            completion.Points > 0 ? $"Não foi aceite, os {completion.Points} pontos não contam." : "Não foi aceite.",
+            chore.Id,
+            ct);
+        return Results.Ok(new ChoreHistoryItemDto(
+            completion.Id, chore.Id, chore.Title, completion.UserId, completion.Points, completion.CompletedAt,
+            completion.PhotoId, true));
+    }
+
+    /// <summary>
+    /// Apaga as fotos antigas e as que se enviaram mas nunca serviram para concluir uma tarefa: as de uma casa (ao
+    /// enviar outra) ou, sem <paramref name="householdId"/>, as de todas (o <c>MaintenanceWorker</c>, uma vez por dia,
+    /// para as casas que deixaram de enviar fotos). Não lê os bytes das fotos. Devolve quantas apagou.
+    /// </summary>
+    internal static async Task<int> CleanUpAsync(KubicoDbContext db, Guid? householdId, DateTimeOffset now, CancellationToken ct)
+    {
+        var old = now - ChorePhoto.KeepFor;
+        var unused = now - ChorePhoto.KeepUnusedFor;
+        var expired = await db.ChorePhotos
+            .Where(p => householdId == null || p.HouseholdId == householdId)
+            .Where(p => p.CreatedAt < old || (p.CreatedAt < unused && !db.ChoreCompletions.Any(c => c.PhotoId == p.Id)))
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+        if (expired.Count == 0)
+        {
+            return 0;
+        }
+
+        await db.ChoreCompletions.Where(c => c.PhotoId != null && expired.Contains(c.PhotoId.Value))
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.PhotoId, (Guid?)null), ct);
+        return await db.ChorePhotos.Where(p => expired.Contains(p.Id)).ExecuteDeleteAsync(ct);
+    }
+
+    private static IResult Invalid(string title) => Results.Problem(title: title, statusCode: StatusCodes.Status400BadRequest);
+}

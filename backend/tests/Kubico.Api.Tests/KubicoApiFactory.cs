@@ -10,8 +10,10 @@ using Microsoft.Extensions.Time.Testing;
 namespace Kubico.Api.Tests;
 
 /// <summary>
-/// Arranca a API real em memória com uma base de dados SQLite temporária,
-/// para os testes não dependerem de Docker nem de PostgreSQL.
+/// Arranca a API real em memória com uma base de dados SQLite temporária, para os testes não dependerem de Docker nem
+/// de PostgreSQL. Com a variável KUBICO_TEST_POSTGRES (uma ligação a um PostgreSQL, sem base), cada servidor de testes
+/// usa uma base PostgreSQL própria, criada pelas migrações e apagada no fim: é assim que o CI prova as migrações, a
+/// concorrência e as consultas no motor de produção.
 /// </summary>
 public sealed class KubicoApiFactory : WebApplicationFactory<Program>
 {
@@ -21,27 +23,79 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
     /// </summary>
     public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero));
 
+    public const string SupportEmail = "suporte@kubico.test";
+
     /// <summary>"Hoje" na casa (Europe/Lisbon) segundo o relógio dos testes.</summary>
     public DateOnly Today => DateOnly.FromDateTime(
         TimeZoneInfo.ConvertTime(Clock.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById("Europe/Lisbon")).DateTime);
 
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"kubico-tests-{Guid.NewGuid():N}.db");
 
+    /// <summary>A ligação ao PostgreSQL dos testes (sem base), ou null para usar SQLite.</summary>
+    private static readonly string? Postgres = Environment.GetEnvironmentVariable("KUBICO_TEST_POSTGRES");
+
+    private readonly string _postgresDatabase = $"kubico_test_{Guid.NewGuid():N}";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.UseSetting("ConnectionStrings:Kubico", $"Data Source={_databasePath}");
-        builder.UseSetting("Database:Provider", "Sqlite");
+        if (Postgres is null)
+        {
+            builder.UseSetting("ConnectionStrings:Kubico", $"Data Source={_databasePath}");
+            builder.UseSetting("Database:Provider", "Sqlite");
+        }
+        else
+        {
+            builder.UseSetting("ConnectionStrings:Kubico", $"{Postgres};Database={_postgresDatabase}");
+            builder.UseSetting("Database:Provider", "Postgres");
+        }
+
         builder.UseSetting("Database:MigrateOnStartup", "true");
         builder.UseSetting("Jwt:SigningKey", "test-signing-key-that-is-long-enough-0123456789");
-        builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(Clock));
+
+        // O relógio dos testes está à meia-noite e o JWT é validado com o relógio real: um token de acesso
+        // de 15 minutos já estaria expirado. Os testes dos refresh tokens usam o relógio falso (ver RefreshTokenTests).
+        builder.UseSetting("Jwt:AccessTokenLifetimeMinutes", "1440");
+
+        // O envio dos avisos para os telemóveis corre nos testes à mão (NotificationDispatcher), com o relógio falso.
+        builder.UseSetting("Notifications:DispatchEnabled", "false");
+
+        // A sincronização com calendários externos também (CalendarSyncService, com serviços falsos).
+        builder.UseSetting("CalendarSync:Enabled", "false");
+
+        // E as limpezas diárias (MaintenanceService, chamado à mão nos testes que as verificam).
+        builder.UseSetting("Maintenance:Enabled", "false");
+        builder.UseSetting("Reminders:Enabled", "false");
+        builder.UseSetting("SmartHome:Enabled", "false");
+
+        // O limite de pedidos por IP desliga-se aqui (todos os testes vêm do mesmo "IP"); RateLimitTests liga-o.
+        builder.UseSetting("RateLimiting:Enabled", "false");
+
+        // Quem lê as mensagens enviadas da ajuda (ver FeedbackTests).
+        builder.UseSetting("Support:AdminEmails:0", SupportEmail);
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<TimeProvider>(Clock);
+            services.AddSingleton<Kubico.Api.Shopping.IProductCatalog>(Products);
+            services.AddSingleton<Kubico.Api.Assistant.IAssistant>(Assistant);
+            services.AddSingleton<Kubico.Api.Home.IHomeAssistantClient>(HomeAssistant);
+        });
     }
 
+    /// <summary>A base pública de produtos dos testes (não vai à internet).</summary>
+    public FakeProductCatalog Products { get; } = new();
+
+    /// <summary>O assistente dos testes (não chama o Claude).</summary>
+    public FakeAssistant Assistant { get; } = new();
+
+    /// <summary>O Home Assistant dos testes.</summary>
+    public FakeHomeAssistant HomeAssistant { get; } = new();
+
     /// <summary>Regista um utilizador novo e devolve um cliente já autenticado.</summary>
-    public async Task<(HttpClient Client, AuthResponse Auth)> CreateUserAsync(string? name = null)
+    public async Task<(HttpClient Client, AuthResponse Auth)> CreateUserAsync(string? name = null, string? email = null)
     {
         var client = CreateClient();
-        var email = $"{Guid.NewGuid():N}@kubico.test";
+        email ??= $"{Guid.NewGuid():N}@kubico.test";
         var response = await client.PostAsJsonAsync("/api/auth/register",
             new RegisterRequest(email, "palavra-passe-segura", name ?? "Teste"));
         response.EnsureSuccessStatusCode();
@@ -54,6 +108,17 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
+        if (Postgres is not null)
+        {
+            Npgsql.NpgsqlConnection.ClearAllPools();
+            using var connection = new Npgsql.NpgsqlConnection(Postgres);
+            connection.Open();
+            using var drop = connection.CreateCommand();
+            drop.CommandText = $"DROP DATABASE IF EXISTS \"{_postgresDatabase}\" WITH (FORCE)";
+            drop.ExecuteNonQuery();
+            return;
+        }
+
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         try
         {

@@ -31,6 +31,26 @@ class ShoppingItemDeleted extends HouseholdEvent {
   final String itemId;
 }
 
+/// Vários artigos saíram de uma vez (limpar o carrinho): uma só mensagem, em vez de uma por artigo.
+class ShoppingItemsDeleted extends HouseholdEvent {
+  const ShoppingItemsDeleted(this.listId, this.itemIds);
+  final String listId;
+  final List<String> itemIds;
+}
+
+/// A ordem nova dos artigos de uma lista (alguém arrastou um artigo): os ids, por ordem.
+class ShoppingItemsReordered extends HouseholdEvent {
+  const ShoppingItemsReordered(this.listId, this.itemIds);
+  final String listId;
+  final List<String> itemIds;
+}
+
+/// A ordem nova das listas da casa: os ids, por ordem.
+class ShoppingListsReordered extends HouseholdEvent {
+  const ShoppingListsReordered(this.listIds);
+  final List<String> listIds;
+}
+
 class ChoreUpserted extends HouseholdEvent {
   const ChoreUpserted(this.chore);
   final Chore chore;
@@ -41,18 +61,113 @@ class ChoreDeleted extends HouseholdEvent {
   final String choreId;
 }
 
+class CalendarEventUpserted extends HouseholdEvent {
+  const CalendarEventUpserted(this.event);
+  final CalendarEvent event;
+}
+
+class CalendarEventDeleted extends HouseholdEvent {
+  const CalendarEventDeleted(this.eventId);
+  final String eventId;
+}
+
+/// Vários eventos saíram de uma vez (uma série e as suas exceções).
+class CalendarEventsDeleted extends HouseholdEvent {
+  const CalendarEventsDeleted(this.eventIds);
+  final List<String> eventIds;
+}
+
+/// Mudaram os pontos ganhos (uma tarefa feita, não aceite, desfeita ou apagada): saldos, mesada e estatísticas.
+class PointsChanged extends HouseholdEvent {
+  const PointsChanged(this.householdId);
+  final String householdId;
+}
+
+/// Um aviso pessoal novo (chega pelo canal da pessoa, seja qual for a casa aberta).
+class NotificationReceived extends HouseholdEvent {
+  const NotificationReceived(this.notification);
+  final AppNotification notification;
+}
+
+/// Mudou alguma coisa nas recompensas ou nos pedidos (o ecrã volta a ler tudo, porque os saldos mudam).
+class RewardsChanged extends HouseholdEvent {
+  const RewardsChanged();
+}
+
+/// Mudou alguma coisa na área Casa (F4-07, F4-12, F4-13).
+class HomeChanged extends HouseholdEvent {
+  const HomeChanged();
+}
+
+/// Mudou uma despesa ou um acerto (F4-10): os saldos mudam, o ecrã volta a pedir o resumo.
+class ExpensesChanged extends HouseholdEvent {
+  const ExpensesChanged();
+}
+
+/// Mudou uma receita ou um dia do plano das refeições (F4-09): o ecrã volta a pedir o que mostra.
+class MealsChanged extends HouseholdEvent {
+  const MealsChanged();
+}
+
+/// Mudou a mesada de alguém (valores, ou um período pago).
+class AllowanceChanged extends HouseholdEvent {
+  const AllowanceChanged(this.userId);
+  final String userId;
+}
+
+/// Mudou quem está numa casa: alguém entrou ou mudou de papel ([member]), ou saiu ([removedUserId]). A saída também
+/// chega pelo canal pessoal de quem saiu.
+class MembersChanged extends HouseholdEvent {
+  const MembersChanged(this.householdId, {this.member, this.removedUserId});
+  final String householdId;
+  final Member? member;
+  final String? removedUserId;
+}
+
+/// A casa foi apagada (saiu o último membro com conta). Chega pelo canal pessoal de cada membro.
+class HouseholdDeleted extends HouseholdEvent {
+  const HouseholdDeleted(this.householdId, this.name);
+  final String householdId;
+  final String name;
+}
+
+/// O administrador mudou o que cada papel pode fazer: a app volta a ler o acesso às áreas.
+class PermissionsChanged extends HouseholdEvent {
+  const PermissionsChanged(this.householdId);
+  final String householdId;
+}
+
+/// Alguém marcou ou cancelou uma ausência (o ecrã dos membros volta a ler as ausências).
+class AbsencesChanged extends HouseholdEvent {
+  const AbsencesChanged();
+}
+
+/// Mudou uma ligação deste membro ao Google Calendar ou ao Outlook (ligada, sincronizada, desligada).
+/// Chega pelo canal pessoal; o ecrã das ligações volta a ler tudo.
+class CalendarConnectionsChanged extends HouseholdEvent {
+  const CalendarConnectionsChanged();
+}
+
 /// Ligação SignalR ao agregado aberto. Volta a ligar-se sozinha quando a rede falha
 /// e avisa (via [reconnected]) para os ecrãs recarregarem o que possam ter perdido.
 class HouseholdRealtime {
   HouseholdRealtime({required this.baseUrl, required this.accessToken});
 
   final String baseUrl;
-  final String Function() accessToken;
+
+  /// O token para ligar (o SignalR só o envia ao ligar e ao voltar a ligar); pode renovar a sessão antes.
+  final FutureOr<String> Function() accessToken;
 
   final _events = StreamController<HouseholdEvent>.broadcast();
   final _reconnected = StreamController<void>.broadcast();
   HubConnection? _connection;
   String? _householdId;
+  Timer? _retry;
+  var _attempt = 0;
+
+  /// Esperas entre tentativas de voltar a ligar quando a ligação caiu de vez (sem limite de tentativas).
+  static const _backoff = [Duration(seconds: 2), Duration(seconds: 5), Duration(seconds: 15), Duration(seconds: 30)];
+  static const _maxBackoff = Duration(minutes: 1);
 
   Stream<HouseholdEvent> get events => _events.stream;
   Stream<void> get reconnected => _reconnected.stream;
@@ -65,7 +180,7 @@ class HouseholdRealtime {
     final connection = HubConnectionBuilder()
         .withUrl(
           '$baseUrl/hubs/household',
-          options: HttpConnectionOptions(accessTokenFactory: () async => accessToken()),
+          options: HttpConnectionOptions(accessTokenFactory: () async => await accessToken()),
         )
         .withAutomaticReconnect(retryDelays: [0, 2000, 5000, 10000, 30000])
         .build();
@@ -83,22 +198,128 @@ class HouseholdRealtime {
       'ShoppingItemDeleted',
       (args) => _emit(args, (a) => ShoppingItemDeleted(a[0] as String, a[1] as String)),
     );
+    connection.on(
+      'ShoppingItemsDeleted',
+      (args) => _emit(args, (a) => ShoppingItemsDeleted(a[0] as String, (a[1] as List).cast<String>())),
+    );
+
+    connection.on(
+      'ShoppingItemsReordered',
+      (args) => _emit(args, (a) => ShoppingItemsReordered(a[0] as String, (a[1] as List).cast<String>())),
+    );
+    connection.on(
+      'ShoppingListsReordered',
+      (args) => _emit(args, (a) => ShoppingListsReordered((a[0] as List).cast<String>())),
+    );
 
     connection.on('ChoreUpserted', (args) => _emit(args, (a) => ChoreUpserted(Chore.fromJson(_map(a[0])))));
     connection.on('ChoreDeleted', (args) => _emit(args, (a) => ChoreDeleted(a[0] as String)));
+
+    connection.on(
+      'CalendarEventUpserted',
+      (args) => _emit(args, (a) => CalendarEventUpserted(CalendarEvent.fromJson(_map(a[0])))),
+    );
+    connection.on('CalendarEventDeleted', (args) => _emit(args, (a) => CalendarEventDeleted(a[0] as String)));
+    connection.on(
+      'CalendarEventsDeleted',
+      (args) => _emit(args, (a) => CalendarEventsDeleted((a[0] as List).cast<String>())),
+    );
+    connection.on('PointsChanged', (args) => _emit(args, (a) => PointsChanged(a[0] as String)));
+
+    connection.on(
+      'NotificationCreated',
+      (args) => _emit(args, (a) => NotificationReceived(AppNotification.fromJson(_map(a[0])))),
+    );
+
+    for (final name in ['RewardUpserted', 'RewardDeleted', 'RedemptionUpserted', 'RedemptionDeleted']) {
+      connection.on(name, (args) => _emit(args, (_) => const RewardsChanged()));
+    }
+
+    connection.on('ExpensesChanged', (args) => _emit(args, (_) => const ExpensesChanged()));
+    connection.on('HomeChanged', (args) => _emit(args, (_) => const HomeChanged()));
+
+    for (final name in ['RecipeUpserted', 'RecipeDeleted', 'MealPlanChanged']) {
+      connection.on(name, (args) => _emit(args, (_) => const MealsChanged()));
+    }
+
+    connection.on(
+      'MemberUpserted',
+      (args) => _emit(args, (a) => MembersChanged(a[0] as String, member: Member.fromJson(_map(a[1])))),
+    );
+    connection.on(
+      'MemberDeleted',
+      (args) => _emit(args, (a) => MembersChanged(a[0] as String, removedUserId: a[1] as String)),
+    );
+
+    connection.on('AllowanceChanged', (args) => _emit(args, (a) => AllowanceChanged(a[0] as String)));
+
+    connection.on('PermissionsChanged', (args) => _emit(args, (a) => PermissionsChanged(a[0] as String)));
+    connection.on(
+      'HouseholdDeleted',
+      (args) => _emit(args, (a) => HouseholdDeleted(a[0] as String, a.length > 1 ? a[1] as String? ?? '' : '')),
+    );
+
+    for (final name in ['AbsenceUpserted', 'AbsenceDeleted']) {
+      connection.on(name, (args) => _emit(args, (_) => const AbsencesChanged()));
+    }
+
+    for (final name in ['CalendarConnectionUpserted', 'CalendarConnectionDeleted']) {
+      connection.on(name, (args) => _emit(args, (_) => const CalendarConnectionsChanged()));
+    }
 
     connection.onreconnected(({connectionId}) async {
       await _join(connection, householdId);
       _reconnected.add(null);
     });
 
+    // O reconectar automático do SignalR desiste ao fim de ~47 s (um túnel, o metro, a app em segundo plano). Daí
+    // em diante tenta-se aqui, para sempre, com esperas crescentes até um minuto.
+    connection.onclose(({error}) {
+      if (identical(_connection, connection)) _scheduleRetry(connection, householdId);
+    });
+
     _connection = connection;
     try {
       await connection.start();
       await _join(connection, householdId);
+      _attempt = 0;
     } catch (e) {
-      // A app continua a funcionar sem tempo real; os dados recarregam ao abrir cada ecrã.
+      // A app continua a funcionar sem tempo real e volta a tentar ligar.
       debugPrint('Kubico: tempo real indisponível ($e)');
+      if (identical(_connection, connection)) _scheduleRetry(connection, householdId);
+    }
+  }
+
+  /// Ao voltar à app (o sistema corta a ligação em segundo plano): se a ligação caiu, tenta já.
+  Future<void> resume() async {
+    final connection = _connection;
+    final householdId = _householdId;
+    if (connection == null || householdId == null || connection.state != HubConnectionState.Disconnected) return;
+    _retry?.cancel();
+    _retry = null;
+    await _restart(connection, householdId);
+  }
+
+  void _scheduleRetry(HubConnection connection, String householdId) {
+    if (_retry != null) return;
+    final delay = _attempt < _backoff.length ? _backoff[_attempt] : _maxBackoff;
+    _attempt++;
+    _retry = Timer(delay, () {
+      _retry = null;
+      unawaited(_restart(connection, householdId));
+    });
+  }
+
+  Future<void> _restart(HubConnection connection, String householdId) async {
+    if (!identical(_connection, connection) || connection.state != HubConnectionState.Disconnected) return;
+    try {
+      await connection.start();
+      await _join(connection, householdId);
+      _attempt = 0;
+      // Enquanto esteve desligada podem ter mudado coisas: os ecrãs recarregam.
+      _reconnected.add(null);
+    } catch (e) {
+      if (identical(_connection, connection)) _scheduleRetry(connection, householdId);
     }
   }
 
@@ -106,6 +327,9 @@ class HouseholdRealtime {
     final connection = _connection;
     _connection = null;
     _householdId = null;
+    _retry?.cancel();
+    _retry = null;
+    _attempt = 0;
     if (connection != null) {
       try {
         await connection.stop();
@@ -118,6 +342,10 @@ class HouseholdRealtime {
     await _events.close();
     await _reconnected.close();
   }
+
+  /// Para os testes: injeta um evento como se tivesse chegado do servidor.
+  @visibleForTesting
+  void emitForTest(HouseholdEvent event) => _events.add(event);
 
   Future<void> _join(HubConnection connection, String householdId) =>
       connection.invoke('JoinHousehold', args: [householdId]);

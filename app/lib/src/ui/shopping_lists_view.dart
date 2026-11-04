@@ -1,11 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show CustomSemanticsAction;
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
 import '../realtime/household_realtime.dart';
+import '../shopping/shopping_repository.dart';
+import 'design/components.dart';
 import 'theme.dart';
 
 class ShoppingListsView extends StatefulWidget {
@@ -53,7 +57,7 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
 
   Future<void> _load() async {
     try {
-      final lists = await _api.getLists(widget.household.id);
+      final lists = await context.read<ShoppingRepository>().lists(widget.household.id);
       if (mounted) {
         setState(() {
           _lists = lists;
@@ -71,16 +75,38 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
         setState(() {
           _lists = [..._lists ?? <ShoppingList>[]].where((l) => l.id != list.id).toList()
             ..add(list)
-            ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+            ..sort(ShoppingList.compare);
         });
+      case ShoppingListsReordered(:final listIds):
+        setState(() => _lists = _ordered(_lists, listIds));
       case ShoppingListDeleted(:final listId):
         setState(() => _lists = _lists?.where((l) => l.id != listId).toList());
         widget.onDeleted(listId);
-      case ShoppingItemUpserted() || ShoppingItemDeleted():
-        // As contagens mudaram; recarregar é barato e evita contas erradas.
-        _load();
+      // As contagens chegam no ShoppingListUpserted que o servidor envia a seguir a cada alteração aos artigos: não
+      // é preciso voltar a pedir as listas (antes era um GET /lists por artigo, em cada aparelho).
       default:
         break;
+    }
+  }
+
+  /// As listas com as posições de [ids] (as outras ficam com a sua).
+  static List<ShoppingList>? _ordered(List<ShoppingList>? lists, List<String> ids) => lists == null
+      ? null
+      : ([for (final l in lists) ids.contains(l.id) ? l.withPosition(ids.indexOf(l.id)) : l]
+          ..sort(ShoppingList.compare));
+
+  /// Arrastar uma lista (quem gere as Compras): aparece logo e vai para o servidor; se falhar, volta a ler.
+  Future<void> _reorder(int oldIndex, int newIndex) async {
+    final lists = [...?_lists];
+    final moved = lists.removeAt(oldIndex);
+    lists.insert(newIndex, moved);
+    final ids = [for (final l in lists) l.id];
+    setState(() => _lists = _ordered(lists, ids));
+    try {
+      await _api.reorderLists(widget.household.id, ids);
+    } catch (e) {
+      if (mounted) showError(context, e);
+      await _load();
     }
   }
 
@@ -100,11 +126,11 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Apagar "${list.name}"?'),
-        content: const Text('Os artigos desta lista também são apagados para toda a casa.'),
+        title: Text('Apagar «${list.name}»?'.tr),
+        content: Text('Os artigos desta lista também são apagados para toda a casa.'.tr),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Apagar')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancelar'.tr)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text('Apagar'.tr)),
         ],
       ),
     );
@@ -119,45 +145,63 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
 
   @override
   Widget build(BuildContext context) {
-    final canManage = widget.household.role.canManageContent;
+    final canManage = widget.household.accessTo(HouseholdModule.shopping).canManage;
     final lists = _lists;
 
     Widget body;
     if (lists == null && _error != null) {
-      body = _Message(
-        icon: Icons.cloud_off,
-        text: _error.toString(),
-        action: TextButton(onPressed: _load, child: const Text('Tentar de novo')),
-      );
+      body = StateView.error(message: errorText(_error!), offline: isOffline(_error!), onRetry: _load);
     } else if (lists == null) {
       body = const Center(child: CircularProgressIndicator());
     } else if (lists.isEmpty) {
-      body = _Message(
-        icon: Icons.checklist_rtl,
-        text: canManage ? 'Ainda não há listas. Cria a primeira!' : 'Ainda não há listas nesta casa.',
+      body = StateView(
+        icon: Icons.checklist_rtl_rounded,
+        illustration: KubicoIllustration.basket,
+        color: context.kubico.area(KubicoArea.shopping).color,
+        title: 'Ainda não há listas'.tr,
+        message: canManage
+            ? 'Cria a primeira lista de compras: o que lá puseres aparece logo a toda a casa.'.tr
+            : 'Quando alguém criar uma lista, aparece aqui.'.tr,
       );
     } else {
       body = RefreshIndicator(
         onRefresh: _load,
-        child: ListView.builder(
+        // Quem gere as Compras arrasta as listas (carregar sem largar); o leitor de ecrã tem "mover para cima/baixo".
+        child: ReorderableListView.builder(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
           itemCount: lists.length,
+          buildDefaultDragHandles: false,
+          onReorderItem: _reorder,
           itemBuilder: (context, index) {
             final list = lists[index];
-            return Card(
+            final card = Card(
+              key: ValueKey(list.id),
               child: ListTile(
                 selected: list.id == widget.selectedListId,
-                leading: const Icon(Icons.shopping_cart_outlined),
+                leading: const Icon(Icons.shopping_cart_rounded),
                 title: Text(list.name),
-                subtitle: Text(list.pendingCount == 0 ? 'Tudo comprado' : '${list.pendingCount} por comprar'),
+                subtitle: Text(list.pendingCount == 0 ? 'Tudo comprado'.tr : '${list.pendingCount} por comprar'.tr),
                 trailing: canManage
                     ? IconButton(
-                        tooltip: 'Apagar lista',
-                        icon: const Icon(Icons.delete_outline),
+                        tooltip: 'Apagar lista'.tr,
+                        icon: const Icon(Icons.delete_outline_rounded),
                         onPressed: () => _deleteList(list),
                       )
                     : null,
                 onTap: () => widget.onOpen(list),
+              ),
+            );
+            if (!canManage) return card;
+            return ReorderableDelayedDragStartListener(
+              key: ValueKey(list.id),
+              index: index,
+              child: Semantics(
+                customSemanticsActions: {
+                  if (index > 0) CustomSemanticsAction(label: 'Mover para cima'.tr): () => _reorder(index, index - 1),
+                  if (index < lists.length - 1)
+                    CustomSemanticsAction(label: 'Mover para baixo'.tr): () => _reorder(index, index + 1),
+                },
+                child: card,
               ),
             );
           },
@@ -170,8 +214,8 @@ class _ShoppingListsViewState extends State<ShoppingListsView> {
       floatingActionButton: canManage
           ? FloatingActionButton.extended(
               onPressed: _createList,
-              icon: const Icon(Icons.add),
-              label: const Text('Nova lista'),
+              icon: const Icon(Icons.add_rounded),
+              label: Text('Nova lista'.tr),
             )
           : null,
     );
@@ -183,45 +227,18 @@ Future<String?> _askName(BuildContext context) {
   return showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Nova lista'),
+      title: Text('Nova lista'.tr),
       content: TextField(
         controller: controller,
         autofocus: true,
-        decoration: const InputDecoration(hintText: 'Ex.: Supermercado'),
+        decoration: InputDecoration(hintText: 'Ex.: Supermercado'.tr),
         textCapitalization: TextCapitalization.sentences,
         onSubmitted: (value) => Navigator.pop(context, value.trim()),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Criar')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar'.tr)),
+        FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: Text('Criar'.tr)),
       ],
     ),
   ).whenComplete(controller.dispose);
-}
-
-class _Message extends StatelessWidget {
-  const _Message({required this.icon, required this.text, this.action});
-
-  final IconData icon;
-  final String text;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: theme.colorScheme.outline),
-            const SizedBox(height: 12),
-            Text(text, textAlign: TextAlign.center),
-            if (action != null) ...[const SizedBox(height: 8), action!],
-          ],
-        ),
-      ),
-    );
-  }
 }

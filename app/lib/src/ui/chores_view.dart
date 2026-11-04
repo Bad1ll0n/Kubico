@@ -1,13 +1,21 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../l10n/strings.dart';
+import '../realtime/coalesced_reload.dart';
+import '../offline/chore_queue.dart';
 import '../realtime/household_realtime.dart';
 import '../session/session_controller.dart';
 import 'chore_editor.dart';
+import 'chore_history_screen.dart';
+import 'dates_pt.dart';
+import 'design/components.dart';
+import 'first_steps.dart';
 import 'theme.dart';
 
 enum ChoreGroup {
@@ -17,8 +25,10 @@ enum ChoreGroup {
   later('Mais tarde'),
   noDate('Sem prazo');
 
-  const ChoreGroup(this.label);
-  final String label;
+  const ChoreGroup(this._label);
+  final String _label;
+
+  String get label => _label.tr;
 }
 
 /// Em que secção da lista aparece uma tarefa, relativamente a [today].
@@ -36,9 +46,12 @@ ChoreGroup choreGroupFor(Chore chore, DateTime today) {
 
 /// Tarefas da casa, sincronizadas em tempo real, com o resumo de pontos do mês.
 class ChoresView extends StatefulWidget {
-  const ChoresView({super.key, required this.household});
+  const ChoresView({super.key, required this.household, this.pickPhoto = pickChorePhoto});
 
   final HouseholdSummary household;
+
+  /// Pede a foto de prova (por omissão, com a câmara ou da galeria).
+  final Future<PickedPhoto?> Function(BuildContext context) pickPhoto;
 
   @override
   State<ChoresView> createState() => _ChoresViewState();
@@ -62,6 +75,19 @@ class _ChoresViewState extends State<ChoresView> {
     _subscriptions
       ..add(realtime.events.listen(_onEvent))
       ..add(realtime.reconnected.listen((_) => _load()));
+    // O que ficou feito sem rede: ao chegar ao servidor, recarrega (pontos, próxima vez); se for recusado, avisa.
+    final queue = maybeChoreQueue(context, listen: false);
+    if (queue != null) {
+      _subscriptions
+        ..add(queue.sent.listen((_) => _load()))
+        ..add(
+          queue.rejections.listen((r) {
+            if (!mounted) return;
+            showError(context, '«${r.completion.title}» não ficou feita: ${r.message}'.tr);
+            _load();
+          }),
+        );
+    }
     _load();
   }
 
@@ -70,8 +96,12 @@ class _ChoresViewState extends State<ChoresView> {
     for (final s in _subscriptions) {
       s.cancel();
     }
+    _reloadStats.dispose();
     super.dispose();
   }
+
+  /// As estatísticas só mudam com as tarefas feitas (PointsChanged), e várias seguidas dão uma só recarga.
+  late final _reloadStats = CoalescedReload(_loadStats);
 
   Future<void> _load() async {
     try {
@@ -105,17 +135,18 @@ class _ChoresViewState extends State<ChoresView> {
     switch (event) {
       case ChoreUpserted(:final chore) when chore.householdId == _householdId:
         _upsert(chore);
-        _loadStats();
       case ChoreDeleted(:final choreId):
         setState(() => _chores?.remove(choreId));
+      case PointsChanged(:final householdId) when householdId == _householdId:
+        _reloadStats.request();
       default:
         break;
     }
   }
 
-  void _upsert(Chore chore) {
+  void _upsert(Chore chore, {bool force = false}) {
     final current = _chores?[chore.id];
-    if (current != null && current.updatedAt.isAfter(chore.updatedAt)) return;
+    if (!force && current != null && current.updatedAt.isAfter(chore.updatedAt)) return;
     setState(() {
       if (chore.isDone) {
         _chores?.remove(chore.id);
@@ -125,29 +156,152 @@ class _ChoresViewState extends State<ChoresView> {
     });
   }
 
+  ModuleAccess get _access => widget.household.accessTo(HouseholdModule.chores);
+
+  /// Que dia é na casa (não no telemóvel, que pode estar noutro fuso): o mesmo "hoje" que o servidor usa.
+  DateTime get _today => _details?.todayAt(clock.now()) ?? DateUtils.dateOnly(clock.now());
+
+  /// Quem gere conclui qualquer tarefa; quem usa, as suas e as de ninguém; quem só vê, nenhuma. Uma tarefa que se
+  /// repete só se faz uma vez em cada ocorrência: a seguinte fica à espera do seu dia.
   bool _canComplete(Chore chore) =>
-      widget.household.role.canManageContent || chore.assigneeUserId == null || chore.assigneeUserId == _myUserId;
+      chore.isAvailableOn(_today) &&
+      (_access.canManage ||
+          (_access.canParticipate && (chore.assigneeUserId == null || chore.assigneeUserId == _myUserId)));
+
+  /// Quem gere marca como feita a tarefa de outra pessoa (a criança sem telemóvel): pergunta quem a fez, com o
+  /// responsável escolhido. Os pontos vão para quem a fez.
+  Future<String?> _whoDidIt(Chore chore) async {
+    final assignee = chore.assigneeUserId;
+    final details = _details;
+    if (!_access.canManage || assignee == null || assignee == _myUserId || details == null) return _myUserId;
+    return showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text('Quem fez «${chore.title}»?'.tr),
+        children: [
+          for (final member in details.members)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, member.userId),
+              child: Row(
+                children: [
+                  MemberAvatar(
+                    name: member.displayName,
+                    color: member.color,
+                    emoji: member.avatar,
+                    photo: member.photo,
+                    size: 32,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(member.displayName)),
+                  if (member.userId == assignee) const Icon(Icons.check_rounded, size: 18),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _complete(Chore chore) async {
+    final queue = maybeChoreQueue(context, listen: false);
     try {
-      final (updated, points) = await _api.completeChore(_householdId, chore.id);
+      final doneBy = await _whoDidIt(chore);
+      if (doneBy == null || !mounted) return;
+      String? photoId;
+      if (chore.requiresPhoto) {
+        final photo = await widget.pickPhoto(context);
+        if (photo == null || !mounted) return;
+        photoId = await _api.uploadChorePhoto(_householdId, photo.bytes, photo.name);
+      }
+      final (Chore, int) result;
+      try {
+        result = await _api.completeChore(
+          _householdId,
+          chore.id,
+          photoId: photoId,
+          doneByUserId: doneBy == _myUserId ? null : doneBy,
+        );
+      } on ApiException catch (e) {
+        // Sem rede: fica na fila e envia-se quando a rede voltar (F4-14). Com foto não (a foto tem de ir antes).
+        if (e.statusCode != 0 || queue == null || photoId != null) rethrow;
+        await queue.enqueue(
+          householdId: _householdId,
+          choreId: chore.id,
+          title: chore.title,
+          doneByUserId: doneBy == _myUserId ? null : doneBy,
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text('Sem ligação: fica feita aqui e envia-se quando houver rede.'.tr)));
+        return;
+      }
+      final (updated, points) = result;
       _upsert(updated);
       _loadStats();
       if (!mounted) return;
+      celebratePoints(context, points);
       final next = updated.isDone ? null : _details?.member(updated.assigneeUserId)?.displayName;
+      final doer = doneBy == _myUserId ? null : _details?.member(doneBy)?.displayName;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
             content: Text(
               [
-                if (points > 0) '+$points pontos!' else 'Feito!',
-                if (next != null && updated.rotates) 'Agora é a vez de $next.',
+                if (doer != null && points > 0)
+                  (points == 1 ? '+1 ponto para $doer!'.tr : '+$points pontos para $doer!'.tr)
+                else if (points > 0)
+                  (points == 1 ? '+1 ponto!'.tr : '+$points pontos!'.tr)
+                else
+                  'Feito!'.tr,
+                if (next != null && updated.rotates) 'Agora é a vez de $next.'.tr,
               ].join(' '),
             ),
           ),
         );
     } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  /// Marca um passo da rotina; o último conclui-a.
+  Future<void> _step(Chore chore, int index, bool done) async {
+    // Aparece logo marcado; se o servidor recusar, volta atrás.
+    setState(() {
+      _chores?[chore.id] = chore.copyWith(
+        doneSteps: done
+            ? ({...chore.doneSteps, index}.toList()..sort())
+            : [...chore.doneSteps.where((i) => i != index)],
+      );
+    });
+    try {
+      final result = await _api.setChoreStep(_householdId, chore.id, index, done: done);
+      _upsert(result.chore, force: true);
+      // Todos os passos feitos, mas a tarefa pede foto: falta a foto para a dar como feita.
+      if (!result.completed &&
+          result.chore.requiresPhoto &&
+          result.chore.doneSteps.length == result.chore.steps.length) {
+        await _complete(result.chore);
+        return;
+      }
+      if (!result.completed) return;
+      _loadStats();
+      if (!mounted) return;
+      celebratePoints(context, result.points);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(switch (result.points) {
+              0 => '${chore.title}: feito!'.tr,
+              1 => '${chore.title}: +1 ponto!'.tr,
+              final points => '${chore.title}: +$points pontos!'.tr,
+            }),
+          ),
+        );
+    } catch (e) {
+      setState(() => _chores?[chore.id] = chore);
       if (mounted) showError(context, e);
     }
   }
@@ -175,28 +329,24 @@ class _ChoresViewState extends State<ChoresView> {
   @override
   Widget build(BuildContext context) {
     final chores = _chores;
-    final canManage = widget.household.role.canManageContent;
+    final canManage = _access.canManage;
+    final queued = maybeChoreQueue(context)?.pendingIn(_householdId) ?? const <String>{};
 
     if (chores == null) {
-      return Center(
-        child: _error == null
-            ? const CircularProgressIndicator()
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(_error.toString()),
-                  TextButton(onPressed: _load, child: const Text('Tentar de novo')),
-                ],
-              ),
-      );
+      return _error == null
+          ? const Center(child: CircularProgressIndicator())
+          : StateView.error(message: errorText(_error!), offline: isOffline(_error!), onRetry: _load);
     }
 
-    final today = DateTime.now();
+    final today = _today;
     final grouped = <ChoreGroup, List<Chore>>{};
     final sorted = chores.values.toList()
       ..sort((a, b) {
         final byDate = (a.dueDate ?? DateTime(9999)).compareTo(b.dueDate ?? DateTime(9999));
-        return byDate != 0 ? byDate : a.title.toLowerCase().compareTo(b.title.toLowerCase());
+        if (byDate != 0) return byDate;
+        // No mesmo dia: primeiro a manhã, depois o resto, por fim a noite.
+        final byTime = a.timeOfDay.index.compareTo(b.timeOfDay.index);
+        return byTime != 0 ? byTime : a.title.toLowerCase().compareTo(b.title.toLowerCase());
       });
     for (final chore in sorted) {
       grouped.putIfAbsent(choreGroupFor(chore, today), () => []).add(chore);
@@ -206,40 +356,60 @@ class _ChoresViewState extends State<ChoresView> {
       floatingActionButton: canManage
           ? FloatingActionButton.extended(
               onPressed: _edit,
-              icon: const Icon(Icons.add),
-              label: const Text('Nova tarefa'),
+              icon: const Icon(Icons.add_rounded),
+              label: Text('Nova tarefa'.tr),
             )
           : null,
       body: RefreshIndicator(
         onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-          children: [
-            if (_stats.any((s) => s.points > 0 || s.completed > 0)) _StatsCard(stats: _stats),
+        // As linhas só se constroem quando aparecem no ecrã (P10): numa casa com 300 tarefas, cada alteração já não
+        // reconstrói as 300.
+        child: _LazyList(
+          padding: readablePadding(context),
+          rows: [
+            (_) => FirstTimeTip(
+              id: 'chores',
+              text: 'Desliza uma tarefa para a direita para a dar como feita: os pontos vão para quem a fez.'.tr,
+            ),
+            if (_stats.any((s) => s.points > 0 || s.completed > 0))
+              (context) => _StatsCard(
+                stats: _stats,
+                onHistory: () =>
+                    Navigator.of(context)
+                        .push(MaterialPageRoute<void>(builder: (_) => ChoreHistoryScreen(household: widget.household))),
+              ),
             if (chores.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(
-                  canManage ? 'Sem tarefas por fazer. Cria a primeira!' : 'Sem tarefas por fazer.',
-                  textAlign: TextAlign.center,
-                ),
+              (context) => StateView(
+                inList: true,
+                icon: Icons.task_alt_rounded,
+                illustration: KubicoIllustration.chores,
+                color: context.kubico.area(KubicoArea.chores).color,
+                title: 'Sem tarefas por fazer'.tr,
+                message: canManage ? 'Cria a primeira e escolhe quem a faz e quando se repete.'.tr : null,
               ),
             for (final group in ChoreGroup.values)
               if (grouped[group] case final items?) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
-                  child: Text(
-                    '${group.label} (${items.length})',
-                    style: Theme.of(context).textTheme.titleSmall
-                        ?.copyWith(color: group == ChoreGroup.overdue ? Theme.of(context).colorScheme.error : null),
+                (context) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  // Em atraso vai em cor de aviso (não de erro), com um ícone: a cor nunca vai sozinha.
+                  child: SectionHeader(
+                    group.label,
+                    count: items.length,
+                    icon: group == ChoreGroup.overdue ? Icons.schedule_rounded : null,
+                    color: group == ChoreGroup.overdue ? context.kubico.warning : null,
                   ),
                 ),
                 for (final chore in items)
-                  _ChoreTile(
+                  (context) => _ChoreTile(
+                    key: ValueKey(chore.id),
                     chore: chore,
                     assignee: _details?.member(chore.assigneeUserId),
-                    canComplete: _canComplete(chore),
+                    queued: queued.contains(chore.id),
+                    canComplete: _canComplete(chore) && !queued.contains(chore.id),
+                    waitsUntil: chore.isAvailableOn(today) ? null : chore.availableFrom,
+                    viewOnly: !_access.canParticipate,
                     onComplete: () => _complete(chore),
+                    onStep: (index, done) => _step(chore, index, done),
                     onTap: canManage ? () => _edit(chore) : null,
                   ),
               ],
@@ -250,80 +420,155 @@ class _ChoresViewState extends State<ChoresView> {
   }
 }
 
+/// Uma lista que só constrói as linhas que aparecem no ecrã (P10). Cada linha é uma função que a constrói.
+class _LazyList extends StatelessWidget {
+  const _LazyList({required this.rows, this.padding});
+
+  final List<WidgetBuilder> rows;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) =>
+      ListView.builder(padding: padding, itemCount: rows.length, itemBuilder: (context, index) => rows[index](context));
+}
+
 class _ChoreTile extends StatelessWidget {
   const _ChoreTile({
+    super.key,
     required this.chore,
     required this.assignee,
     required this.canComplete,
+    this.queued = false,
     required this.onComplete,
+    required this.onStep,
     this.onTap,
+    this.viewOnly = false,
+    this.waitsUntil,
   });
 
   final Chore chore;
   final Member? assignee;
   final bool canComplete;
+
+  /// Feita aqui sem rede, à espera de ir para o servidor.
+  final bool queued;
+
+  /// Já está feita por agora: só se volta a poder fazer neste dia.
+  final DateTime? waitsUntil;
   final VoidCallback onComplete;
+  final void Function(int index, bool done) onStep;
   final VoidCallback? onTap;
+
+  /// Quem só vê as tarefas não as conclui.
+  final bool viewOnly;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final localizations = MaterialLocalizations.of(context);
     final details = [
+      if (chore.timeOfDay != ChoreTimeOfDay.any) chore.timeOfDay.label,
       if (chore.dueDate != null) localizations.formatShortMonthDay(chore.dueDate!),
       if (chore.recurrence != ChoreRecurrence.none) chore.recurrence.label.toLowerCase(),
-      if (chore.rotates) 'em rotação',
+      if (chore.rotates) 'em rotação'.tr,
+      if (chore.isRoutine) '${chore.doneSteps.length}/${chore.steps.length} passos'.tr,
+      if (chore.requiresPhoto) 'com foto'.tr,
+      if (waitsUntil != null) 'disponível a ${formatDayMonthShort(waitsUntil!)}'.tr,
+      if (queued) 'feita, por enviar'.tr,
     ].join(' · ');
 
-    return Card(
-      child: ListTile(
-        onTap: onTap,
-        leading: IconButton(
-          tooltip: canComplete ? 'Marcar como feita' : 'Atribuída a outra pessoa',
-          onPressed: canComplete ? onComplete : null,
-          icon: const Icon(Icons.radio_button_unchecked),
-          selectedIcon: const Icon(Icons.check_circle),
-        ),
-        title: Text(chore.title),
-        subtitle: details.isEmpty ? null : Text(details),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (chore.points > 0)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Text(
-                  '${chore.points} pts',
-                  style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.primary),
-                ),
+    final tile = ListTile(
+      onTap: onTap,
+      leading: IconButton(
+        tooltip: queued
+            ? 'Feita aqui; envia-se quando houver rede'.tr
+            : canComplete
+            ? 'Marcar como feita'.tr
+            : waitsUntil != null
+            ? 'Já está feita. Volta a estar disponível a ${formatDayMonthShort(waitsUntil!)}.'.tr
+            : viewOnly
+            ? 'Só podes ver as tarefas'.tr
+            : 'Atribuída a outra pessoa'.tr,
+        onPressed: canComplete ? onComplete : null,
+        icon: Icon(switch (chore.timeOfDay) {
+          _ when queued => Icons.cloud_upload_rounded,
+          _ when waitsUntil != null => Icons.check_circle_outline_rounded,
+          ChoreTimeOfDay.morning when chore.isRoutine => Icons.wb_sunny_rounded,
+          ChoreTimeOfDay.evening when chore.isRoutine => Icons.bedtime_rounded,
+          _ => Icons.radio_button_unchecked_rounded,
+        }),
+        selectedIcon: const Icon(Icons.check_circle_rounded),
+      ),
+      title: Text(chore.title),
+      subtitle: details.isEmpty ? null : Text(details),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (chore.points > 0) Padding(padding: const EdgeInsets.only(right: 8), child: PointsBadge(chore.points)),
+          Tooltip(
+            message: assignee?.displayName ?? 'Qualquer pessoa'.tr,
+            child: assignee == null
+                ? CircleAvatar(
+                    radius: 14,
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                    child: Icon(Icons.groups_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                  )
+                : MemberAvatar(name: assignee!.displayName, color: assignee!.color, size: 28),
+          ),
+        ],
+      ),
+    );
+
+    // Gesto (F4-04): deslizar para a direita conclui (a tarefa fica no sítio até o servidor responder).
+    if (!chore.isRoutine) {
+      return canComplete
+          ? Dismissible(
+              key: ValueKey('swipe-${chore.id}'),
+              direction: DismissDirection.startToEnd,
+              background: Container(
+                color: context.kubico.successContainer,
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Icon(Icons.check_rounded, color: context.kubico.onSuccessContainer),
               ),
-            Tooltip(
-              message: assignee?.displayName ?? 'Qualquer pessoa',
-              child: CircleAvatar(
-                radius: 14,
-                backgroundColor: assignee == null
-                    ? theme.colorScheme.surfaceContainerHighest
-                    : colorFromHex(assignee!.color),
-                foregroundColor: Colors.white,
-                child: assignee == null
-                    ? Icon(Icons.groups_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant)
-                    : Text(
-                        assignee!.displayName.isEmpty ? '?' : assignee!.displayName[0].toUpperCase(),
-                        style: const TextStyle(fontSize: 12),
-                      ),
+              confirmDismiss: (_) async {
+                onComplete();
+                return false;
+              },
+              child: Card(child: tile),
+            )
+          : Card(child: tile);
+    }
+    return Card(
+      child: Column(
+        children: [
+          tile,
+          for (final (i, step) in chore.steps.indexed)
+            CheckboxListTile(
+              dense: true,
+              contentPadding: const EdgeInsets.only(left: 72, right: 16),
+              controlAffinity: ListTileControlAffinity.leading,
+              value: chore.doneSteps.contains(i),
+              onChanged: canComplete ? (done) => onStep(i, done ?? false) : null,
+              title: Text(
+                step,
+                style: chore.doneSteps.contains(i)
+                    ? TextStyle(decoration: TextDecoration.lineThrough, color: theme.colorScheme.onSurfaceVariant)
+                    : null,
               ),
             ),
-          ],
-        ),
+          const SizedBox(height: 4),
+        ],
       ),
     );
   }
 }
 
 class _StatsCard extends StatelessWidget {
-  const _StatsCard({required this.stats});
+  const _StatsCard({required this.stats, required this.onHistory});
 
   final List<MemberChoreStats> stats;
+  final VoidCallback onHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -335,32 +580,44 @@ class _StatsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Últimos 30 dias', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: Text('Últimos 30 dias'.tr, style: theme.textTheme.titleSmall)),
+                TextButton.icon(
+                  onPressed: onHistory,
+                  icon: const Icon(Icons.history_rounded, size: 18),
+                  label: Text('Quem fez o quê'.tr),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
             for (final s in stats)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
+                // O nome e os números numa linha que parte se não couber (letra grande), a barra por baixo.
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(width: 96, child: Text(s.displayName, overflow: TextOverflow.ellipsis)),
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: maxPoints == 0 ? 0 : s.points / maxPoints,
-                          minHeight: 8,
-                          color: colorFromHex(s.color),
-                          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      spacing: 8,
+                      children: [
+                        Text(s.displayName, style: theme.textTheme.titleSmall),
+                        Text(
+                          '${s.points} pts · ${s.completed} ${s.completed == 1 ? 'tarefa'.tr : 'tarefas'.tr}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontFeatures: tabularFigures,
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                    SizedBox(
-                      width: 120,
-                      child: Text(
-                        '${s.points} pts · ${s.completed} ${s.completed == 1 ? 'tarefa' : 'tarefas'}',
-                        textAlign: TextAlign.end,
-                        style: theme.textTheme.bodySmall,
-                      ),
+                    const SizedBox(height: 4),
+                    LinearProgressIndicator(
+                      value: maxPoints == 0 ? 0 : s.points / maxPoints,
+                      minHeight: 8,
+                      borderRadius: BorderRadius.circular(4),
+                      color: memberColor(context, s.color),
                     ),
                   ],
                 ),

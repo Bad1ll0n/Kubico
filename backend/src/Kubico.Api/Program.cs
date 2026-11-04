@@ -1,15 +1,27 @@
 using System.Text;
-using System.Text.Json.Serialization;
+
+using Kubico.Api.Activity;
+using Kubico.Api.Assistant;
 using Kubico.Api.Auth;
+using Kubico.Api.Calendar;
+using Kubico.Api.Calendar.Sync;
 using Kubico.Api.Chores;
 using Kubico.Api.Common;
+using Kubico.Api.Expenses;
+using Kubico.Api.Home;
 using Kubico.Api.Households;
+using Kubico.Api.Meals;
+using Kubico.Api.Notifications;
 using Kubico.Api.Realtime;
+using Kubico.Api.Rewards;
 using Kubico.Api.Shopping;
+using Kubico.Api.Support;
 using Kubico.Domain.Users;
 using Kubico.Infrastructure;
 using Kubico.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -17,14 +29,111 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Fora de Development não se arranca com a configuração de desenvolvimento (chave do JWT do repositório, CORS
+// aberto) nem sem as definições obrigatórias de produção.
+ProductionChecks.Validate(builder.Configuration, builder.Environment);
+
 // --- Serviços -------------------------------------------------------------
 
 builder.Services.AddKubicoPersistence(builder.Configuration);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<HouseholdAccess>();
 builder.Services.AddScoped<HouseholdNotifier>();
+builder.Services.AddSingleton<HubConnections>();
+builder.Services.AddScoped<HouseholdGroups>();
+builder.Services.AddScoped<MembershipService>();
+builder.Services.AddScoped<ActivityLog>();
+builder.Services.AddOptions<SupportOptions>().Bind(builder.Configuration.GetSection(SupportOptions.SectionName));
 builder.Services.AddSingleton<TokenService>();
+builder.Services.AddScoped<SessionService>();
+builder.Services.AddSingleton<LoginThrottle>();
+builder.Services.AddKubicoRateLimits(builder.Configuration);
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<NotificationDispatcher>();
+builder.Services.AddScoped<MaintenanceService>();
+builder.Services.AddScoped<ReminderService>();
+builder.Services.AddScoped<RecurringItemsService>();
+if (builder.Configuration.GetValue("Reminders:Enabled", true))
+{
+    // Lembretes, resumos e mesada por pagar, de minuto a minuto: ver ReminderService.
+    builder.Services.AddHostedService<ReminderWorker>();
+}
+
+if (builder.Configuration.GetValue("Maintenance:Enabled", true))
+{
+    // Limpezas diárias (histórico, avisos, sessões expiradas, fotos): ver MaintenanceService.
+    builder.Services.AddHostedService<MaintenanceWorker>();
+}
+
+// Avisos no telemóvel: Firebase Cloud Messaging quando há conta de serviço (Push:Fcm:ServiceAccountJson);
+// sem ela, os avisos ficam só na app.
+builder.Services.AddOptions<FcmOptions>().Bind(builder.Configuration.GetSection(FcmOptions.SectionName));
+builder.Services.AddHttpClient(nameof(FcmPushSender));
+builder.Services.AddSingleton<IPushSender>(sp =>
+{
+    var fcm = sp.GetRequiredService<IOptions<FcmOptions>>();
+    return fcm.Value.IsConfigured
+        ? ActivatorUtilities.CreateInstance<FcmPushSender>(
+            sp, sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(FcmPushSender)))
+        : ActivatorUtilities.CreateInstance<LogPushSender>(sp);
+});
+if (builder.Configuration.GetValue("Notifications:DispatchEnabled", true))
+{
+    builder.Services.AddHostedService<NotificationWorker>();
+}
+
+// Sincronização com o Google Calendar e o Outlook: as credenciais OAuth vêm de CalendarSync:Google e
+// CalendarSync:Microsoft; sem elas, o serviço aparece como indisponível. Os tokens guardados são cifrados com
+// chaves que ficam na base de dados (têm de sobreviver a reinícios), elas próprias cifradas com a chave-mestra
+// DataProtection:MasterKey, que fica fora da base de dados.
+builder.Services.AddKubicoDataProtection(builder.Configuration, builder.Environment);
+builder.Services.AddOptions<CalendarSyncOptions>().Bind(builder.Configuration.GetSection(CalendarSyncOptions.SectionName));
+builder.Services.AddHttpClient<IProductCatalog, OpenFoodFactsCatalog>(http =>
+{
+    http.DefaultRequestHeaders.UserAgent.ParseAdd(OpenFoodFactsCatalog.UserAgent);
+    http.Timeout = TimeSpan.FromSeconds(8);
+});
+builder.Services.AddHttpClient<GoogleCalendarProvider>();
+builder.Services.AddHttpClient<MicrosoftCalendarProvider>();
+builder.Services.AddTransient<ICalendarProvider>(sp => sp.GetRequiredService<GoogleCalendarProvider>());
+builder.Services.AddTransient<ICalendarProvider>(sp => sp.GetRequiredService<MicrosoftCalendarProvider>());
+builder.Services.AddHttpClient<AppleCalendarProvider>(http =>
+{
+    http.DefaultRequestHeaders.UserAgent.ParseAdd("Kubico/1.0");
+    http.Timeout = TimeSpan.FromSeconds(30);
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddTransient<ICalendarProvider>(sp => sp.GetRequiredService<AppleCalendarProvider>());
+builder.Services.AddSingleton<CalendarSecrets>();
+builder.Services.AddSingleton<TwoFactorService>();
+builder.Services.AddSingleton<CalendarSyncLocks>();
+builder.Services.AddSingleton<CalendarAccessTokens>();
+builder.Services.AddSingleton<CalendarSyncTrigger>();
+builder.Services.AddScoped<CalendarSyncService>();
+if (builder.Configuration.GetValue("CalendarSync:Enabled", true))
+{
+    builder.Services.AddHostedService<CalendarSyncWorker>();
+}
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+
+// A casa inteligente (F4-16c): o Home Assistant de cada casa, a cada minuto (SmartHomeService).
+builder.Services.AddHttpClient<IHomeAssistantClient, HomeAssistantClient>(http => http.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddScoped<SmartHomeService>();
+if (builder.Configuration.GetValue("SmartHome:Enabled", true))
+{
+    builder.Services.AddHostedService<SmartHomeWorker>();
+}
+
+// O assistente (F4-24) com o Claude: sem Assistant:ApiKey (ou ANTHROPIC_API_KEY), fica desligado.
+builder.Services.AddOptions<AssistantOptions>().Bind(builder.Configuration.GetSection(AssistantOptions.SectionName))
+    .PostConfigure(o => o.ApiKey ??= Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") is { Length: > 0 } key ? key : null);
+builder.Services.AddSingleton<IAssistant>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<AssistantOptions>>();
+    return string.IsNullOrWhiteSpace(options.Value.ApiKey)
+        ? new DisabledAssistant()
+        : new ClaudeAssistant(options);
+});
 
 builder.Services.AddOptions<JwtOptions>()
     .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
@@ -42,6 +151,9 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
             ValidAudience = jwt.Value.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Value.SigningKey)),
             NameClaimType = "name",
+
+            // A tolerância por omissão (5 minutos) deixava um token servir 20 minutos depois de terminar a sessão.
+            ClockSkew = TimeSpan.FromSeconds(30),
         };
 
         // O SignalR em WebSocket não envia cabeçalhos: o token chega na query string.
@@ -61,30 +173,61 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
     });
 builder.Services.AddAuthorization();
 
+// Os enums viajam como texto e só se aceitam valores que existem: um número ou nome fora do enum (9, "Hourly") é um
+// pedido inválido (400), não um valor estranho gravado.
 builder.Services.AddSignalR()
-    .AddJsonProtocol(o => o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+    .AddJsonProtocol(o => o.PayloadSerializerOptions.Converters.Add(new DefinedEnumConverter()));
 
-builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new DefinedEnumConverter()));
 builder.Services.AddValidation();
-builder.Services.AddProblemDetails();
-builder.Services.AddOpenApi();
-builder.Services.AddHealthChecks().AddDbContextCheck<KubicoDbContext>();
 
+// Pedidos mal formados (sem corpo, JSON inválido, data impossível) e conflitos de concorrência: ProblemDetails com
+// título traduzido, em todos os ambientes (sem isto, em Development davam 500).
+builder.Services.Configure<RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+// Os erros vão na língua da app (cabeçalho Accept-Language): o título e as mensagens de validação.
+builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = context =>
+    Texts.Localize(context.ProblemDetails, Texts.LanguageOf(context.HttpContext)));
+builder.Services.AddOpenApi();
+builder.Services.AddHealthChecks().AddDbContextCheck<KubicoDbContext>(tags: ["ready"]);
+
+// Origens da app web. "http://localhost:*" aceita qualquer porta desse endereço (desenvolvimento: o Flutter web corre
+// numa porta aleatória); "*" só é aceite em Development (ver ProductionChecks).
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
 {
-    if (allowedOrigins.Contains("*"))
+    policy.SetIsOriginAllowed(origin => CorsOrigins.IsAllowed(origin, allowedOrigins));
+    policy.AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+
+    // O browser guarda a resposta ao "preflight" (OPTIONS) durante 2 horas (o máximo do Chrome), em vez de 5 s:
+    // menos uma ida e volta na primeira ação depois de cada pausa.
+    policy.SetPreflightMaxAge(TimeSpan.FromHours(2));
+}));
+
+// Respostas comprimidas (Brotli ou gzip, conforme o Accept-Encoding): o JSON e o calendário subscrito ficam 8 a 15
+// vezes mais pequenos. Ver ResponseCompressionSetup.
+builder.Services.AddKubicoResponseCompression();
+
+// Atrás de um proxy (TLS no proxy): o IP e o esquema verdadeiros vêm dos cabeçalhos X-Forwarded-*, mas só dos
+// proxies em ForwardedHeaders:KnownProxies (por omissão, só o próprio servidor).
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    foreach (var proxy in (builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+        .Where(p => !string.IsNullOrWhiteSpace(p)))
     {
-        // Desenvolvimento: a app Flutter web corre numa porta aleatória.
-        policy.SetIsOriginAllowed(_ => true);
-    }
-    else
-    {
-        policy.WithOrigins(allowedOrigins);
+        options.KnownProxies.Add(System.Net.IPAddress.Parse(proxy));
     }
 
-    policy.AllowAnyHeader().AllowAnyMethod().AllowCredentials();
-}));
+    // Um proxy num contentor (ou na rede do alojamento) muda de IP a cada recriação: confia-se na rede dele
+    // (CIDR, ex.: 172.30.0.0/24). Sem isto, o limite de pedidos por IP passava a ser para toda a gente junta.
+    foreach (var network in (builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [])
+        .Where(n => !string.IsNullOrWhiteSpace(n)))
+    {
+        options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+    }
+});
+builder.Services.AddHsts(options => options.MaxAge = TimeSpan.FromDays(365));
 
 // --- Pipeline -------------------------------------------------------------
 
@@ -92,26 +235,78 @@ var app = builder.Build();
 
 await app.InitializeDatabaseAsync();
 
+// O que está ligado neste servidor, no arranque: sem isto, avisos ou calendários desligados só se notavam quando
+// alguém se queixava.
+var startup = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Kubico.Startup");
+var fcmConfigured = app.Services.GetRequiredService<IOptions<FcmOptions>>().Value.IsConfigured;
+var calendars = app.Services.GetRequiredService<IOptions<CalendarSyncOptions>>().Value;
+startup.LogInformation(
+    "Avisos no telemóvel (FCM): {Fcm}; Google Calendar: {Google}; Outlook: {Outlook}",
+    fcmConfigured ? "sim" : "não", calendars.Google.IsConfigured ? "sim" : "não", calendars.Microsoft.IsConfigured ? "sim" : "não");
+if (app.Environment.IsProduction() && !fcmConfigured)
+{
+    startup.LogWarning("Sem Push:Fcm:ServiceAccountFile (ou ServiceAccountJson): os avisos ficam só na app.");
+}
+
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+if (app.Environment.IsProduction() && app.Configuration.GetValue("Https:Enforce", true))
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+
+app.UseSecurityHeaders();
+app.UseKubicoResponseCompression();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
-app.MapHealthChecks("/health");
+// "Vivo" (o processo responde, sem tocar na base: um orquestrador reinicia-o se falhar) e "pronto" (a base de dados
+// também responde: só então recebe tráfego). "/health" fica como sinónimo de "pronto".
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
+app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
 
 var api = app.MapGroup("/api");
 api.MapAuthEndpoints();
+api.MapAccountEndpoints();
 api.MapHouseholdEndpoints();
+api.MapMemberEndpoints();
+api.MapPermissionEndpoints();
+api.MapActivityEndpoints();
+api.MapAbsenceEndpoints();
+api.MapTodayEndpoints();
+api.MapChildProfileEndpoints();
+api.MapChildSignInEndpoints();
 api.MapShoppingEndpoints();
+api.MapShoppingInsightsEndpoints();
+api.MapMealEndpoints();
+api.MapExpenseEndpoints();
+api.MapHomeEndpoints();
+api.MapAssistantEndpoints();
+api.MapProfilePhotoEndpoints();
+api.MapSmartHomeEndpoints();
+api.MapProductEndpoints();
 api.MapChoreEndpoints();
+api.MapChoreHistoryEndpoints();
+api.MapCalendarEndpoints();
+api.MapCalendarFeedEndpoints();
+api.MapCalendarSyncEndpoints();
+api.MapRewardEndpoints();
+api.MapAllowanceEndpoints();
+api.MapNotificationEndpoints();
+api.MapFeedbackEndpoints();
 
-app.MapHub<HouseholdHub>(HouseholdHub.Path);
+// A ligação fecha quando o token de acesso expira (a app volta a ligar com um novo, se a sessão continuar ativa).
+app.MapHub<HouseholdHub>(HouseholdHub.Path, options => options.CloseOnAuthenticationExpiration = true);
 
 app.Run();
 
@@ -122,22 +317,44 @@ internal static class DatabaseStartup
 {
     public static async Task InitializeDatabaseAsync(this WebApplication app)
     {
-        if (!app.Configuration.GetValue("Database:MigrateOnStartup", false))
-        {
-            return;
-        }
-
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<KubicoDbContext>();
 
-        // As migrações são geradas para PostgreSQL; em SQLite cria-se o esquema diretamente.
-        if (db.Database.IsSqlite())
+        if (app.Configuration.GetValue("Database:MigrateOnStartup", false))
         {
-            await db.Database.EnsureCreatedAsync();
+            // As migrações são geradas para PostgreSQL; em SQLite cria-se o esquema diretamente.
+            if (db.Database.IsSqlite())
+            {
+                await db.Database.EnsureCreatedAsync();
+            }
+            else
+            {
+                await db.Database.MigrateAsync();
+            }
         }
-        else
+
+        await WarmUpAsync(db);
+    }
+
+    /// <summary>
+    /// Aquece o EF Core antes do primeiro pedido (F4-20): constrói o modelo, abre o pool de ligações e compila as
+    /// consultas de quem entra (a pessoa e as suas casas). Sem isto, o primeiro /api/me depois de arrancar levava
+    /// cerca de 300 ms. Uma falha aqui não impede o arranque (a base pode ainda não estar pronta).
+    /// </summary>
+    private static async Task WarmUpAsync(KubicoDbContext db)
+    {
+        try
         {
-            await db.Database.MigrateAsync();
+            var someone = Guid.Empty;
+            _ = await db.Users.AsNoTracking().Where(u => u.Id == someone).Select(u => u.DisplayName).FirstOrDefaultAsync();
+            _ = await db.Memberships.AsNoTracking()
+                .Where(m => m.UserId == someone)
+                .Select(m => new { m.HouseholdId, m.Household.Name, m.Role })
+                .ToListAsync();
+        }
+        catch (Exception)
+        {
+            // Fica para o primeiro pedido.
         }
     }
 }

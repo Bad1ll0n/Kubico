@@ -10,5 +10,8 @@ public class ShoppingList
     public required string Name { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
+    /// <summary>A ordem das listas na casa (arrastar para reordenar); as novas vão para o fim.</summary>
+    public int Position { get; set; }
+
     public List<ShoppingItem> Items { get; set; } = [];
 }
