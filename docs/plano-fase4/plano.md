@@ -28,10 +28,8 @@ As regras do `CLAUDE.md` valem para tudo:
   - 4I (F4-23);
   - 4A (F4-01: verde-salva e creme, cubo isométrico);
   - 4J (F4-24: assistente com o Claude — frase, talão, PDF da escola; à espera de uma chave da API).
-- **Por fazer sem decisão:**
-  - fotografia de perfil (F4-03);
-  - reordenar listas e artigos (F4-04);
-  - casa inteligente (F4-16c).
+  - F4-03 (fotografia de perfil, só adultos), F4-04 (arrastar para reordenar), PDF da Casa dentro da app e F4-16c
+    (casa inteligente com o Home Assistant).
 - **À espera de decisões:** 4K (D2, D3, D5).
 
 ## Decisões que só tu podes tomar

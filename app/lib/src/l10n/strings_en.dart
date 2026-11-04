@@ -933,7 +933,8 @@ const englishTexts = <String, String>{
   'Verificar agora': 'Check now',
   'Regras': 'Rules',
   'Ainda não há regras': 'No rules yet',
-  'Por exemplo: quando a máquina de lavar acabar, criar a tarefa «Estender a roupa».': 'For example: when the washing machine finishes, create the chore “Hang out the laundry”.',
+  'Por exemplo: quando a máquina de lavar acabar, criar a tarefa «Estender a roupa».':
+      'For example: when the washing machine finishes, create the chore “Hang out the laundry”.',
   'Editar a regra': 'Edit rule',
   'Nova regra': 'New rule',
   'Escolhe a entidade e escreve o estado e a tarefa.': 'Choose the entity and write the state and the chore.',

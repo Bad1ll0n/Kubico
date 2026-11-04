@@ -138,7 +138,7 @@ class _SmartHomeViewState extends State<SmartHomeView> {
           TextField(
             controller: _token,
             obscureText: true,
-            decoration: InputDecoration(labelText: 'Token de longa duração'.tr, errorText: _connectError),
+            decoration: InputDecoration(labelText: 'Token de longa duração'.tr),
           ),
           const SizedBox(height: 12),
           FilledButton.icon(
@@ -146,6 +146,12 @@ class _SmartHomeViewState extends State<SmartHomeView> {
             icon: const Icon(Icons.link_rounded),
             label: Text('Ligar'.tr),
           ),
+          // O erro pode ser do endereço ou do token: fica por baixo dos dois.
+          if (_connectError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_connectError!, style: TextStyle(color: theme.colorScheme.error)),
+            ),
         ] else ...[
           Card(
             child: ListTile(
