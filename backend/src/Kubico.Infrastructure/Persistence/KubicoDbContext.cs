@@ -51,6 +51,7 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
     public DbSet<SentReminder> SentReminders => Set<SentReminder>();
+    public DbSet<Kubico.Domain.Assistant.AssistantUsage> AssistantUsages => Set<Kubico.Domain.Assistant.AssistantUsage>();
     public DbSet<PushDevice> PushDevices => Set<PushDevice>();
     public DbSet<MemberAbsence> MemberAbsences => Set<MemberAbsence>();
     public DbSet<HouseholdPermission> HouseholdPermissions => Set<HouseholdPermission>();
@@ -432,6 +433,12 @@ public class KubicoDbContext(DbContextOptions<KubicoDbContext> options) : DbCont
             e.HasIndex(n => n.CreatedAt);
             e.HasOne<User>().WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Household>().WithMany().HasForeignKey(n => n.HouseholdId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Kubico.Domain.Assistant.AssistantUsage>(e =>
+        {
+            e.HasKey(u => new { u.HouseholdId, u.Day });
+            e.HasOne<Household>().WithMany().HasForeignKey(u => u.HouseholdId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<SentReminder>(e =>

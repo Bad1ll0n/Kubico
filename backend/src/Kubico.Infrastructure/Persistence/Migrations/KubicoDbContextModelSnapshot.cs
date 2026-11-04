@@ -82,6 +82,22 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.ToTable("ActivityEntries");
                 });
 
+            modelBuilder.Entity("Kubico.Domain.Assistant.AssistantUsage", b =>
+                {
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.HasKey("HouseholdId", "Day");
+
+                    b.ToTable("AssistantUsages");
+                });
+
             modelBuilder.Entity("Kubico.Domain.Calendar.CalendarConnection", b =>
                 {
                     b.Property<Guid>("Id")
@@ -714,6 +730,9 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("AssistantEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<int?>("AutoApproveRewardsUpTo")
                         .HasColumnType("integer");
@@ -1743,6 +1762,15 @@ namespace Kubico.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("Kubico.Domain.Activity.ActivityEntry", b =>
+                {
+                    b.HasOne("Kubico.Domain.Households.Household", null)
+                        .WithMany()
+                        .HasForeignKey("HouseholdId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Kubico.Domain.Assistant.AssistantUsage", b =>
                 {
                     b.HasOne("Kubico.Domain.Households.Household", null)
                         .WithMany()

@@ -24,6 +24,7 @@ import 'household_screen.dart';
 import 'kitchen_panel.dart' deferred as kitchen;
 import 'expenses_view.dart';
 import 'first_steps.dart';
+import 'assistant_screen.dart' deferred as assistant;
 import 'home_area_screen.dart' deferred as homearea;
 import 'meals_view.dart';
 import 'notifications_screen.dart';
@@ -393,6 +394,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 onSelected: (value) => switch (value) {
                   'devices' => pushDeferred<void>(context, devices.loadLibrary, () => devices.DevicesScreen()),
                   'account' => _openAccount(),
+                  'assistant' => pushDeferred<void>(
+                    context,
+                    assistant.loadLibrary,
+                    () => assistant.AssistantScreen(household: household),
+                  ),
                   'home' => pushDeferred<void>(
                     context,
                     homearea.loadLibrary,
@@ -437,6 +443,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (narrow) item('members', Icons.group_rounded, 'Membros e convites'.tr),
                     if (household.role.canManageContent)
                       item('panel', Icons.countertops_rounded, 'Modo painel de cozinha'.tr),
+                    // O assistente não está disponível para as crianças (nada sobre elas vai para o modelo).
+                    if (!child) item('assistant', Icons.auto_awesome_rounded, 'Assistente'.tr),
                     if (household.accessTo(HouseholdModule.home).canView)
                       item('home', Icons.cottage_rounded, 'A casa'.tr),
                     if (!child) item('activity', Icons.history_rounded, 'Histórico de alterações'.tr),

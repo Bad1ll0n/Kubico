@@ -399,6 +399,32 @@ class ApiClient {
   Future<Uint8List> getHomeFile(String householdId, String fileId) async =>
       (await _execute('GET', '${_home(householdId)}/files/$fileId')).bodyBytes;
 
+  // Assistente (F4-24).
+
+  Future<AssistantStatus> getAssistant(String householdId) async =>
+      AssistantStatus.fromJson(await _send('GET', '/api/households/$householdId/assistant') as Map<String, dynamic>);
+
+  /// Pede propostas ao assistente: uma frase e/ou um ficheiro (fotografia de um talão ou PDF).
+  Future<AssistantProposal> askAssistant(
+    String householdId, {
+    String? text,
+    Uint8List? file,
+    String? mediaType,
+  }) async => AssistantProposal.fromJson(
+    await _send(
+      'POST',
+      '/api/households/$householdId/assistant',
+      body: {
+        if (text != null && text.trim().isNotEmpty) 'text': text.trim(),
+        if (file != null) 'fileBase64': base64Encode(file),
+        'mediaType': ?mediaType,
+      },
+    ) as Map<String, dynamic>,
+  );
+
+  Future<void> saveAssistantSettings(String householdId, {required bool enabled}) =>
+      _send('PUT', '/api/households/$householdId/assistant/settings', body: {'enabled': enabled});
+
   // Despesas (F4-10).
 
   Future<ExpensesOverview> getExpenses(String householdId) async =>

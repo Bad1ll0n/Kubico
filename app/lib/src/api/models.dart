@@ -2320,3 +2320,106 @@ class NotificationPreferences {
     'weeklySummary': weeklySummary,
   };
 }
+
+// Assistente (F4-24).
+
+/// O assistente nesta casa: se existe no servidor (e para esta pessoa), se a casa o tem ligado e o uso de hoje.
+class AssistantStatus {
+  const AssistantStatus({
+    required this.available,
+    required this.enabled,
+    required this.usedToday,
+    required this.dailyLimit,
+  });
+
+  final bool available;
+  final bool enabled;
+  final int usedToday;
+  final int dailyLimit;
+
+  factory AssistantStatus.fromJson(Map<String, dynamic> json) => AssistantStatus(
+    available: json['available'] as bool? ?? false,
+    enabled: json['enabled'] as bool? ?? false,
+    usedToday: json['usedToday'] as int? ?? 0,
+    dailyLimit: json['dailyLimit'] as int? ?? 0,
+  );
+}
+
+enum AssistantActionKind { addItems, checkItems, createEvent, createChore, createExpense }
+
+/// Uma ação proposta pelo assistente, já validada no servidor. Só acontece se a pessoa a escolher.
+class AssistantAction {
+  const AssistantAction({
+    required this.kind,
+    this.listId,
+    this.listName,
+    this.items = const [],
+    this.itemIds = const [],
+    this.title,
+    this.date,
+    this.endDate,
+    this.startsAt,
+    this.endsAt,
+    this.amountCents,
+    this.location,
+  });
+
+  final AssistantActionKind kind;
+  final String? listId;
+  final String? listName;
+  final List<String> items;
+  final List<String> itemIds;
+  final String? title;
+  final DateTime? date;
+  final DateTime? endDate;
+  final DateTime? startsAt;
+  final DateTime? endsAt;
+  final int? amountCents;
+  final String? location;
+
+  factory AssistantAction.fromJson(Map<String, dynamic> json) => AssistantAction(
+    kind: AssistantActionKind.values.firstWhere(
+      (k) => k.name.toLowerCase() == (json['kind'] as String).toLowerCase(),
+      orElse: () => AssistantActionKind.createChore,
+    ),
+    listId: json['listId'] as String?,
+    listName: json['listName'] as String?,
+    items: [for (final i in json['items'] as List<dynamic>? ?? const []) i as String],
+    itemIds: [for (final i in json['itemIds'] as List<dynamic>? ?? const []) i as String],
+    title: json['title'] as String?,
+    date: _day(json['date']),
+    endDate: _day(json['endDate']),
+    startsAt: _instant(json['startsAt']),
+    endsAt: _instant(json['endsAt']),
+    amountCents: json['amountCents'] as int?,
+    location: json['location'] as String?,
+  );
+}
+
+/// O que o assistente propõe: uma frase para a pessoa e as ações (as que não se aproveitaram contam em [skipped]).
+class AssistantProposal {
+  const AssistantProposal({
+    this.reply,
+    required this.actions,
+    required this.skipped,
+    required this.usedToday,
+    required this.dailyLimit,
+  });
+
+  final String? reply;
+  final List<AssistantAction> actions;
+  final int skipped;
+  final int usedToday;
+  final int dailyLimit;
+
+  factory AssistantProposal.fromJson(Map<String, dynamic> json) => AssistantProposal(
+    reply: json['reply'] as String?,
+    actions: [
+      for (final a in json['actions'] as List<dynamic>? ?? const [])
+        AssistantAction.fromJson(a as Map<String, dynamic>),
+    ],
+    skipped: json['skipped'] as int? ?? 0,
+    usedToday: json['usedToday'] as int? ?? 0,
+    dailyLimit: json['dailyLimit'] as int? ?? 0,
+  );
+}

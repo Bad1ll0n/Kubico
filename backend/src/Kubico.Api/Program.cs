@@ -1,6 +1,7 @@
 using System.Text;
 
 using Kubico.Api.Activity;
+using Kubico.Api.Assistant;
 using Kubico.Api.Auth;
 using Kubico.Api.Calendar;
 using Kubico.Api.Calendar.Sync;
@@ -113,6 +114,17 @@ if (builder.Configuration.GetValue("CalendarSync:Enabled", true))
     builder.Services.AddHostedService<CalendarSyncWorker>();
 }
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+
+// O assistente (F4-24) com o Claude: sem Assistant:ApiKey (ou ANTHROPIC_API_KEY), fica desligado.
+builder.Services.AddOptions<AssistantOptions>().Bind(builder.Configuration.GetSection(AssistantOptions.SectionName))
+    .PostConfigure(o => o.ApiKey ??= Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") is { Length: > 0 } key ? key : null);
+builder.Services.AddSingleton<IAssistant>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<AssistantOptions>>();
+    return string.IsNullOrWhiteSpace(options.Value.ApiKey)
+        ? new DisabledAssistant()
+        : new ClaudeAssistant(options);
+});
 
 builder.Services.AddOptions<JwtOptions>()
     .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
@@ -270,6 +282,7 @@ api.MapShoppingInsightsEndpoints();
 api.MapMealEndpoints();
 api.MapExpenseEndpoints();
 api.MapHomeEndpoints();
+api.MapAssistantEndpoints();
 api.MapProductEndpoints();
 api.MapChoreEndpoints();
 api.MapChoreHistoryEndpoints();

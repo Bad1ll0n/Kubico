@@ -48,6 +48,9 @@ services:
       CalendarSync__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
       CalendarSync__Microsoft__ClientId: ${MICROSOFT_CLIENT_ID:-}
       CalendarSync__Microsoft__ClientSecret: ${MICROSOFT_CLIENT_SECRET:-}
+      # O assistente com o Claude (API da Anthropic); sem chave, não aparece.
+      Assistant__ApiKey: ${ASSISTANT_API_KEY:-}
+      Assistant__DailyLimit: ${ASSISTANT_DAILY_LIMIT:-30}
     volumes:
       - ./secrets:/run/secrets:ro
     ports:

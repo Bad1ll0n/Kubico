@@ -25,12 +25,14 @@ As regras do `CLAUDE.md` valem para tudo:
   - 4F (F4-07, F4-12, F4-13);
   - 4G (F4-08);
   - 4H (F4-10);
-  - 4I (F4-23).
+  - 4I (F4-23);
+  - 4A (F4-01: verde-salva e creme, cubo isométrico);
+  - 4J (F4-24: assistente com o Claude — frase, talão, PDF da escola; à espera de uma chave da API).
 - **Por fazer sem decisão:**
   - fotografia de perfil (F4-03);
   - reordenar listas e artigos (F4-04);
   - casa inteligente (F4-16c).
-- **À espera de decisões:** 4A (D1), 4J (D4), 4K (D2, D3, D5).
+- **À espera de decisões:** 4K (D2, D3, D5).
 
 ## Decisões que só tu podes tomar
 

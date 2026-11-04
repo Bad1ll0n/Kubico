@@ -662,6 +662,20 @@ public static partial class Texts
         ["limpou 1 artigo comprado da lista «{0}»"] = "cleared 1 bought item from the list “{0}”",
         ["limpou {0} artigos comprados da lista «{1}»"] = "cleared {0} bought items from the list “{1}”",
 
+        // Assistente
+        ["O assistente não está disponível para as crianças."] = "The assistant isn't available for children.",
+        ["O assistente não está disponível neste servidor."] = "The assistant isn't available on this server.",
+        ["O assistente está desligado nesta casa."] = "The assistant is turned off in this household.",
+        ["Escreve o que queres ou junta uma fotografia ou um PDF."] = "Write what you want or attach a photo or a PDF.",
+        ["A casa já usou todos os pedidos ao assistente de hoje. Volta a tentar amanhã."] =
+            "The household has used all of today's assistant requests. Try again tomorrow.",
+        ["O assistente não respondeu. Tenta outra vez daqui a pouco."] = "The assistant didn't respond. Try again in a moment.",
+        ["O ficheiro é demasiado grande."] = "The file is too large.",
+        ["O ficheiro não é válido."] = "The file isn't valid.",
+        ["Só se aceitam fotografias (JPEG, PNG ou WebP) e PDF."] = "Only photos (JPEG, PNG or WebP) and PDFs are accepted.",
+        ["ligou o assistente"] = "turned on the assistant",
+        ["desligou o assistente"] = "turned off the assistant",
+
         // Ajuda e sugestões
         ["Já enviaste muitas mensagens hoje. Obrigado! Tenta outra vez amanhã."] =
             "You've sent a lot of messages today. Thank you! Try again tomorrow.",

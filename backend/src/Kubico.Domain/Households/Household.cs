@@ -36,6 +36,9 @@ public class Household : IVersioned
     /// <summary>Os avisos do IRS (e-Fatura e entrega da declaração) a quem gere a área Casa (F4-08).</summary>
     public bool IrsReminders { get; set; } = true;
 
+    /// <summary>O assistente (F4-24): quem administra a casa pode desligá-lo.</summary>
+    public bool AssistantEnabled { get; set; } = true;
+
     public const string DefaultTimeZoneId = "Europe/Lisbon";
 
     /// <summary>Fuso da casa; se o sistema não o conhecer, usa UTC.</summary>

@@ -76,11 +76,15 @@ public sealed class KubicoApiFactory : WebApplicationFactory<Program>
         {
             services.AddSingleton<TimeProvider>(Clock);
             services.AddSingleton<Kubico.Api.Shopping.IProductCatalog>(Products);
+            services.AddSingleton<Kubico.Api.Assistant.IAssistant>(Assistant);
         });
     }
 
     /// <summary>A base pública de produtos dos testes (não vai à internet).</summary>
     public FakeProductCatalog Products { get; } = new();
+
+    /// <summary>O assistente dos testes (não chama o Claude).</summary>
+    public FakeAssistant Assistant { get; } = new();
 
     /// <summary>Regista um utilizador novo e devolve um cliente já autenticado.</summary>
     public async Task<(HttpClient Client, AuthResponse Auth)> CreateUserAsync(string? name = null, string? email = null)
